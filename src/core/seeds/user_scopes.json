@@ -1,0 +1,17 @@
+[
+    {
+        "id": "4fe58c9e-e9bb-47d8-b4dc-655d9c59f74b",
+        "scope_name": "SUPERUSER",
+        "scope_description": "Все права"
+    },
+    {
+        "id": "3910a469-8955-416e-bd48-2771052b1605",
+        "scope_name": "ADMIN",
+        "scope_description": "Администрирование сайта"
+    },
+    {
+        "id": "5c5d5e56-3ab7-4077-a8a8-5e28dfeb0b54",
+        "scope_name": "DEVELOPER",
+        "scope_description": "Администрирование сайта и настройка интеграции"
+    }
+]

@@ -1,0 +1,15 @@
+venv/
+.venv/
+__pycache__/
+.idea/
+.env
+.env.*
+# src/migration/versions/*
+*pgdata/
+redisdata/
+redis-data/
+.mypy_cache/
+.DS_Store
+logs/
+.vscode/
+src/media/*

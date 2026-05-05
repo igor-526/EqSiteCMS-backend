@@ -1,0 +1,9 @@
+from .breed_repository import BreedRepository
+from .coat_color_repository import CoatColorRepository
+from .horse_owner_repository import HorseOwnerRepository
+from .horse_repository import HorseChildrenRepository, HorseRepository
+from .horse_service_repository import HorseServiceRepository
+from .photo_repository import PhotoRepository
+from .price_repository import PriceGroupRepository, PriceRepository
+from .site_settings_repository import SiteSettingsRepository
+from .user_repository import UserRepository
