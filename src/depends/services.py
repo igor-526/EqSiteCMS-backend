@@ -2,6 +2,12 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends
 
+from core.exceptions.auth import InvalidCredentials
+from core.protocols.media import (
+    MediaStorageProtocol,
+    MediaTypeValidatorProtocol,
+    PhotoUrlBuilderProtocol,
+)
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
@@ -26,6 +32,7 @@ from core.services.horse_service import HorseServiceService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
+from core.services.users import UserService
 from depends.repositories import (
     get_breed_repository,
     get_coat_color_repository,
@@ -39,7 +46,12 @@ from depends.repositories import (
     get_site_settings_repository,
     get_user_repository,
 )
-from depends.utils import get_security
+from depends.utils import (
+    get_media_storage,
+    get_media_type_validator,
+    get_photo_url_builder,
+    get_security,
+)
 
 
 async def get_auth_service(
@@ -49,12 +61,18 @@ async def get_auth_service(
     return AuthService(user_repository=user_repository, security=security)
 
 
+async def get_user_service(
+    user_repository: Annotated[UserRepositoryProtocol, Depends(get_user_repository)],
+) -> UserService:
+    return UserService(repository=user_repository)
+
+
 async def get_current_user(
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
     access_token: Annotated[str | None, Cookie(alias="access_token")] = None,
-) -> UserOutDto | None:
+) -> UserOutDto:
     if access_token is None:
-        return None
+        raise InvalidCredentials("Отсутствуют учетные данные")
 
     return await auth_service.get_current_user(token=access_token)
 
@@ -91,8 +109,21 @@ async def get_horse_service_service(
 
 async def get_photo_service(
     photo_repository: Annotated[PhotoRepositoryProtocol, Depends(get_photo_repository)],
+    media_storage: Annotated[MediaStorageProtocol, Depends(get_media_storage)],
+    photo_url_builder: Annotated[
+        PhotoUrlBuilderProtocol, Depends(get_photo_url_builder)
+    ],
+    media_type_validator: Annotated[
+        MediaTypeValidatorProtocol, Depends(get_media_type_validator)
+    ],
 ) -> PhotoService:
-    return PhotoService(photo_repository=photo_repository)
+    # Service stays framework-agnostic; adapters are wired via DI.
+    return PhotoService(
+        photo_repository=photo_repository,
+        media_storage=media_storage,
+        photo_url_builder=photo_url_builder,
+        media_type_validator=media_type_validator,
+    )
 
 
 async def get_site_settings_service(
@@ -117,11 +148,15 @@ async def get_price_service(
         PriceGroupRepositoryProtocol, Depends(get_price_group_repository)
     ],
     photo_repository: Annotated[PhotoRepositoryProtocol, Depends(get_photo_repository)],
+    photo_url_builder: Annotated[
+        PhotoUrlBuilderProtocol, Depends(get_photo_url_builder)
+    ],
 ) -> PriceService:
     return PriceService(
         price_repository=price_repository,
         price_group_repository=price_group_repository,
         photo_repository=photo_repository,
+        photo_url_builder=photo_url_builder,
     )
 
 

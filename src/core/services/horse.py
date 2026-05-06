@@ -45,6 +45,8 @@ from core.schemas.horses import SetPedigreeEntities
 class HorseService:
     """Сервис для работы с лошадьми."""
 
+    _ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
+
     def __init__(
         self,
         horse_repository: HorseRepositoryProtocol,
@@ -67,8 +69,14 @@ class HorseService:
             if raise_exception:
                 raise ClientError("Пользователь не авторизован")
             return False
+        has_admin_scope = any(
+            scope.scope_name in self._ADMIN_SCOPE_NAMES for scope in user.scopes
+        )
+        if not has_admin_scope:
+            if raise_exception:
+                raise ClientError("Недостаточно прав для выполнения операции")
+            return False
         return True
-        raise ClientError("Пользователь не имеет прав на это действие")
 
     def _get_horse_dto(
         self,
@@ -215,18 +223,17 @@ class HorseService:
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
             raise ClientError("Нет данных для обновления")
-        update_data = {}
-        if "breed_id" in update_data:
+        if "breed_id" in update_data and update_data["breed_id"] is not None:
             await self._get_breed_by_id(breed_id=update_data["breed_id"])
-            update_data["breed_id"] = data.breed_id
-        if "coat_color_id" in update_data:
+        if "coat_color_id" in update_data and update_data["coat_color_id"] is not None:
             await self._get_coat_color_by_id(coat_color_id=update_data["coat_color_id"])
-            update_data["coat_color_id"] = data.coat_color_id
-        if "horse_owner_id" in update_data:
+        if (
+            "horse_owner_id" in update_data
+            and update_data["horse_owner_id"] is not None
+        ):
             await self._get_horse_owner_by_id(
                 horse_owner_id=update_data["horse_owner_id"]
             )
-            update_data["horse_owner_id"] = data.horse_owner_id
         for key, value in update_data.items():
             setattr(horse, key, value)
         await self.horse_repository.update(horse)
@@ -267,7 +274,7 @@ class HorseService:
         *,
         user: UserOutDto | None = None,
         horse_id: UUID,
-        mode: Literal["sire", "dame", "children"],
+        mode: Literal["sire", "dam", "children"],
         search: str | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
@@ -284,14 +291,17 @@ class HorseService:
         if target_horse is None:
             raise ClientError("Лошадь не найдена")
         _PEDIGREE_METHODS_REGISTRY: dict[
-            Literal["sire", "dame", "children"],
+            Literal["sire", "dam", "children"],
             Callable[..., Awaitable[tuple[Mapping[UUID, HorseOutDto], int]]],
         ] = {
             "sire": self.horse_repository.get_available_sires,
-            "dame": self.horse_repository.get_available_dames,
+            "dam": self.horse_repository.get_available_dams,
             "children": self.horse_repository.get_available_children,
         }
-        horses, total = await _PEDIGREE_METHODS_REGISTRY[mode](
+        repo_method = _PEDIGREE_METHODS_REGISTRY.get(mode)
+        if repo_method is None:
+            raise ClientError("Некорректный режим родословной")
+        horses, total = await repo_method(
             target_horse=target_horse,
             search=search,
             limit=limit,
@@ -324,11 +334,14 @@ class HorseService:
         if pedigree_data.dam_id is not None:
             horses_ids_to_check.append(pedigree_data.dam_id)
         if pedigree_data.foals is not None:
+            if len(set(pedigree_data.foals)) != len(pedigree_data.foals):
+                raise ClientError("Список потомков содержит дубликаты")
             horses_ids_to_check.extend(pedigree_data.foals)
+        horses_ids_to_check_unique = list(dict.fromkeys(horses_ids_to_check))
         horses_mapping: Mapping[UUID, Horse] = await self.horse_repository.get_by_ids(
-            horses_ids_to_check
+            horses_ids_to_check_unique
         )
-        if len(horses_mapping) != len(horses_ids_to_check):
+        if len(horses_mapping) != len(horses_ids_to_check_unique):
             raise ClientError("Некоторые лошади не найдены")
 
         target = horses_mapping.get(horse_id)
@@ -349,30 +362,36 @@ class HorseService:
         except ValidationError as ex:
             raise ClientError(str(ex))
 
-        await self.horse_children_repository.clear_pedigree(
-            target_horse_id=set_pedigree_entities.target_horse.id,
-            sire=set_pedigree_entities.sire is not None,
-            dam=set_pedigree_entities.dam is not None,
-            foals=set_pedigree_entities.foals is not None,
-        )
-        await self.horse_children_repository.set_pedigree(
-            target_horse_id=set_pedigree_entities.target_horse.id,
-            sire_id=(
-                set_pedigree_entities.sire.id
-                if set_pedigree_entities.sire is not None
-                else None
-            ),
-            dam_id=(
-                set_pedigree_entities.dam.id
-                if set_pedigree_entities.dam is not None
-                else None
-            ),
-            foals_ids=(
-                [foal.id for foal in set_pedigree_entities.foals]
-                if set_pedigree_entities.foals is not None
-                else None
-            ),
-        )
+        try:
+            await self.horse_children_repository.clear_pedigree(
+                target_horse_id=set_pedigree_entities.target_horse.id,
+                sire=set_pedigree_entities.sire is not None,
+                dam=set_pedigree_entities.dam is not None,
+                foals=set_pedigree_entities.foals is not None,
+            )
+            await self.horse_children_repository.set_pedigree(
+                target_horse_id=set_pedigree_entities.target_horse.id,
+                sire_id=(
+                    set_pedigree_entities.sire.id
+                    if set_pedigree_entities.sire is not None
+                    else None
+                ),
+                dam_id=(
+                    set_pedigree_entities.dam.id
+                    if set_pedigree_entities.dam is not None
+                    else None
+                ),
+                foals_ids=(
+                    [foal.id for foal in set_pedigree_entities.foals]
+                    if set_pedigree_entities.foals is not None
+                    else None
+                ),
+            )
+        except Exception as ex:
+            raise ClientError(
+                "Не удалось обновить родословную: операция неатомарна, "
+                "после clear_pedigree могли остаться частично очищенные связи"
+            ) from ex
 
     async def delete_horse(
         self, *, horse_id: UUID, user: UserOutDto | None = None
@@ -450,12 +469,12 @@ class HorseService:
 
     async def add_horse_service(self):
         """Добавить услугу к лошади."""
-        ...
+        raise ClientError("Функция add_horse_service пока не реализована")
 
     async def remove_horse_service(self):
         """Удалить услугу из лошади."""
-        ...
+        raise ClientError("Функция remove_horse_service пока не реализована")
 
     async def update_horse_service(self):
         """Обновить услугу лошади."""
-        ...
+        raise ClientError("Функция update_horse_service пока не реализована")

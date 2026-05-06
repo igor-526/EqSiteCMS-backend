@@ -1,20 +1,23 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field, computed_field, field_serializer
+from pydantic import ConfigDict, Field, field_serializer
 
-from core.entities.photos import Photo
 from core.schemas.baseschema import BaseSchema
-from settings import settings
 
 
 class PhotoOutDto(BaseSchema):
     """DTO для вывода фотографии."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
     description: str | None
     path: str
+    url: str = Field(
+        ..., description="Публичный URL, собирается на adapter/API-границе"
+    )
     created_at: datetime
     updated_at: datetime | None
 
@@ -27,15 +30,6 @@ class PhotoOutDto(BaseSchema):
         if value is None:
             return None
         return value.isoformat()
-
-    @property
-    def url(self) -> str:
-        """Вычисляемый URL для фотографии."""
-        protocol = "https" if not settings.debug else "http"
-        return f"{protocol}://{settings.cms_backend_domain}/media/{self.path}"
-
-    class Config:
-        from_attributes = True
 
 
 class PhotoCreateDto(BaseSchema):
@@ -60,8 +54,18 @@ class PhotoUpdateDto(BaseSchema):
     )
 
 
+class PhotoUploadDto(BaseSchema):
+    """DTO для файла фотографии или видео, подготовленного API-слоем."""
+
+    filename: str
+    content: bytes
+    content_type: str | None = None
+
+
 class PhotoOutShortDto(BaseSchema):
     """Упрощенный DTO для фотографии - только id, is_main и url."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     is_main: bool
@@ -70,9 +74,6 @@ class PhotoOutShortDto(BaseSchema):
     @field_serializer("id")
     def serialize_id(self, value: UUID) -> str:
         return str(value)
-
-    class Config:
-        from_attributes = True
 
 
 class PhotoBatchDeleteDto(BaseSchema):

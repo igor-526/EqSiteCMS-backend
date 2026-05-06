@@ -3,12 +3,8 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
-from core.schemas.coat_color import (
-    CoatColorCreateDto,
-    CoatColorOutDto,
-    CoatColorOutWithPageDataDto,
-    CoatColorUpdateDto,
-)
+from core.schemas import CoatColorOutDto, CoatColorOutWithPageDataDto
+from core.schemas.coat_color import CoatColorCreateDto, CoatColorUpdateDto
 from core.services.coat_color import CoatColorService
 from depends.services import get_coat_color_service
 
@@ -61,11 +57,6 @@ async def get_coat_color(
     page_data: bool = Query(False, description="Включить page_data в ответ"),
 ) -> CoatColorOutDto | CoatColorOutWithPageDataDto:
     coat_color = await coat_color_service.get_by_slug_or_id(slug_or_id)
-    if coat_color is None:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Масть не найдена")
-
     if page_data:
         return CoatColorOutWithPageDataDto.model_validate(coat_color)
     return CoatColorOutDto.model_validate(coat_color)

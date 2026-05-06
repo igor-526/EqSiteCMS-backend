@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field, field_serializer
+from pydantic import ConfigDict, Field, field_serializer
 
 from core.entities.site_settings import SiteSettingType
 from core.schemas.baseschema import BaseSchema
@@ -9,6 +9,8 @@ from core.schemas.baseschema import BaseSchema
 
 class SiteSettingOutDto(BaseSchema):
     """DTO для вывода настройки."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     key: str
@@ -29,19 +31,15 @@ class SiteSettingOutDto(BaseSchema):
             return None
         return value.isoformat()
 
-    class Config:
-        from_attributes = True
-
 
 class SiteSettingSimpleOutDto(BaseSchema):
     """DTO для вывода настройки без пагинации (только key, value, type)."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     key: str
     value: str
     type: str
-
-    class Config:
-        from_attributes = True
 
 
 class SiteSettingCreateDto(BaseSchema):

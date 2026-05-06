@@ -604,7 +604,7 @@ class HorseRepository(AbstractRepository[Horse]):
 
         return horses_dict, total
 
-    async def get_available_dames(
+    async def get_available_dams(
         self,
         *,
         target_horse: Horse,

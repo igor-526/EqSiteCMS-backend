@@ -1,5 +1,4 @@
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -24,11 +23,10 @@ from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
 from settings import settings
 from utils.configure_logger import configure_logger
+from utils.media import resolve_media_base_dir
 from utils.seeding.init_registry import init_registry
 
-configure_logger(
-    logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend"
-)
+configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
 
 
 @asynccontextmanager
@@ -45,10 +43,10 @@ app = FastAPI(
 
 router = APIRouter(prefix="/api")
 router.include_router(auth_router, prefix="/auth", tags=["Auth"])
-router.include_router(horses_router, prefix="/horses", tags=["Horses"])
 router.include_router(breeds_router)
 router.include_router(coat_color_router)
 router.include_router(horse_owner_router)
+router.include_router(horses_router, prefix="/horses", tags=["Horses"])
 router.include_router(horse_service_router)
 router.include_router(photos_router)
 router.include_router(prices_router)
@@ -62,7 +60,7 @@ async def health_check() -> dict[str, str]:
 
 
 if settings.debug:
-    media_dir = Path(__file__).parent / "media"
+    media_dir = resolve_media_base_dir()
     media_dir.mkdir(parents=True, exist_ok=True)
     app.mount("/media", StaticFiles(directory=str(media_dir)), name="media")
 

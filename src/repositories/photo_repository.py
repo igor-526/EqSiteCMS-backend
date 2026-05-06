@@ -2,7 +2,6 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import Table, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities.photos import Photo
 from models.horse import horse_photos
@@ -47,7 +46,6 @@ class PhotoRepository(AbstractRepository[Photo]):
         limit: int | None = None,
         offset: int | None = None,
     ) -> tuple[list[Photo], int]:
-        base_table = self.table
         conditions = []
 
         if price_ids or horse_ids:
@@ -125,4 +123,4 @@ class PhotoRepository(AbstractRepository[Photo]):
 
         stmt = self.table.delete().where(self.table.c.id.in_(ids))
         await self.session.execute(stmt)
-        await self.session.commit()
+        await self.session.flush()

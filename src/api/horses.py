@@ -157,7 +157,7 @@ async def delete_existing_horse(
 
 
 @router.post(
-    "{horse_id}/pedigree",
+    "/{horse_id}/pedigree",
     description="Установить родословное древо лошади",
     status_code=204,
 )
@@ -173,7 +173,7 @@ async def set_horse_pedigree(
 
 
 @router.get(
-    "{horse_id}/pedigree/{mode}",
+    "/{horse_id}/pedigree/{mode}",
     description="Получить родословное древо лошади",
     response_model=PaginatedEntities[HorseOutDto],
 )
@@ -181,7 +181,7 @@ async def get_horse_pedigree(
     current_user: Annotated[UserOutDto | None, Depends(get_current_user)],
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
     horse_id: UUID,
-    mode: Literal["sire", "dame", "children"],
+    mode: Literal["sire", "dam", "children"],
     search: str | None = Query(None, description="Поиск"),
     limit: int | None = Query(None, description="Лимит"),
     offset: int | None = Query(None, description="Смещение"),

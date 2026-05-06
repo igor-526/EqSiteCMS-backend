@@ -27,6 +27,7 @@ from .photos import (
     PhotoOutDto,
     PhotoOutShortDto,
     PhotoUpdateDto,
+    PhotoUploadDto,
 )
 from .prices import (
     PriceCreateDto,
@@ -70,6 +71,7 @@ __all__ = [
     "HorseCreateInDto",
     "HorseUpdateInDto",
     "HorseSetPedigreeInDto",
+    "SetPedigreeEntities",
     "HorseOwnerOutDto",
     "HorseOwnerCreateInDto",
     "HorseOwnerUpdateDto",
@@ -80,6 +82,7 @@ __all__ = [
     "PhotoOutDto",
     "PhotoCreateDto",
     "PhotoUpdateDto",
+    "PhotoUploadDto",
     "PhotoOutShortDto",
     "PhotoBatchDeleteDto",
     "BreedOutDto",

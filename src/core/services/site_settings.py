@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Literal
 from uuid import UUID
 
@@ -19,21 +20,25 @@ class SiteSettingsService:
         """Валидирует значение в зависимости от типа и возвращает строковое представление."""
         try:
             if setting_type == SiteSettingType.string:
-                # Любая строка - просто возвращаем
                 return value
 
-            elif setting_type == SiteSettingType.number:
-                # Целое число
-                int(value)
-                return value
+            if setting_type == SiteSettingType.number:
+                # number = целое число (без дробной части и без bool-представлений)
+                normalized = value.strip()
+                if normalized.lower() in {"true", "false"}:
+                    raise ValueError("Булево значение не является числом")
+                int(normalized)
+                return normalized
 
-            elif setting_type == SiteSettingType.float:
-                # Число с плавающей точкой
-                float(value)
-                return value
+            if setting_type == SiteSettingType.float:
+                # float = конечное десятичное число (например: 1.0, -0.5, 2)
+                normalized = value.strip()
+                parsed_decimal = Decimal(normalized)
+                if not parsed_decimal.is_finite():
+                    raise ValueError("Допускаются только конечные значения")
+                return normalized
 
-            elif setting_type == SiteSettingType.boolean:
-                # Булево значение
+            if setting_type == SiteSettingType.boolean:
                 value_lower = value.lower().strip()
                 if value_lower not in (
                     "true",
@@ -46,39 +51,35 @@ class SiteSettingsService:
                     "off",
                 ):
                     raise ValueError(f"Неверное булево значение: {value}")
-                # Нормализуем к true/false
-                normalized = value_lower in ("true", "1", "yes", "on")
-                return "true" if normalized else "false"
+                normalized_bool = value_lower in ("true", "1", "yes", "on")
+                return "true" if normalized_bool else "false"
 
-            elif setting_type == SiteSettingType.object:
-                # Валидный JSON
-                json.loads(value)
-                return value
+            if setting_type == SiteSettingType.object:
+                parsed_json = json.loads(value)
+                return json.dumps(
+                    parsed_json, ensure_ascii=False, separators=(",", ":")
+                )
 
-            elif setting_type == SiteSettingType.date:
-                # Дата в формате YYYY-MM-DD
+            if setting_type == SiteSettingType.date:
                 from datetime import date as date_type
 
-                date_type.fromisoformat(value)
-                return value
+                parsed_date = date_type.fromisoformat(value.strip())
+                return parsed_date.isoformat()
 
-            elif setting_type == SiteSettingType.time:
-                # Время в формате HH:MM
-                datetime.strptime(value, "%H:%M")
-                return value
+            if setting_type == SiteSettingType.time:
+                parsed_time = datetime.strptime(value.strip(), "%H:%M")
+                return parsed_time.strftime("%H:%M")
 
-            elif setting_type == SiteSettingType.datetime:
-                # Дата и время в формате "YYYY-MM-DD HH:MM"
-                datetime.strptime(value, "%Y-%m-%d %H:%M")
-                return value
+            if setting_type == SiteSettingType.datetime:
+                parsed_datetime = datetime.strptime(value.strip(), "%Y-%m-%d %H:%M")
+                return parsed_datetime.strftime("%Y-%m-%d %H:%M")
 
-            else:
-                raise ClientError(f"Неизвестный тип настройки: {setting_type}")
+            raise ClientError(f"Неизвестный тип настройки: {setting_type}")
 
-        except ValueError as e:
-            raise ClientError(f"Неверное значение для типа {setting_type}: {str(e)}")
         except json.JSONDecodeError:
             raise ClientError(f"Неверный JSON для типа object: {value}")
+        except (ValueError, InvalidOperation) as e:
+            raise ClientError(f"Неверное значение для типа {setting_type}: {str(e)}")
 
     async def create(self, data: SiteSettingCreateDto) -> SiteSetting:
         """Создать новую настройку."""
@@ -112,6 +113,8 @@ class SiteSettingsService:
             raise ClientError("Настройка не найдена")
 
         update_data = data.model_dump(exclude_none=True)
+        if not update_data:
+            raise ClientError("Нет данных для обновления")
 
         # Если обновляется key, проверяем уникальность
         if "key" in update_data:
@@ -149,9 +152,12 @@ class SiteSettingsService:
 
         return await self.site_settings_repository.update(site_setting)
 
-    async def get_by_id(self, id: UUID) -> SiteSetting | None:
+    async def get_by_id(self, id: UUID) -> SiteSetting:
         """Получить настройку по UUID."""
-        return await self.site_settings_repository.get_by_id(id)
+        site_setting = await self.site_settings_repository.get_by_id(id)
+        if site_setting is None:
+            raise ClientError("Настройка не найдена")
+        return site_setting
 
     async def delete(self, id: UUID) -> None:
         """Удалить настройку."""

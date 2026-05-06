@@ -1,11 +1,19 @@
 from typing import Literal
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from core.entities.base import _generate_slug
 from core.entities.breeds import Breed
 from core.exceptions.base import ClientError
 from core.protocols.repositories.breed_repository import BreedRepositoryProtocol
 from core.schemas.breeds import BreedCreateDto, BreedUpdateDto
+
+BREED_NAME_MAX_LENGTH = 63
+BREED_SHORT_NAME_MAX_LENGTH = 63
+BREED_SLUG_MAX_LENGTH = 63
+BREED_DESCRIPTION_MAX_LENGTH = 511
+DEFAULT_PAGE_DATA = "<div></div>"
 
 
 class BreedService:
@@ -18,6 +26,66 @@ class BreedService:
             return UUID(slug_or_id)
         except ValueError:
             return slug_or_id
+
+    def _validate_required_text(
+        self, *, field: str, value: str | None, max_length: int
+    ) -> str:
+        if value is None:
+            raise ClientError(f"{field} обязательно")
+
+        normalized = value.strip()
+        if not normalized:
+            raise ClientError(f"{field} не может быть пустым")
+        if len(normalized) > max_length:
+            raise ClientError(f"{field} не может быть длиннее {max_length} символов")
+        return normalized
+
+    def _validate_optional_text(
+        self, *, field: str, value: str | None, max_length: int | None = None
+    ) -> str | None:
+        if value is None:
+            return None
+
+        normalized = value.strip()
+        if not normalized:
+            raise ClientError(f"{field} не может быть пустым")
+        if max_length is not None and len(normalized) > max_length:
+            raise ClientError(f"{field} не может быть длиннее {max_length} символов")
+        return normalized
+
+    def _validate_breed_data(
+        self, data: dict[str, str | None], *, partial: bool
+    ) -> None:
+        if not partial or "name" in data:
+            data["name"] = self._validate_required_text(
+                field="Название породы",
+                value=data.get("name"),
+                max_length=BREED_NAME_MAX_LENGTH,
+            )
+
+        if "short_name" in data:
+            data["short_name"] = self._validate_optional_text(
+                field="Короткое название породы",
+                value=data["short_name"],
+                max_length=BREED_SHORT_NAME_MAX_LENGTH,
+            )
+        if "slug" in data:
+            data["slug"] = self._validate_required_text(
+                field="Slug",
+                value=data["slug"],
+                max_length=BREED_SLUG_MAX_LENGTH,
+            )
+        if "description" in data:
+            data["description"] = self._validate_optional_text(
+                field="Описание породы",
+                value=data["description"],
+                max_length=BREED_DESCRIPTION_MAX_LENGTH,
+            )
+        if "page_data" in data:
+            data["page_data"] = self._validate_optional_text(
+                field="Данные страницы породы",
+                value=data["page_data"],
+            )
 
     async def _ensure_unique_slug(
         self, slug: str, exclude_id: UUID | None = None
@@ -40,6 +108,7 @@ class BreedService:
         """Создать новую породу."""
 
         breed_data = data.model_dump(exclude_none=True)
+        self._validate_breed_data(breed_data, partial=False)
 
         existing = await self.breed_repository.find_by_name(breed_data["name"])
         if existing is not None:
@@ -47,17 +116,18 @@ class BreedService:
                 f"Порода с названием '{breed_data['name']}' уже существует"
             )
 
-        if "slug" not in breed_data or breed_data["slug"] is None:
-            from core.entities.base import _generate_slug
-
+        if "slug" not in breed_data:
             breed_data["slug"] = _generate_slug(breed_data["name"])
 
         breed_data["slug"] = await self._ensure_unique_slug(breed_data["slug"])
 
-        if "page_data" not in breed_data or breed_data["page_data"] is None:
-            breed_data["page_data"] = "<div></div>"
+        if "page_data" not in breed_data:
+            breed_data["page_data"] = DEFAULT_PAGE_DATA
 
-        breed = Breed(**breed_data)
+        try:
+            breed = Breed(**breed_data)
+        except ValidationError as ex:
+            raise ClientError(str(ex)) from ex
         return await self.breed_repository.create(breed)
 
     async def update(self, slug_or_id: str, data: BreedUpdateDto) -> Breed:
@@ -69,6 +139,9 @@ class BreedService:
             raise ClientError("Порода не найдена")
 
         update_data = data.model_dump(exclude_none=True)
+        if not update_data:
+            raise ClientError("Нет данных для обновления")
+        self._validate_breed_data(update_data, partial=True)
 
         if "name" in update_data:
             existing = await self.breed_repository.find_by_name(update_data["name"])
@@ -83,7 +156,6 @@ class BreedService:
             )
 
         if "name" in update_data and "slug" not in update_data:
-
             new_slug = _generate_slug(update_data["name"])
             update_data["slug"] = await self._ensure_unique_slug(
                 new_slug, exclude_id=breed.id
@@ -94,11 +166,14 @@ class BreedService:
 
         return await self.breed_repository.update(breed)
 
-    async def get_by_slug_or_id(self, slug_or_id: str) -> Breed | None:
+    async def get_by_slug_or_id(self, slug_or_id: str) -> Breed:
         """Получить породу по slug или UUID."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        return await self.breed_repository.get_by_slug_or_id(parsed)
+        breed = await self.breed_repository.get_by_slug_or_id(parsed)
+        if breed is None:
+            raise ClientError("Порода не найдена")
+        return breed
 
     async def delete(self, slug_or_id: str) -> None:
         """Удалить породу."""

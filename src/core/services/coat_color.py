@@ -1,12 +1,19 @@
 from typing import Literal
 from uuid import UUID
 
+from pydantic import ValidationError
+
+from core.entities.base import _generate_slug
 from core.entities.coat_color import CoatColor
 from core.exceptions.base import ClientError
-from core.protocols.repositories.coat_color_repository import (
-    CoatColorRepositoryProtocol,
-)
-from core.schemas.coat_color import CoatColorCreateDto, CoatColorUpdateDto
+from core.protocols.repositories import CoatColorRepositoryProtocol
+from core.schemas import CoatColorCreateDto, CoatColorUpdateDto
+
+COAT_COLOR_NAME_MAX_LENGTH = 63
+COAT_COLOR_SHORT_NAME_MAX_LENGTH = 63
+COAT_COLOR_SLUG_MAX_LENGTH = 63
+COAT_COLOR_DESCRIPTION_MAX_LENGTH = 511
+DEFAULT_PAGE_DATA = "<div></div>"
 
 
 class CoatColorService:
@@ -20,6 +27,72 @@ class CoatColorService:
             return UUID(slug_or_id)
         except ValueError:
             return slug_or_id
+
+    def _validate_required_text(
+        self, *, field: str, value: str | None, max_length: int
+    ) -> str:
+        if value is None:
+            raise ClientError(f"{field} обязательно")
+
+        normalized = value.strip()
+        if not normalized:
+            raise ClientError(f"{field} не может быть пустым")
+        if len(normalized) > max_length:
+            raise ClientError(f"{field} не может быть длиннее {max_length} символов")
+        return normalized
+
+    def _validate_optional_text(
+        self, *, field: str, value: str | None, max_length: int | None = None
+    ) -> str | None:
+        if value is None:
+            return None
+
+        normalized = value.strip()
+        if not normalized:
+            raise ClientError(f"{field} не может быть пустым")
+        if max_length is not None and len(normalized) > max_length:
+            raise ClientError(f"{field} не может быть длиннее {max_length} символов")
+        return normalized
+
+    def _validate_coat_color_data(
+        self, data: dict[str, str | None], *, partial: bool
+    ) -> None:
+        if not partial or "name" in data:
+            data["name"] = self._validate_required_text(
+                field="Название масти",
+                value=data.get("name"),
+                max_length=COAT_COLOR_NAME_MAX_LENGTH,
+            )
+
+        if "short_name" in data:
+            data["short_name"] = self._validate_optional_text(
+                field="Короткое название масти",
+                value=data["short_name"],
+                max_length=COAT_COLOR_SHORT_NAME_MAX_LENGTH,
+            )
+        if "slug" in data:
+            data["slug"] = self._validate_required_text(
+                field="Slug",
+                value=data["slug"],
+                max_length=COAT_COLOR_SLUG_MAX_LENGTH,
+            )
+        if "description" in data:
+            data["description"] = self._validate_optional_text(
+                field="Описание масти",
+                value=data["description"],
+                max_length=COAT_COLOR_DESCRIPTION_MAX_LENGTH,
+            )
+        if "page_data" in data:
+            data["page_data"] = self._validate_optional_text(
+                field="Данные страницы масти",
+                value=data["page_data"],
+            )
+
+    def _validate_pagination(self, *, limit: int | None, offset: int | None) -> None:
+        if limit is not None and limit < 0:
+            raise ClientError("Лимит не может быть меньше 0")
+        if offset is not None and offset < 0:
+            raise ClientError("Смещение не может быть меньше 0")
 
     async def _ensure_unique_slug(
         self, slug: str, exclude_id: UUID | None = None
@@ -43,6 +116,7 @@ class CoatColorService:
         """Создать новую масть."""
 
         coat_color_data = data.model_dump(exclude_none=True)
+        self._validate_coat_color_data(coat_color_data, partial=False)
 
         existing = await self.coat_color_repository.find_by_name(
             coat_color_data["name"]
@@ -52,19 +126,27 @@ class CoatColorService:
                 f"Масть с названием '{coat_color_data['name']}' уже существует"
             )
 
-        if "slug" not in coat_color_data or coat_color_data["slug"] is None:
-            from core.entities.base import _generate_slug
-
+        if "slug" not in coat_color_data:
             coat_color_data["slug"] = _generate_slug(coat_color_data["name"])
-
-        coat_color_data["slug"] = await self._ensure_unique_slug(
-            coat_color_data["slug"]
-        )
+            coat_color_data["slug"] = await self._ensure_unique_slug(
+                coat_color_data["slug"]
+            )
+        else:
+            existing_slug = await self.coat_color_repository.find_by_slug(
+                coat_color_data["slug"]
+            )
+            if existing_slug is not None:
+                raise ClientError(
+                    f"Масть со slug '{coat_color_data['slug']}' уже существует"
+                )
 
         if "page_data" not in coat_color_data or coat_color_data["page_data"] is None:
-            coat_color_data["page_data"] = "<div></div>"
+            coat_color_data["page_data"] = DEFAULT_PAGE_DATA
 
-        coat_color = CoatColor(**coat_color_data)
+        try:
+            coat_color = CoatColor(**coat_color_data)
+        except ValidationError as ex:
+            raise ClientError(str(ex)) from ex
         return await self.coat_color_repository.create(coat_color)
 
     async def update(self, slug_or_id: str, data: CoatColorUpdateDto) -> CoatColor:
@@ -75,6 +157,9 @@ class CoatColorService:
             raise ClientError("Масть не найдена")
 
         update_data = data.model_dump(exclude_none=True)
+        if not update_data:
+            raise ClientError("Нет данных для обновления")
+        self._validate_coat_color_data(update_data, partial=True)
 
         if "name" in update_data:
             existing = await self.coat_color_repository.find_by_name(
@@ -86,13 +171,15 @@ class CoatColorService:
                 )
 
         if "slug" in update_data:
-            update_data["slug"] = await self._ensure_unique_slug(
-                update_data["slug"], exclude_id=coat_color.id
+            existing_slug = await self.coat_color_repository.find_by_slug(
+                update_data["slug"]
             )
+            if existing_slug is not None and existing_slug.id != coat_color.id:
+                raise ClientError(
+                    f"Масть со slug '{update_data['slug']}' уже существует"
+                )
 
         if "name" in update_data and "slug" not in update_data:
-            from core.entities.base import _generate_slug
-
             new_slug = _generate_slug(update_data["name"])
             update_data["slug"] = await self._ensure_unique_slug(
                 new_slug, exclude_id=coat_color.id
@@ -103,11 +190,14 @@ class CoatColorService:
 
         return await self.coat_color_repository.update(coat_color)
 
-    async def get_by_slug_or_id(self, slug_or_id: str) -> CoatColor | None:
+    async def get_by_slug_or_id(self, slug_or_id: str) -> CoatColor:
         """Получить масть по slug или UUID."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        return await self.coat_color_repository.get_by_slug_or_id(parsed)
+        coat_color = await self.coat_color_repository.get_by_slug_or_id(parsed)
+        if coat_color is None:
+            raise ClientError("Масть не найдена")
+        return coat_color
 
     async def delete(self, slug_or_id: str) -> None:
         """Удалить масть."""
@@ -135,6 +225,7 @@ class CoatColorService:
         offset: int | None = None,
     ) -> tuple[list[CoatColor], int]:
         """Получить отфильтрованный список мастей."""
+        self._validate_pagination(limit=limit, offset=offset)
         return await self.coat_color_repository.get_filtered(
             name=name,
             slug=slug,

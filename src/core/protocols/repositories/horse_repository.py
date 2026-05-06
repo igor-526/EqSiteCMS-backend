@@ -61,7 +61,7 @@ class HorseRepositoryProtocol(BaseRepositoryProtocol[Horse], Protocol):
         """Получить полную информацию о лошадях c породой, мастью, владельцем, фотографиями и услугами с возможностью фильтрации и сортировки"""
         ...
 
-    async def get_available_dames(
+    async def get_available_dams(
         self,
         *,
         target_horse: Horse,

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, Field
 
 from core.schemas.baseschema import BaseSchema
 
@@ -12,7 +12,7 @@ class RegisterData(BaseSchema):
 
 
 class LoginData(BaseSchema):
-    username: str
+    username: str = Field(validation_alias=AliasChoices("username", "login"))
     password: str
 
 

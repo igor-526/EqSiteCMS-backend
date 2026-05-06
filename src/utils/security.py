@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import jwt
 from passlib.hash import pbkdf2_sha256
@@ -18,7 +19,7 @@ class Security:
         expiration = datetime.now(timezone.utc) + timedelta(
             minutes=self.access_token_expires_in_minutes
         )
-        payload = {"sub": sub, "exp": expiration}
+        payload = {"sub": sub, "exp": expiration, "token_type": "access"}
         token = jwt.encode(payload, self.secret_key, algorithm=self.jwt_algorithm)
         return token
 
@@ -26,14 +27,17 @@ class Security:
         expiration = datetime.now(timezone.utc) + timedelta(
             days=self.refresh_token_expires_in_days
         )
-        payload = {"sub": sub, "exp": expiration}
+        payload = {"sub": sub, "exp": expiration, "token_type": "refresh"}
         token = jwt.encode(payload, self.secret_key, algorithm=self.jwt_algorithm)
         return token
 
-    def decode_token(self, token: str) -> dict:
+    def decode_token(self, token: str) -> dict[str, Any]:
         try:
             payload = jwt.decode(
-                token, self.secret_key, algorithms=[self.jwt_algorithm]
+                token,
+                self.secret_key,
+                algorithms=[self.jwt_algorithm],
+                options={"require": ["exp", "sub", "token_type"]},
             )
             return payload
         except jwt.ExpiredSignatureError:

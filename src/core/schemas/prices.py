@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import Field, field_serializer
+from pydantic import ConfigDict, Field, field_serializer
 
 from core.entities.prices import Price, PriceGroup
 from core.entities.table import Table as TableEntity
@@ -11,6 +11,8 @@ from core.schemas.photos import PhotoOutShortDto
 
 class PriceGroupOutDto(BaseSchema):
     """DTO для вывода группы цен."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str
@@ -27,9 +29,6 @@ class PriceGroupOutDto(BaseSchema):
         if value is None:
             return None
         return value.isoformat()
-
-    class Config:
-        from_attributes = True
 
 
 class PriceGroupCreateDto(BaseSchema):
@@ -49,6 +48,8 @@ class PriceGroupUpdateDto(BaseSchema):
 class PriceGroupSimpleDto(BaseSchema):
     """Упрощенный DTO группы для вложенных объектов."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
     name: str
 
@@ -56,12 +57,11 @@ class PriceGroupSimpleDto(BaseSchema):
     def serialize_id(self, value: UUID) -> str:
         return str(value)
 
-    class Config:
-        from_attributes = True
-
 
 class PriceOutDto(BaseSchema):
     """DTO для вывода цены."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     name: str
@@ -82,9 +82,6 @@ class PriceOutDto(BaseSchema):
             return None
         return value.isoformat()
 
-    class Config:
-        from_attributes = True
-
 
 class PriceOutWithPageDataDto(PriceOutDto):
     """DTO для вывода цены с page_data."""
@@ -102,6 +99,7 @@ class PriceCreateDto(BaseSchema):
     """DTO для создания цены."""
 
     name: str = Field(..., description="Название цены")
+    slug: str | None = Field(None, description="Slug цены")
     description: str | None = Field(None, description="Описание цены")
     groups: list[UUID] = Field(default_factory=list, description="Список UUID групп")
     page_data: str | None = Field(
@@ -114,6 +112,7 @@ class PriceUpdateDto(BaseSchema):
     """DTO для обновления цены."""
 
     name: str | None = Field(None, description="Название цены")
+    slug: str | None = Field(None, description="Slug цены")
     description: str | None = Field(None, description="Описание цены")
     groups: list[UUID] | None = Field(
         None, description="Список UUID групп (заменяет все связи)"

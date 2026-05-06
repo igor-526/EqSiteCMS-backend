@@ -4,7 +4,6 @@ from typing import Annotated
 from fastapi import APIRouter, Cookie, Depends, Response
 from fastapi.responses import JSONResponse
 
-from core.exceptions.auth import InvalidCredentials
 from core.schemas.auth import LoginData, RegisterData
 from core.schemas.users import UserOutDto
 from core.services.auth import AuthService
@@ -45,11 +44,7 @@ async def login(
     data: LoginData,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
 ) -> JSONResponse:
-    try:
-        tokens = await auth_service.login(data=data)
-    except InvalidCredentials:
-        return JSONResponse({"status": "denied"}, status_code=401)
-
+    tokens = await auth_service.login(data=data)
     response = JSONResponse({"status": "ok"}, status_code=200)
     response.set_cookie(
         key="access_token",
@@ -89,11 +84,7 @@ async def refresh_access_token(
     if not refresh_token:
         return JSONResponse({"status": "denied"}, status_code=401)
 
-    try:
-        tokens = await auth_service.refresh(refresh_token=refresh_token)
-    except InvalidCredentials:
-        return JSONResponse({"status": "denied"}, status_code=401)
-
+    tokens = await auth_service.refresh(refresh_token=refresh_token)
     response = JSONResponse({"status": "ok"}, status_code=200)
     response.set_cookie(
         key="access_token",

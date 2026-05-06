@@ -91,11 +91,6 @@ async def get_site_setting(
     ],
 ) -> SiteSettingOutDto:
     site_setting = await site_settings_service.get_by_id(id)
-    if site_setting is None:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Настройка не найдена")
-
     return SiteSettingOutDto.model_validate(site_setting)
 
 

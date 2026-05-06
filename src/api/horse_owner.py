@@ -65,12 +65,7 @@ async def get_horse_owner(
     id: UUID,
     horse_owner_service: Annotated[HorseOwnerService, Depends(get_horse_owner_service)],
 ) -> HorseOwnerOutDto:
-    horse_owner = await horse_owner_service.get_by_id(id)
-    if horse_owner is None:
-        from fastapi import HTTPException
-
-        raise HTTPException(status_code=404, detail="Владелец не найден")
-
+    horse_owner = await horse_owner_service.get_by_id_or_raise(id)
     return HorseOwnerOutDto.model_validate(horse_owner)
 
 

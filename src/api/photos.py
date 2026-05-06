@@ -18,11 +18,29 @@ from core.schemas.photos import (
     PhotoCreateDto,
     PhotoOutDto,
     PhotoUpdateDto,
+    PhotoUploadDto,
 )
 from core.services.photos import PhotoService
 from depends.services import get_photo_service
 
 router = APIRouter()
+
+
+def to_photo_out_dto(photo_service: PhotoService, photo) -> PhotoOutDto:
+    return PhotoOutDto.model_validate(
+        {
+            **photo.model_dump(),
+            "url": photo_service.build_url(photo.path),
+        }
+    )
+
+
+async def to_photo_upload_dto(file: UploadFile) -> PhotoUploadDto:
+    return PhotoUploadDto(
+        filename=file.filename or "",
+        content=await file.read(),
+        content_type=file.content_type,
+    )
 
 
 @router.get(
@@ -62,7 +80,7 @@ async def get_photos(
         limit=limit,
         offset=offset,
     )
-    items = [PhotoOutDto.model_validate(entity) for entity in entities]
+    items = [to_photo_out_dto(photo_service, entity) for entity in entities]
     return PaginatedEntities(items=items, total=total)
 
 
@@ -80,7 +98,7 @@ async def get_photo(
     if photo is None:
         raise HTTPException(status_code=404, detail="Фотография не найдена")
 
-    return PhotoOutDto.model_validate(photo)
+    return to_photo_out_dto(photo_service, photo)
 
 
 @router.post(
@@ -100,9 +118,10 @@ async def create_photo(
     ),
 ) -> PhotoOutDto:
     data = PhotoCreateDto(name=name, description=description)
-    photo = await photo_service.create_from_upload(data, file, file.filename)
+    upload = await to_photo_upload_dto(file)
+    photo = await photo_service.create(data, upload)
 
-    return PhotoOutDto.model_validate(photo)
+    return to_photo_out_dto(photo_service, photo)
 
 
 @router.patch(
@@ -123,11 +142,12 @@ async def update_photo(
     ),
 ) -> PhotoOutDto:
     data = PhotoUpdateDto(name=name, description=description)
-    photo = await photo_service.update_from_upload(
-        id, data, file, file.filename if file else None
-    )
+    upload = None
+    if file is not None:
+        upload = await to_photo_upload_dto(file)
+    photo = await photo_service.update(id, data, upload)
 
-    return PhotoOutDto.model_validate(photo)
+    return to_photo_out_dto(photo_service, photo)
 
 
 @router.delete(
