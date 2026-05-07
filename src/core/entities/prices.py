@@ -9,6 +9,7 @@ from .table import Table
 class Price(Entity, TimeStampMixin, SlugMixin):
     """Ценовая позиция."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         description="Название цены",
@@ -34,6 +35,7 @@ class Price(Entity, TimeStampMixin, SlugMixin):
 class PriceGroup(Entity, TimeStampMixin):
     """Группа цен."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         description="Название группы",

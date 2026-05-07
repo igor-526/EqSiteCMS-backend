@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
+from core.entities.equestrian import EquestrianContext
 from core.schemas.site_settings import (
     SiteSettingCreateDto,
     SiteSettingOutDto,
@@ -11,7 +12,12 @@ from core.schemas.site_settings import (
     SiteSettingUpdateDto,
 )
 from core.services.site_settings import SiteSettingsService
-from depends.services import get_site_settings_service
+from depends.services import (
+    get_current_user,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+    get_site_settings_service,
+)
 
 router = APIRouter()
 
@@ -24,6 +30,9 @@ router = APIRouter()
 async def get_site_settings(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
+    ],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
     ],
     key: list[str] | None = Query(
         None, description="Фильтр по ключам (множественная фильтрация)"
@@ -57,6 +66,7 @@ async def get_site_settings(
     ),
 ):
     entities, total = await site_settings_service.get_filtered(
+        equestrian_context=equestrian_context,
         key=key,
         name=name,
         value=value,
@@ -89,8 +99,13 @@ async def get_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
 ) -> SiteSettingOutDto:
-    site_setting = await site_settings_service.get_by_id(id)
+    site_setting = await site_settings_service.get_by_id(
+        id, equestrian_context=equestrian_context
+    )
     return SiteSettingOutDto.model_validate(site_setting)
 
 
@@ -105,8 +120,14 @@ async def create_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> SiteSettingOutDto:
-    site_setting = await site_settings_service.create(data)
+    site_setting = await site_settings_service.create(
+        data, equestrian_context=equestrian_context
+    )
     return SiteSettingOutDto.model_validate(site_setting)
 
 
@@ -122,8 +143,14 @@ async def update_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> SiteSettingOutDto:
-    site_setting = await site_settings_service.update(id, data)
+    site_setting = await site_settings_service.update(
+        id, data, equestrian_context=equestrian_context
+    )
     return SiteSettingOutDto.model_validate(site_setting)
 
 
@@ -138,5 +165,9 @@ async def delete_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await site_settings_service.delete(id)
+    await site_settings_service.delete(id, equestrian_context=equestrian_context)

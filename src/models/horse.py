@@ -1,4 +1,13 @@
-from sqlalchemy import Boolean, Column, Date, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Date,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+)
 
 from utils.basemodel import metadata, timestamp_columns, uuid_pk
 
@@ -7,6 +16,12 @@ horse = Table(
     metadata,
     uuid_pk(),
     *timestamp_columns(),
+    Column(
+        "equestrian_id",
+        ForeignKey("equestrians.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    ),
     Column("name", String(63), nullable=False, index=True),
     Column("slug", String(63), nullable=False, index=True),
     Column("description", String(511), nullable=True),
@@ -29,6 +44,10 @@ horse = Table(
     Column(
         "this_stable", Boolean(), nullable=False, default=True, server_default="true"
     ),
+    Index("ix_horse_equestrian_slug", "equestrian_id", "slug", unique=True),
+    Index("ix_horse_equestrian_name", "equestrian_id", "name"),
+    Index("ix_horse_equestrian_kind", "equestrian_id", "kind"),
+    Index("ix_horse_equestrian_sex", "equestrian_id", "sex"),
 )
 
 horse_children = Table(

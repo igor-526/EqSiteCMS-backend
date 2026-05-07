@@ -1,7 +1,8 @@
 import pytest
 
 from core.entities.user import User, UserScope
-from core.exceptions.auth import InvalidCredentials, UserAlreadyExists
+from core.exceptions.auth import InvalidCredentials
+from core.exceptions.base import ClientError
 from core.schemas.auth import LoginData, RegisterData
 from core.services.auth import AuthService
 
@@ -138,7 +139,7 @@ async def test_get_current_user_repository_lookup_failure_is_invalid_credentials
 
 
 @pytest.mark.asyncio
-async def test_register_hashes_password_without_mutating_input_and_hides_password():
+async def test_register_is_disabled_without_mutating_input_or_writing_user():
     repository = FakeUserRepository()
     security = FakeSecurity()
     service = AuthService(user_repository=repository, security=security)
@@ -150,15 +151,13 @@ async def test_register_hashes_password_without_mutating_input_and_hides_passwor
         password="plain-password",
     )
 
-    result = await service.register(data=data)
+    with pytest.raises(ClientError):
+        await service.register(data=data)
 
     assert data.password == "plain-password"
-    assert repository.created_user is not None
-    assert repository.created_user.password == "hashed:plain-password"
-    assert result.username == "new-user"
-    assert "password" not in result.model_dump()
-    assert repository.calls[0] == ("get_by_username", "new-user")
-    assert security.calls == [("hash_password", "plain-password")]
+    assert repository.created_user is None
+    assert repository.calls == []
+    assert security.calls == []
 
 
 @pytest.mark.asyncio
@@ -174,11 +173,11 @@ async def test_register_duplicate_username_raises_user_already_exists():
         password="plain-password",
     )
 
-    with pytest.raises(UserAlreadyExists):
+    with pytest.raises(ClientError):
         await service.register(data=data)
 
     assert security.calls == []
-    assert [call[0] for call in repository.calls] == ["get_by_username"]
+    assert repository.calls == []
 
 
 @pytest.mark.asyncio

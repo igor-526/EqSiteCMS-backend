@@ -9,6 +9,7 @@ from core.schemas.baseschema import BaseSchema
 
 class UserOutDto(BaseSchema):
     id: UUID
+    equestrian_id: UUID
     username: str
     first_name: str | None = None
     last_name: str | None = None

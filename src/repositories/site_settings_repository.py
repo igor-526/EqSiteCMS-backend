@@ -1,20 +1,22 @@
 from typing import Literal
+from uuid import UUID
 
 from sqlalchemy import Table, func, or_, select
 
 from core.entities.site_settings import SiteSetting
 from models.site_settings import site_settings
 
-from .abstract_repository import AbstractRepository
+from .abstract_repository import TenantScopedRepository
 
 
-class SiteSettingsRepository(AbstractRepository[SiteSetting]):
+class SiteSettingsRepository(TenantScopedRepository[SiteSetting]):
     table: Table = site_settings
     entity = SiteSetting
 
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         key: list[str] | None = None,
         name: str | None = None,
         value: str | None = None,
@@ -41,8 +43,12 @@ class SiteSettingsRepository(AbstractRepository[SiteSetting]):
         offset: int | None = None,
     ) -> tuple[list[SiteSetting], int]:
         """Получить отфильтрованный список с подсчётом общего количества."""
-        stmt = select(self.table)
-        count_stmt = select(func.count()).select_from(self.table)
+        stmt = select(self.table).where(self.table.c.equestrian_id == equestrian_id)
+        count_stmt = (
+            select(func.count())
+            .select_from(self.table)
+            .where(self.table.c.equestrian_id == equestrian_id)
+        )
 
         conditions = []
         if key:
@@ -87,15 +93,20 @@ class SiteSettingsRepository(AbstractRepository[SiteSetting]):
 
         return entities, total
 
-    async def find_by_key(self, key: str) -> SiteSetting | None:
+    async def find_by_key(self, key: str, *, equestrian_id: UUID) -> SiteSetting | None:
         """Проверить существование key."""
-        stmt = select(self.table).where(self.table.c.key == key)
+        stmt = select(self.table).where(
+            self.table.c.key == key,
+            self.table.c.equestrian_id == equestrian_id,
+        )
         row = await self.session.execute(stmt)
         mapping = row.mappings().first()
         if mapping is None:
             return None
         return self.entity.model_validate(dict(mapping))
 
-    async def find_by_name(self, name: str) -> SiteSetting | None:
+    async def find_by_name(
+        self, name: str, *, equestrian_id: UUID
+    ) -> SiteSetting | None:
         """Проверить существование name."""
-        return await super().find_by_name(name)
+        return await super().find_by_name(name, equestrian_id=equestrian_id)

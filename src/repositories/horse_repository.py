@@ -31,10 +31,10 @@ from models.horse_service import horse_service, horse_service_relations
 from models.photos import photos
 from settings import settings
 
-from .abstract_repository import AbstractRepository
+from .abstract_repository import TenantScopedRepository
 
 
-class HorseRepository(AbstractRepository[Horse]):
+class HorseRepository(TenantScopedRepository[Horse]):
     """Протокол для работы с лошадьми."""
 
     table: Table = horse
@@ -103,10 +103,13 @@ class HorseRepository(AbstractRepository[Horse]):
         )
 
     async def get_horse_full_info_by_slug(
-        self, *, horse_slug: str, pedigree: int | None = None
+        self, *, horse_slug: str, equestrian_id: UUID, pedigree: int | None = None
     ) -> HorseOutDto | HorseWithPedigreeOutDto | None:
         if pedigree is not None and pedigree > 0:
-            id_stmt = select(horse.c.id).where(horse.c.slug == horse_slug)
+            id_stmt = select(horse.c.id).where(
+                horse.c.slug == horse_slug,
+                horse.c.equestrian_id == equestrian_id,
+            )
             id_result = await self.session.execute(id_stmt)
             id_row = id_result.first()
             if id_row is None:
@@ -114,6 +117,7 @@ class HorseRepository(AbstractRepository[Horse]):
             horse_id = UUID(str(id_row[0]))
             mapping, _ = await self.get_horse_list_full_info(
                 include_ids=[horse_id],
+                equestrian_id=equestrian_id,
                 limit=1,
                 pedigree=pedigree,
             )
@@ -126,10 +130,28 @@ class HorseRepository(AbstractRepository[Horse]):
                 coat_color,
                 horse_owner,
             )
-            .outerjoin(breeds, horse.c.breed_id == breeds.c.id)
-            .outerjoin(coat_color, horse.c.coat_color_id == coat_color.c.id)
-            .outerjoin(horse_owner, horse.c.horse_owner_id == horse_owner.c.id)
-            .where(horse.c.slug == horse_slug)
+            .outerjoin(
+                breeds,
+                and_(
+                    horse.c.breed_id == breeds.c.id,
+                    breeds.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                coat_color,
+                and_(
+                    horse.c.coat_color_id == coat_color.c.id,
+                    coat_color.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                horse_owner,
+                and_(
+                    horse.c.horse_owner_id == horse_owner.c.id,
+                    horse_owner.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .where(horse.c.slug == horse_slug, horse.c.equestrian_id == equestrian_id)
         )
 
         result = await self.session.execute(stmt)
@@ -160,7 +182,10 @@ class HorseRepository(AbstractRepository[Horse]):
         photos_stmt = (
             select(horse_photos.c.photo_id, horse_photos.c.is_main, photos.c.path)
             .join(photos, horse_photos.c.photo_id == photos.c.id)
-            .where(horse_photos.c.horse_id == horse_id)
+            .where(
+                horse_photos.c.horse_id == horse_id,
+                photos.c.equestrian_id == equestrian_id,
+            )
         )
         photos_result = await self.session.execute(photos_stmt)
         photos_data = [dict(row) for row in photos_result.mappings().all()]
@@ -171,7 +196,10 @@ class HorseRepository(AbstractRepository[Horse]):
                 horse_service_relations,
                 horse_service.c.id == horse_service_relations.c.service_id,
             )
-            .where(horse_service_relations.c.horse_id == horse_id)
+            .where(
+                horse_service_relations.c.horse_id == horse_id,
+                horse_service.c.equestrian_id == equestrian_id,
+            )
         )
         services_result = await self.session.execute(services_stmt)
         services_data = [dict(row) for row in services_result.mappings().all()]
@@ -186,11 +214,12 @@ class HorseRepository(AbstractRepository[Horse]):
         )
 
     async def get_horse_full_info_by_id(
-        self, *, horse_id: UUID, pedigree: int | None = None
+        self, *, horse_id: UUID, equestrian_id: UUID, pedigree: int | None = None
     ) -> HorseOutDto | HorseWithPedigreeOutDto | None:
         if pedigree is not None and pedigree > 0:
             mapping, _ = await self.get_horse_list_full_info(
                 include_ids=[horse_id],
+                equestrian_id=equestrian_id,
                 limit=1,
                 pedigree=pedigree,
             )
@@ -203,10 +232,28 @@ class HorseRepository(AbstractRepository[Horse]):
                 coat_color,
                 horse_owner,
             )
-            .outerjoin(breeds, horse.c.breed_id == breeds.c.id)
-            .outerjoin(coat_color, horse.c.coat_color_id == coat_color.c.id)
-            .outerjoin(horse_owner, horse.c.horse_owner_id == horse_owner.c.id)
-            .where(horse.c.id == horse_id)
+            .outerjoin(
+                breeds,
+                and_(
+                    horse.c.breed_id == breeds.c.id,
+                    breeds.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                coat_color,
+                and_(
+                    horse.c.coat_color_id == coat_color.c.id,
+                    coat_color.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                horse_owner,
+                and_(
+                    horse.c.horse_owner_id == horse_owner.c.id,
+                    horse_owner.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .where(horse.c.id == horse_id, horse.c.equestrian_id == equestrian_id)
         )
 
         result = await self.session.execute(stmt)
@@ -236,7 +283,10 @@ class HorseRepository(AbstractRepository[Horse]):
         photos_stmt = (
             select(horse_photos.c.photo_id, horse_photos.c.is_main, photos.c.path)
             .join(photos, horse_photos.c.photo_id == photos.c.id)
-            .where(horse_photos.c.horse_id == horse_id)
+            .where(
+                horse_photos.c.horse_id == horse_id,
+                photos.c.equestrian_id == equestrian_id,
+            )
         )
         photos_result = await self.session.execute(photos_stmt)
         photos_data = [dict(row) for row in photos_result.mappings().all()]
@@ -247,7 +297,10 @@ class HorseRepository(AbstractRepository[Horse]):
                 horse_service_relations,
                 horse_service.c.id == horse_service_relations.c.service_id,
             )
-            .where(horse_service_relations.c.horse_id == horse_id)
+            .where(
+                horse_service_relations.c.horse_id == horse_id,
+                horse_service.c.equestrian_id == equestrian_id,
+            )
         )
         services_result = await self.session.execute(services_stmt)
         services_data = [dict(row) for row in services_result.mappings().all()]
@@ -264,6 +317,7 @@ class HorseRepository(AbstractRepository[Horse]):
     async def get_horse_list_full_info(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         description: str | None = None,
         breed_ids: list[UUID] | None = None,
@@ -292,18 +346,54 @@ class HorseRepository(AbstractRepository[Horse]):
     ) -> tuple[Mapping[UUID, Union[HorseOutDto, HorseWithPedigreeOutDto]], int]:
         base_stmt = (
             select(horse, breeds, coat_color, horse_owner)
-            .outerjoin(breeds, horse.c.breed_id == breeds.c.id)
-            .outerjoin(coat_color, horse.c.coat_color_id == coat_color.c.id)
-            .outerjoin(horse_owner, horse.c.horse_owner_id == horse_owner.c.id)
+            .outerjoin(
+                breeds,
+                and_(
+                    horse.c.breed_id == breeds.c.id,
+                    breeds.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                coat_color,
+                and_(
+                    horse.c.coat_color_id == coat_color.c.id,
+                    coat_color.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                horse_owner,
+                and_(
+                    horse.c.horse_owner_id == horse_owner.c.id,
+                    horse_owner.c.equestrian_id == equestrian_id,
+                ),
+            )
         )
 
         count_stmt = select(func.count(func.distinct(horse.c.id))).select_from(
-            horse.outerjoin(breeds, horse.c.breed_id == breeds.c.id)
-            .outerjoin(coat_color, horse.c.coat_color_id == coat_color.c.id)
-            .outerjoin(horse_owner, horse.c.horse_owner_id == horse_owner.c.id)
+            horse.outerjoin(
+                breeds,
+                and_(
+                    horse.c.breed_id == breeds.c.id,
+                    breeds.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                coat_color,
+                and_(
+                    horse.c.coat_color_id == coat_color.c.id,
+                    coat_color.c.equestrian_id == equestrian_id,
+                ),
+            )
+            .outerjoin(
+                horse_owner,
+                and_(
+                    horse.c.horse_owner_id == horse_owner.c.id,
+                    horse_owner.c.equestrian_id == equestrian_id,
+                ),
+            )
         )
 
-        conditions: list[ColumnElement[bool]] = []
+        conditions: list[ColumnElement[bool]] = [horse.c.equestrian_id == equestrian_id]
         if name:
             conditions.append(horse.c.name.ilike(f"%{name}%"))
         if description:
@@ -357,9 +447,10 @@ class HorseRepository(AbstractRepository[Horse]):
                 select(horse_children.c.child_id)
                 .join(horse, horse_children.c.horse_id == horse.c.id)
                 .where(
+                    horse.c.equestrian_id == equestrian_id,
                     horse.c.sex.in_(
                         [e.value for e in exclude_ids_that_are_children_of_sex]
-                    )
+                    ),
                 )
             )
             conditions.append(~horse.c.id.in_(subq))
@@ -410,7 +501,10 @@ class HorseRepository(AbstractRepository[Horse]):
                 photos.c.path,
             )
             .join(photos, horse_photos.c.photo_id == photos.c.id)
-            .where(horse_photos.c.horse_id.in_(horse_ids))
+            .where(
+                horse_photos.c.horse_id.in_(horse_ids),
+                photos.c.equestrian_id == equestrian_id,
+            )
         )
         photos_result = await self.session.execute(photos_stmt)
         photos_by_horse: dict[UUID, list[dict]] = {}
@@ -427,6 +521,7 @@ class HorseRepository(AbstractRepository[Horse]):
                 horse_service.c.id == horse_service_relations.c.service_id,
             )
             .where(horse_service_relations.c.horse_id.in_(horse_ids))
+            .where(horse_service.c.equestrian_id == equestrian_id)
         )
         services_result = await self.session.execute(services_stmt)
         services_by_horse: dict[UUID, list[dict]] = {}
@@ -487,7 +582,10 @@ class HorseRepository(AbstractRepository[Horse]):
                         horse.c.sex,
                     )
                     .join(horse, horse_children.c.horse_id == horse.c.id)
-                    .where(horse_children.c.child_id.in_(current_children))
+                    .where(
+                        horse_children.c.child_id.in_(current_children),
+                        horse.c.equestrian_id == equestrian_id,
+                    )
                 )
                 parents_result = await self.session.execute(parents_stmt)
                 next_children: set[UUID] = set()
@@ -531,6 +629,7 @@ class HorseRepository(AbstractRepository[Horse]):
                     batch = missing_list[i : i + batch_size]
                     fetched, _ = await self.get_horse_list_full_info(
                         include_ids=batch,
+                        equestrian_id=equestrian_id,
                         limit=len(batch) + 1,
                         pedigree=0,
                     )
@@ -614,6 +713,7 @@ class HorseRepository(AbstractRepository[Horse]):
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
         """Получить доступных матерей."""
         filters: dict = {
+            "equestrian_id": target_horse.equestrian_id,
             "sex": [HorseSexEnum.FEMALE],
             "kind": [target_horse.kind],
             "exclude_ids": [target_horse.id],
@@ -638,6 +738,7 @@ class HorseRepository(AbstractRepository[Horse]):
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
         """Получить доступных отцов."""
         filters: dict = {
+            "equestrian_id": target_horse.equestrian_id,
             "sex": [HorseSexEnum.MALE],
             "kind": [target_horse.kind],
             "exclude_ids": [target_horse.id],
@@ -661,6 +762,7 @@ class HorseRepository(AbstractRepository[Horse]):
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
         """Получить доступных детей (без дублирования отца/матери: исключаем уже имеющих родителя того же пола)."""
         filters: dict = {
+            "equestrian_id": target_horse.equestrian_id,
             "kind": [target_horse.kind],
             "exclude_ids": [target_horse.id],
             "sort": ["name"],
@@ -683,7 +785,7 @@ class HorseRepository(AbstractRepository[Horse]):
         return await self.get_horse_list_full_info(**filters)
 
 
-class HorseChildrenRepository(AbstractRepository[HorseChildren]):
+class HorseChildrenRepository(TenantScopedRepository[HorseChildren]):
     """Репозиторий для работы с родословной лошади (связи родитель–потомок)."""
 
     table: Table = horse_children

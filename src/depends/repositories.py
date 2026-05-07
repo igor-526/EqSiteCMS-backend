@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
+    EquestrianRepositoryProtocol,
     HorseChildrenRepositoryProtocol,
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
@@ -20,6 +21,7 @@ from depends.utils import get_session
 from repositories import (
     BreedRepository,
     CoatColorRepository,
+    EquestrianRepository,
     HorseChildrenRepository,
     HorseOwnerRepository,
     HorseRepository,
@@ -36,6 +38,12 @@ async def get_user_repository(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> UserRepositoryProtocol:
     return UserRepository(session=session)
+
+
+async def get_equestrian_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> EquestrianRepositoryProtocol:
+    return EquestrianRepository(session=session)
 
 
 async def get_breed_repository(

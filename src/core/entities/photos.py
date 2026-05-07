@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import Field
 
 from .base import Entity, TimeStampMixin
@@ -6,6 +8,7 @@ from .base import Entity, TimeStampMixin
 class Photo(Entity, TimeStampMixin):
     """Фотография."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         description="Название фотографии",

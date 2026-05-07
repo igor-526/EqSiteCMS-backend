@@ -7,7 +7,13 @@ def configure_logger(
     logging.getLogger("httpx").setLevel(logging.WARNING)
     if advanced:
         logging.basicConfig(
-            format=f"{logger_prefix_output}:\n    TIME: %(asctime)s\n    LOGLEVEL: %(levelname)s\n    FIlENAME: %(name)s\n    MESSAGE: %(message)s",
+            format=(
+                f"{logger_prefix_output}:\n"
+                "    TIME: %(asctime)s\n"
+                "    LOGLEVEL: %(levelname)s\n"
+                "    FIlENAME: %(name)s\n"
+                "    MESSAGE: %(message)s"
+            ),
             level=logging.INFO,
         )
     else:

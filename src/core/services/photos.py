@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
+from core.entities.equestrian import EquestrianContext
 from core.entities.photos import Photo
 from core.exceptions.base import ClientError
 from core.protocols.media import (
@@ -28,13 +29,19 @@ class PhotoService:
         self.media_type_validator = media_type_validator
 
     async def _generate_unique_name(
-        self, base_name: str, exclude_id: UUID | None = None
+        self,
+        base_name: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         counter = 1
         current_name = base_name
 
         while True:
-            existing = await self.photo_repository.find_by_name(current_name)
+            existing = await self.photo_repository.find_by_name(
+                current_name, equestrian_id=equestrian_context.id
+            )
             if existing is None or (
                 exclude_id is not None and existing.id == exclude_id
             ):
@@ -75,7 +82,13 @@ class PhotoService:
             # Rollback is best-effort; keep bubbling original error.
             pass
 
-    async def create(self, data: PhotoCreateDto, upload: PhotoUploadDto) -> Photo:
+    async def create(
+        self,
+        data: PhotoCreateDto,
+        upload: PhotoUploadDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> Photo:
         if not upload.filename:
             raise ClientError("Имя файла не указано")
         self._validate_file_type(upload.filename, upload.content, upload.content_type)
@@ -83,12 +96,15 @@ class PhotoService:
         if not name or name.strip() == "":
             name = self._get_name_from_filename(upload.filename)
 
-        name = await self._generate_unique_name(name)
+        name = await self._generate_unique_name(
+            name, equestrian_context=equestrian_context
+        )
         description = data.description if data.description is not None else ""
         filename = self._generate_filename(upload.filename)
         await self.media_storage.save(upload.content, filename)
 
         photo = Photo(
+            equestrian_id=equestrian_context.id,
             name=name,
             description=description,
             path=filename,
@@ -103,9 +119,13 @@ class PhotoService:
         self,
         id: UUID,
         data: PhotoUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
         upload: PhotoUploadDto | None = None,
     ) -> Photo:
-        photo = await self.photo_repository.get_by_id(id)
+        photo = await self.photo_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if photo is None:
             raise ClientError("Фотография не найдена")
 
@@ -135,7 +155,9 @@ class PhotoService:
                     name_value = self._get_name_from_filename(photo.path)
 
             name_value = await self._generate_unique_name(
-                name_value, exclude_id=photo.id
+                name_value,
+                equestrian_context=equestrian_context,
+                exclude_id=photo.id,
             )
             update_data["name"] = name_value
 
@@ -171,18 +193,24 @@ class PhotoService:
 
         return updated
 
-    async def get_by_id(self, id: UUID) -> Photo | None:
-        return await self.photo_repository.get_by_id(id)
+    async def get_by_id(
+        self, id: UUID, *, equestrian_context: EquestrianContext
+    ) -> Photo | None:
+        return await self.photo_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
 
-    async def delete(self, id: UUID) -> None:
-        photo = await self.photo_repository.get_by_id(id)
+    async def delete(self, id: UUID, *, equestrian_context: EquestrianContext) -> None:
+        photo = await self.photo_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if photo is None:
             raise ClientError("Фотография не найдена")
 
         deleted_payload = await self.media_storage.load(photo.path)
         await self.media_storage.delete(photo.path)
         try:
-            await self.photo_repository.delete(id)
+            await self.photo_repository.delete(id, equestrian_id=equestrian_context.id)
         except Exception:
             await self._safe_restore_file(photo.path, deleted_payload)
             raise
@@ -190,6 +218,7 @@ class PhotoService:
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | None = None,
         description: str | None = None,
         price_ids: list[UUID] | None = None,
@@ -211,6 +240,7 @@ class PhotoService:
         offset: int | None = None,
     ) -> tuple[list[Photo], int]:
         return await self.photo_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             description=description,
             price_ids=price_ids,
@@ -220,13 +250,17 @@ class PhotoService:
             offset=offset,
         )
 
-    async def batch_delete(self, ids: list[UUID]) -> None:
+    async def batch_delete(
+        self, ids: list[UUID], *, equestrian_context: EquestrianContext
+    ) -> None:
         if not ids:
             return
 
         existing_photos: list[Photo] = []
         for photo_id in ids:
-            photo = await self.photo_repository.get_by_id(photo_id)
+            photo = await self.photo_repository.get_by_id(
+                photo_id, equestrian_id=equestrian_context.id
+            )
             if photo is None:
                 continue
             existing_photos.append(photo)
@@ -248,7 +282,9 @@ class PhotoService:
 
         existing_ids = [photo.id for photo in existing_photos]
         try:
-            await self.photo_repository.batch_delete(existing_ids)
+            await self.photo_repository.batch_delete(
+                existing_ids, equestrian_id=equestrian_context.id
+            )
         except Exception:
             # Rollback intent: try to restore media files if DB deletion fails.
             for filename, payload in reversed(deleted_files):

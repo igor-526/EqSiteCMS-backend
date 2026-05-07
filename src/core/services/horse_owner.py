@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from core.entities.equestrian import EquestrianContext
 from core.entities.horse_owner import HorseOwner
 from core.exceptions.base import ClientError
 from core.protocols.repositories.horse_owner_repository import (
@@ -27,19 +28,31 @@ class HorseOwnerService:
                     "Телефон должен начинаться с + и содержать от 7 до 15 цифр"
                 )
 
-    async def create(self, data: HorseOwnerCreateInDto) -> HorseOwner:
+    async def create(
+        self, data: HorseOwnerCreateInDto, *, equestrian_context: EquestrianContext
+    ) -> HorseOwner:
         """Создать нового владельца."""
         if data.phone_numbers:
             self._validate_phone_numbers(data.phone_numbers)
         try:
-            horse_owner = HorseOwner(**data.model_dump())
+            horse_owner = HorseOwner(
+                **data.model_dump(), equestrian_id=equestrian_context.id
+            )
         except ValidationError as e:
             raise ClientError(str(e)) from e
         return await self.horse_owner_repository.create(horse_owner)
 
-    async def update(self, id: UUID, data: HorseOwnerUpdateDto) -> HorseOwner:
+    async def update(
+        self,
+        id: UUID,
+        data: HorseOwnerUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> HorseOwner:
         """Обновить владельца."""
-        horse_owner = await self.get_by_id_or_raise(id)
+        horse_owner = await self.get_by_id_or_raise(
+            id, equestrian_context=equestrian_context
+        )
 
         if data.phone_numbers is not None:
             self._validate_phone_numbers(data.phone_numbers)
@@ -53,25 +66,36 @@ class HorseOwnerService:
 
         return await self.horse_owner_repository.update(horse_owner)
 
-    async def get_by_id(self, id: UUID) -> HorseOwner | None:
+    async def get_by_id(
+        self, id: UUID, *, equestrian_context: EquestrianContext
+    ) -> HorseOwner | None:
         """Получить владельца по UUID."""
-        return await self.horse_owner_repository.get_by_id(id)
+        return await self.horse_owner_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
 
-    async def get_by_id_or_raise(self, id: UUID) -> HorseOwner:
+    async def get_by_id_or_raise(
+        self, id: UUID, *, equestrian_context: EquestrianContext
+    ) -> HorseOwner:
         """Получить владельца по UUID или бросить ClientError."""
-        horse_owner = await self.horse_owner_repository.get_by_id(id)
+        horse_owner = await self.horse_owner_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if horse_owner is None:
             raise ClientError("Владелец не найден")
         return horse_owner
 
-    async def delete(self, id: UUID) -> None:
+    async def delete(self, id: UUID, *, equestrian_context: EquestrianContext) -> None:
         """Удалить владельца."""
-        await self.get_by_id_or_raise(id)
-        await self.horse_owner_repository.delete(id)
+        await self.get_by_id_or_raise(id, equestrian_context=equestrian_context)
+        await self.horse_owner_repository.delete(
+            id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | None = None,
         description: str | None = None,
         type: list[str] | None = None,
@@ -88,6 +112,7 @@ class HorseOwnerService:
     ) -> tuple[list[HorseOwner], int]:
         """Получить отфильтрованный список владельцев."""
         return await self.horse_owner_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             description=description,
             type=type,

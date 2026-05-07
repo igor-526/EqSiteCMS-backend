@@ -4,6 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Literal
 from uuid import UUID
 
+from core.entities.equestrian import EquestrianContext
 from core.entities.site_settings import SiteSetting, SiteSettingType
 from core.exceptions.base import ClientError
 from core.protocols.repositories.site_settings_repository import (
@@ -81,15 +82,21 @@ class SiteSettingsService:
         except (ValueError, InvalidOperation) as e:
             raise ClientError(f"Неверное значение для типа {setting_type}: {str(e)}")
 
-    async def create(self, data: SiteSettingCreateDto) -> SiteSetting:
+    async def create(
+        self, data: SiteSettingCreateDto, *, equestrian_context: EquestrianContext
+    ) -> SiteSetting:
         """Создать новую настройку."""
         # Проверяем уникальность key
-        existing_by_key = await self.site_settings_repository.find_by_key(data.key)
+        existing_by_key = await self.site_settings_repository.find_by_key(
+            data.key, equestrian_id=equestrian_context.id
+        )
         if existing_by_key is not None:
             raise ClientError(f"Настройка с ключом '{data.key}' уже существует")
 
         # Проверяем уникальность name
-        existing_by_name = await self.site_settings_repository.find_by_name(data.name)
+        existing_by_name = await self.site_settings_repository.find_by_name(
+            data.name, equestrian_id=equestrian_context.id
+        )
         if existing_by_name is not None:
             raise ClientError(f"Настройка с названием '{data.name}' уже существует")
 
@@ -97,6 +104,7 @@ class SiteSettingsService:
         validated_value = self._validate_value_by_type(data.value, data.type)
 
         site_setting = SiteSetting(
+            equestrian_id=equestrian_context.id,
             key=data.key,
             value=validated_value,
             name=data.name,
@@ -106,9 +114,17 @@ class SiteSettingsService:
 
         return await self.site_settings_repository.create(site_setting)
 
-    async def update(self, id: UUID, data: SiteSettingUpdateDto) -> SiteSetting:
+    async def update(
+        self,
+        id: UUID,
+        data: SiteSettingUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> SiteSetting:
         """Обновить настройку."""
-        site_setting = await self.site_settings_repository.get_by_id(id)
+        site_setting = await self.site_settings_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if site_setting is None:
             raise ClientError("Настройка не найдена")
 
@@ -119,7 +135,7 @@ class SiteSettingsService:
         # Если обновляется key, проверяем уникальность
         if "key" in update_data:
             existing = await self.site_settings_repository.find_by_key(
-                update_data["key"]
+                update_data["key"], equestrian_id=equestrian_context.id
             )
             if existing is not None and existing.id != site_setting.id:
                 raise ClientError(
@@ -129,7 +145,7 @@ class SiteSettingsService:
         # Если обновляется name, проверяем уникальность
         if "name" in update_data:
             existing = await self.site_settings_repository.find_by_name(
-                update_data["name"]
+                update_data["name"], equestrian_id=equestrian_context.id
             )
             if existing is not None and existing.id != site_setting.id:
                 raise ClientError(
@@ -152,23 +168,32 @@ class SiteSettingsService:
 
         return await self.site_settings_repository.update(site_setting)
 
-    async def get_by_id(self, id: UUID) -> SiteSetting:
+    async def get_by_id(
+        self, id: UUID, *, equestrian_context: EquestrianContext
+    ) -> SiteSetting:
         """Получить настройку по UUID."""
-        site_setting = await self.site_settings_repository.get_by_id(id)
+        site_setting = await self.site_settings_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if site_setting is None:
             raise ClientError("Настройка не найдена")
         return site_setting
 
-    async def delete(self, id: UUID) -> None:
+    async def delete(self, id: UUID, *, equestrian_context: EquestrianContext) -> None:
         """Удалить настройку."""
-        site_setting = await self.site_settings_repository.get_by_id(id)
+        site_setting = await self.site_settings_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if site_setting is None:
             raise ClientError("Настройка не найдена")
-        await self.site_settings_repository.delete(id)
+        await self.site_settings_repository.delete(
+            id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         key: list[str] | None = None,
         name: str | None = None,
         value: str | None = None,
@@ -196,6 +221,7 @@ class SiteSettingsService:
     ) -> tuple[list[SiteSetting], int]:
         """Получить отфильтрованный список настроек."""
         return await self.site_settings_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             key=key,
             name=name,
             value=value,

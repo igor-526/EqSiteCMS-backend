@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from core.entities.base import _generate_slug
 from core.entities.breeds import Breed
+from core.entities.equestrian import EquestrianContext
 from core.exceptions.base import ClientError
 from core.protocols.repositories.breed_repository import BreedRepositoryProtocol
 from core.schemas.breeds import BreedCreateDto, BreedUpdateDto
@@ -88,7 +89,11 @@ class BreedService:
             )
 
     async def _ensure_unique_slug(
-        self, slug: str, exclude_id: UUID | None = None
+        self,
+        slug: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         """Обеспечивает уникальность slug, добавляя суффиксы -1, -2 и т.д."""
         base_slug = slug
@@ -96,7 +101,9 @@ class BreedService:
         current_slug = base_slug
 
         while True:
-            existing = await self.breed_repository.find_by_slug(current_slug)
+            existing = await self.breed_repository.find_by_slug(
+                current_slug, equestrian_id=equestrian_context.id
+            )
             if existing is None or (
                 exclude_id is not None and existing.id == exclude_id
             ):
@@ -104,13 +111,17 @@ class BreedService:
             current_slug = f"{base_slug}-{counter}"
             counter += 1
 
-    async def create(self, data: BreedCreateDto) -> Breed:
+    async def create(
+        self, data: BreedCreateDto, *, equestrian_context: EquestrianContext
+    ) -> Breed:
         """Создать новую породу."""
 
         breed_data = data.model_dump(exclude_none=True)
         self._validate_breed_data(breed_data, partial=False)
 
-        existing = await self.breed_repository.find_by_name(breed_data["name"])
+        existing = await self.breed_repository.find_by_name(
+            breed_data["name"], equestrian_id=equestrian_context.id
+        )
         if existing is not None:
             raise ClientError(
                 f"Порода с названием '{breed_data['name']}' уже существует"
@@ -119,22 +130,32 @@ class BreedService:
         if "slug" not in breed_data:
             breed_data["slug"] = _generate_slug(breed_data["name"])
 
-        breed_data["slug"] = await self._ensure_unique_slug(breed_data["slug"])
+        breed_data["slug"] = await self._ensure_unique_slug(
+            breed_data["slug"], equestrian_context=equestrian_context
+        )
 
         if "page_data" not in breed_data:
             breed_data["page_data"] = DEFAULT_PAGE_DATA
 
         try:
-            breed = Breed(**breed_data)
+            breed = Breed(**breed_data, equestrian_id=equestrian_context.id)
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
         return await self.breed_repository.create(breed)
 
-    async def update(self, slug_or_id: str, data: BreedUpdateDto) -> Breed:
+    async def update(
+        self,
+        slug_or_id: str,
+        data: BreedUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> Breed:
         """Обновить породу."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        breed = await self.breed_repository.get_by_slug_or_id(parsed)
+        breed = await self.breed_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if breed is None:
             raise ClientError("Порода не найдена")
 
@@ -144,7 +165,9 @@ class BreedService:
         self._validate_breed_data(update_data, partial=True)
 
         if "name" in update_data:
-            existing = await self.breed_repository.find_by_name(update_data["name"])
+            existing = await self.breed_repository.find_by_name(
+                update_data["name"], equestrian_id=equestrian_context.id
+            )
             if existing is not None and existing.id != breed.id:
                 raise ClientError(
                     f"Порода с названием '{update_data['name']}' уже существует"
@@ -152,13 +175,15 @@ class BreedService:
 
         if "slug" in update_data:
             update_data["slug"] = await self._ensure_unique_slug(
-                update_data["slug"], exclude_id=breed.id
+                update_data["slug"],
+                equestrian_context=equestrian_context,
+                exclude_id=breed.id,
             )
 
         if "name" in update_data and "slug" not in update_data:
             new_slug = _generate_slug(update_data["name"])
             update_data["slug"] = await self._ensure_unique_slug(
-                new_slug, exclude_id=breed.id
+                new_slug, equestrian_context=equestrian_context, exclude_id=breed.id
             )
 
         for key, value in update_data.items():
@@ -166,27 +191,38 @@ class BreedService:
 
         return await self.breed_repository.update(breed)
 
-    async def get_by_slug_or_id(self, slug_or_id: str) -> Breed:
+    async def get_by_slug_or_id(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> Breed:
         """Получить породу по slug или UUID."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        breed = await self.breed_repository.get_by_slug_or_id(parsed)
+        breed = await self.breed_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if breed is None:
             raise ClientError("Порода не найдена")
         return breed
 
-    async def delete(self, slug_or_id: str) -> None:
+    async def delete(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> None:
         """Удалить породу."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        breed = await self.breed_repository.get_by_slug_or_id(parsed)
+        breed = await self.breed_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if breed is None:
             raise ClientError("Порода не найдена")
-        await self.breed_repository.delete(breed.id)
+        await self.breed_repository.delete(
+            breed.id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
@@ -202,6 +238,7 @@ class BreedService:
     ) -> tuple[list[Breed], int]:
         """Получить отфильтрованный список пород."""
         return await self.breed_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             slug=slug,
             description=description,

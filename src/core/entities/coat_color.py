@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import Field
 
 from .base import Entity, SlugMixin, TimeStampMixin
@@ -6,6 +8,7 @@ from .base import Entity, SlugMixin, TimeStampMixin
 class CoatColor(Entity, TimeStampMixin, SlugMixin):
     """Масть лошади."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         description="Название масти",

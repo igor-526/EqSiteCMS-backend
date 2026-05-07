@@ -9,6 +9,7 @@ from .price import PriceFormatter
 class HorseServiceEntity(Entity, TimeStampMixin, SlugMixin):
     """Услуга для лошади."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         description="Название услуги",

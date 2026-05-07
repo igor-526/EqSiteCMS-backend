@@ -1,5 +1,7 @@
+from .base_repository import TenantBaseRepositoryProtocol
 from .breed_repository import BreedRepositoryProtocol
 from .coat_color_repository import CoatColorRepositoryProtocol
+from .equestrian_repository import EquestrianRepositoryProtocol
 from .horse_owner_repository import HorseOwnerRepositoryProtocol
 from .horse_repository import HorseChildrenRepositoryProtocol, HorseRepositoryProtocol
 from .horse_service_repository import HorseServiceRepositoryProtocol

@@ -2,6 +2,7 @@ from typing import Any
 
 from core.entities.user import User
 from core.exceptions.auth import InvalidCredentials, UserAlreadyExists
+from core.exceptions.base import ClientError
 from core.protocols.repositories.user_repository import UserRepositoryProtocol
 from core.protocols.security import SecurityProtocol
 from core.schemas.auth import AuthTokens, LoginData, RegisterData
@@ -64,6 +65,10 @@ class AuthService:
         return self._map_user_out(user, scopes)
 
     async def register(self, data: RegisterData) -> UserOutDto:
+        raise ClientError(
+            "Публичная регистрация отключена: привязка пользователя к конюшне "
+            "выполняется прямой операцией в БД"
+        )
         if await self.user_repository.get_by_username(username=data.username):
             raise UserAlreadyExists(
                 f"Пользователь с именем {data.username} уже существует"

@@ -1,6 +1,7 @@
 from .base import Entity, PaginatedEntities, SlugMixin, TimeStampMixin
 from .breeds import Breed
 from .coat_color import CoatColor
+from .equestrian import Equestrian, EquestrianContext
 from .horse import (
     _HORSE_AVAILABLE_SORT_FIELDS,
     Horse,

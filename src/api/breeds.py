@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
+from core.entities.equestrian import EquestrianContext
 from core.schemas.breeds import (
     BreedCreateDto,
     BreedOutDto,
@@ -10,7 +11,12 @@ from core.schemas.breeds import (
     BreedUpdateDto,
 )
 from core.services.breeds import BreedService
-from depends.services import get_breed_service
+from depends.services import (
+    get_breed_service,
+    get_current_user,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 
 router = APIRouter()
 
@@ -23,6 +29,9 @@ router = APIRouter()
 )
 async def get_breeds(
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
     slug: str | None = Query(None, description="Фильтр по slug (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
@@ -35,6 +44,7 @@ async def get_breeds(
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[BreedOutDto]:
     entities, total = await breed_service.get_filtered(
+        equestrian_context=equestrian_context,
         name=name,
         slug=slug,
         description=description,
@@ -58,9 +68,14 @@ async def get_breeds(
 async def get_breed(
     slug_or_id: str,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     page_data: bool = Query(False, description="Включить page_data в ответ"),
 ) -> BreedOutDto | BreedOutWithPageDataDto:
-    breed = await breed_service.get_by_slug_or_id(slug_or_id)
+    breed = await breed_service.get_by_slug_or_id(
+        slug_or_id, equestrian_context=equestrian_context
+    )
     if page_data:
         return BreedOutWithPageDataDto.model_validate(breed)
     return BreedOutDto.model_validate(breed)
@@ -75,8 +90,12 @@ async def get_breed(
 async def create_breed(
     data: BreedCreateDto,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> BreedOutDto:
-    breed = await breed_service.create(data)
+    breed = await breed_service.create(data, equestrian_context=equestrian_context)
     return BreedOutDto.model_validate(breed)
 
 
@@ -90,8 +109,14 @@ async def update_breed(
     slug_or_id: str,
     data: BreedUpdateDto,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> BreedOutDto:
-    breed = await breed_service.update(slug_or_id, data)
+    breed = await breed_service.update(
+        slug_or_id, data, equestrian_context=equestrian_context
+    )
     return BreedOutDto.model_validate(breed)
 
 
@@ -104,5 +129,9 @@ async def update_breed(
 async def delete_breed(
     slug_or_id: str,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await breed_service.delete(slug_or_id)
+    await breed_service.delete(slug_or_id, equestrian_context=equestrian_context)

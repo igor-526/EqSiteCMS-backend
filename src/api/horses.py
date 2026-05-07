@@ -10,6 +10,7 @@ from core.entities import (
     HorseSexEnum,
     PaginatedEntities,
 )
+from core.entities.equestrian import EquestrianContext
 from core.schemas import (
     HorseCreateInDto,
     HorseOutDto,
@@ -19,7 +20,12 @@ from core.schemas import (
     UserOutDto,
 )
 from core.services.horse import HorseService
-from depends.services import get_current_user, get_horse_service
+from depends.services import (
+    get_current_user,
+    get_horse_service,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 
 router = APIRouter()
 
@@ -31,7 +37,9 @@ router = APIRouter()
 )
 async def get_horses(
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
-    current_user: Annotated[UserOutDto | None, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     sort: list[_HORSE_AVAILABLE_SORT_FIELDS] | None = Query(
         None, description="Сортировка"
     ),
@@ -74,7 +82,8 @@ async def get_horses(
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[HorseOutDto | HorseWithPedigreeOutDto]:
     return await horse_service.get_filtered_horses(
-        user=current_user,
+        equestrian_context=equestrian_context,
+        user=None,
         name=name,
         description=description,
         breed_ids=breed_ids,
@@ -104,13 +113,18 @@ async def get_horses(
     description="Получить лошадь по slug или UUID",
 )
 async def get_horse(
-    current_user: Annotated[UserOutDto | None, Depends(get_current_user)],
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     slug_or_id: str,
     pedigree: int | None = Query(None, description="Количество поколений"),
 ) -> HorseOutDto | HorseWithPedigreeOutDto:
     return await horse_service.get_horse_by_slug_or_id(
-        slug_or_id=slug_or_id, pedigree=pedigree, user=current_user
+        slug_or_id=slug_or_id,
+        pedigree=pedigree,
+        user=None,
+        equestrian_context=equestrian_context,
     )
 
 
@@ -123,8 +137,13 @@ async def create_new_horse(
     current_user: Annotated[UserOutDto | None, Depends(get_current_user)],
     data: HorseCreateInDto,
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> HorseOutDto:
-    return await horse_service.create_horse(create_data=data, user=current_user)
+    return await horse_service.create_horse(
+        create_data=data, user=current_user, equestrian_context=equestrian_context
+    )
 
 
 @router.patch(
@@ -137,9 +156,15 @@ async def update_existing_horse(
     horse_id: UUID,
     data: HorseUpdateInDto,
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> HorseOutDto:
     return await horse_service.update_horse(
-        horse_id=horse_id, data=data, user=current_user
+        horse_id=horse_id,
+        data=data,
+        user=current_user,
+        equestrian_context=equestrian_context,
     )
 
 
@@ -152,8 +177,13 @@ async def delete_existing_horse(
     current_user: Annotated[UserOutDto | None, Depends(get_current_user)],
     horse_id: UUID,
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    return await horse_service.delete_horse(horse_id=horse_id, user=current_user)
+    return await horse_service.delete_horse(
+        horse_id=horse_id, user=current_user, equestrian_context=equestrian_context
+    )
 
 
 @router.post(
@@ -166,9 +196,15 @@ async def set_horse_pedigree(
     horse_id: UUID,
     data: HorseSetPedigreeInDto,
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
     return await horse_service.set_horse_pedigree(
-        horse_id=horse_id, pedigree_data=data, user=current_user
+        horse_id=horse_id,
+        pedigree_data=data,
+        user=current_user,
+        equestrian_context=equestrian_context,
     )
 
 
@@ -178,8 +214,10 @@ async def set_horse_pedigree(
     response_model=PaginatedEntities[HorseOutDto],
 )
 async def get_horse_pedigree(
-    current_user: Annotated[UserOutDto | None, Depends(get_current_user)],
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     horse_id: UUID,
     mode: Literal["sire", "dam", "children"],
     search: str | None = Query(None, description="Поиск"),
@@ -188,7 +226,8 @@ async def get_horse_pedigree(
 ) -> PaginatedEntities[HorseOutDto]:
     return await horse_service.get_available_pedigree(
         horse_id=horse_id,
-        user=current_user,
+        user=None,
+        equestrian_context=equestrian_context,
         mode=mode,
         search=search,
         limit=limit,

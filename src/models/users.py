@@ -7,6 +7,11 @@ users = Table(
     metadata,
     uuid_pk(),
     *timestamp_columns(),
+    Column(
+        "equestrian_id",
+        ForeignKey("equestrians.id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
     Column("username", String(63), unique=True, nullable=False, index=True),
     Column("password", String(255), nullable=False),
     Column(

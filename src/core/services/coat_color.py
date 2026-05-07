@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from core.entities.base import _generate_slug
 from core.entities.coat_color import CoatColor
+from core.entities.equestrian import EquestrianContext
 from core.exceptions.base import ClientError
 from core.protocols.repositories import CoatColorRepositoryProtocol
 from core.schemas import CoatColorCreateDto, CoatColorUpdateDto
@@ -95,7 +96,11 @@ class CoatColorService:
             raise ClientError("Смещение не может быть меньше 0")
 
     async def _ensure_unique_slug(
-        self, slug: str, exclude_id: UUID | None = None
+        self,
+        slug: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         """Обеспечивает уникальность slug, добавляя суффиксы -1, -2 и т.д."""
 
@@ -104,7 +109,9 @@ class CoatColorService:
         current_slug = base_slug
 
         while True:
-            existing = await self.coat_color_repository.find_by_slug(current_slug)
+            existing = await self.coat_color_repository.find_by_slug(
+                current_slug, equestrian_id=equestrian_context.id
+            )
             if existing is None or (
                 exclude_id is not None and existing.id == exclude_id
             ):
@@ -112,14 +119,16 @@ class CoatColorService:
             current_slug = f"{base_slug}-{counter}"
             counter += 1
 
-    async def create(self, data: CoatColorCreateDto) -> CoatColor:
+    async def create(
+        self, data: CoatColorCreateDto, *, equestrian_context: EquestrianContext
+    ) -> CoatColor:
         """Создать новую масть."""
 
         coat_color_data = data.model_dump(exclude_none=True)
         self._validate_coat_color_data(coat_color_data, partial=False)
 
         existing = await self.coat_color_repository.find_by_name(
-            coat_color_data["name"]
+            coat_color_data["name"], equestrian_id=equestrian_context.id
         )
         if existing is not None:
             raise ClientError(
@@ -129,11 +138,11 @@ class CoatColorService:
         if "slug" not in coat_color_data:
             coat_color_data["slug"] = _generate_slug(coat_color_data["name"])
             coat_color_data["slug"] = await self._ensure_unique_slug(
-                coat_color_data["slug"]
+                coat_color_data["slug"], equestrian_context=equestrian_context
             )
         else:
             existing_slug = await self.coat_color_repository.find_by_slug(
-                coat_color_data["slug"]
+                coat_color_data["slug"], equestrian_id=equestrian_context.id
             )
             if existing_slug is not None:
                 raise ClientError(
@@ -144,15 +153,25 @@ class CoatColorService:
             coat_color_data["page_data"] = DEFAULT_PAGE_DATA
 
         try:
-            coat_color = CoatColor(**coat_color_data)
+            coat_color = CoatColor(
+                **coat_color_data, equestrian_id=equestrian_context.id
+            )
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
         return await self.coat_color_repository.create(coat_color)
 
-    async def update(self, slug_or_id: str, data: CoatColorUpdateDto) -> CoatColor:
+    async def update(
+        self,
+        slug_or_id: str,
+        data: CoatColorUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> CoatColor:
         """Обновить масть."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        coat_color = await self.coat_color_repository.get_by_slug_or_id(parsed)
+        coat_color = await self.coat_color_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if coat_color is None:
             raise ClientError("Масть не найдена")
 
@@ -163,7 +182,7 @@ class CoatColorService:
 
         if "name" in update_data:
             existing = await self.coat_color_repository.find_by_name(
-                update_data["name"]
+                update_data["name"], equestrian_id=equestrian_context.id
             )
             if existing is not None and existing.id != coat_color.id:
                 raise ClientError(
@@ -172,7 +191,7 @@ class CoatColorService:
 
         if "slug" in update_data:
             existing_slug = await self.coat_color_repository.find_by_slug(
-                update_data["slug"]
+                update_data["slug"], equestrian_id=equestrian_context.id
             )
             if existing_slug is not None and existing_slug.id != coat_color.id:
                 raise ClientError(
@@ -182,7 +201,9 @@ class CoatColorService:
         if "name" in update_data and "slug" not in update_data:
             new_slug = _generate_slug(update_data["name"])
             update_data["slug"] = await self._ensure_unique_slug(
-                new_slug, exclude_id=coat_color.id
+                new_slug,
+                equestrian_context=equestrian_context,
+                exclude_id=coat_color.id,
             )
 
         for key, value in update_data.items():
@@ -190,27 +211,38 @@ class CoatColorService:
 
         return await self.coat_color_repository.update(coat_color)
 
-    async def get_by_slug_or_id(self, slug_or_id: str) -> CoatColor:
+    async def get_by_slug_or_id(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> CoatColor:
         """Получить масть по slug или UUID."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        coat_color = await self.coat_color_repository.get_by_slug_or_id(parsed)
+        coat_color = await self.coat_color_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if coat_color is None:
             raise ClientError("Масть не найдена")
         return coat_color
 
-    async def delete(self, slug_or_id: str) -> None:
+    async def delete(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> None:
         """Удалить масть."""
 
         parsed = self._parse_slug_or_id(slug_or_id)
-        coat_color = await self.coat_color_repository.get_by_slug_or_id(parsed)
+        coat_color = await self.coat_color_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if coat_color is None:
             raise ClientError("Масть не найдена")
-        await self.coat_color_repository.delete(coat_color.id)
+        await self.coat_color_repository.delete(
+            coat_color.id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
@@ -227,6 +259,7 @@ class CoatColorService:
         """Получить отфильтрованный список мастей."""
         self._validate_pagination(limit=limit, offset=offset)
         return await self.coat_color_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             slug=slug,
             description=description,

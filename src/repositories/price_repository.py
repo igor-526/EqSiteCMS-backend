@@ -2,21 +2,25 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import Table, and_, delete, func, insert, or_, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities.prices import Price, PriceGroup, PriceGroupsRelation, PricePhotos
 from models.prices import price_groups, price_groups_relations, price_photos, prices
 
-from .abstract_repository import AbstractRepository
+from .abstract_repository import TenantScopedRepository
 
 
-class PriceGroupRepository(AbstractRepository[PriceGroup]):
+class PriceGroupRepository(TenantScopedRepository[PriceGroup]):
     table: Table = price_groups
     entity = PriceGroup
 
-    async def find_by_name(self, name: str) -> PriceGroup | None:
+    async def find_by_name(
+        self, name: str, *, equestrian_id: UUID
+    ) -> PriceGroup | None:
         """Проверить существование name."""
-        stmt = select(self.table).where(self.table.c.name == name)
+        stmt = select(self.table).where(
+            self.table.c.name == name,
+            self.table.c.equestrian_id == equestrian_id,
+        )
         row = await self.session.execute(stmt)
         mapping = row.mappings().first()
         if mapping is None:
@@ -26,6 +30,7 @@ class PriceGroupRepository(AbstractRepository[PriceGroup]):
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         description: str | None = None,
         sort: list[Literal["name", "-name"]] | None = None,
@@ -33,8 +38,12 @@ class PriceGroupRepository(AbstractRepository[PriceGroup]):
         offset: int | None = None,
     ) -> tuple[list[PriceGroup], int]:
         """Получить отфильтрованный список с подсчётом общего количества."""
-        stmt = select(self.table)
-        count_stmt = select(func.count()).select_from(self.table)
+        stmt = select(self.table).where(self.table.c.equestrian_id == equestrian_id)
+        count_stmt = (
+            select(func.count())
+            .select_from(self.table)
+            .where(self.table.c.equestrian_id == equestrian_id)
+        )
 
         conditions = []
         if name:
@@ -74,13 +83,16 @@ class PriceGroupRepository(AbstractRepository[PriceGroup]):
         return entities, total
 
 
-class PriceRepository(AbstractRepository[Price]):
+class PriceRepository(TenantScopedRepository[Price]):
     table: Table = prices
     entity = Price
 
-    async def find_by_name(self, name: str) -> Price | None:
+    async def find_by_name(self, name: str, *, equestrian_id: UUID) -> Price | None:
         """Проверить существование name."""
-        stmt = select(self.table).where(self.table.c.name == name)
+        stmt = select(self.table).where(
+            self.table.c.name == name,
+            self.table.c.equestrian_id == equestrian_id,
+        )
         row = await self.session.execute(stmt)
         mapping = row.mappings().first()
         if mapping is None:
@@ -94,15 +106,20 @@ class PriceRepository(AbstractRepository[Price]):
         except ValueError:
             return slug_or_id
 
-    async def get_by_slug_or_id(self, slug_or_id: str | UUID) -> Price | None:
+    async def get_by_slug_or_id(
+        self, slug_or_id: str | UUID, *, equestrian_id: UUID
+    ) -> Price | None:
         """Получить цену по slug или UUID."""
         if isinstance(slug_or_id, UUID):
-            return await self.get_by_id(slug_or_id)
+            return await self.get_by_id(slug_or_id, equestrian_id=equestrian_id)
 
         parsed = self._parse_slug_or_id(slug_or_id)
         if isinstance(parsed, UUID):
-            return await self.get_by_id(parsed)
-        stmt = select(self.table).where(self.table.c.slug == parsed)
+            return await self.get_by_id(parsed, equestrian_id=equestrian_id)
+        stmt = select(self.table).where(
+            self.table.c.slug == parsed,
+            self.table.c.equestrian_id == equestrian_id,
+        )
         row = await self.session.execute(stmt)
         mapping = row.mappings().first()
         if mapping is None:
@@ -112,6 +129,7 @@ class PriceRepository(AbstractRepository[Price]):
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         name: str | list[str] | None = None,
         description: str | None = None,
         groups: str | list[str] | None = None,
@@ -120,8 +138,12 @@ class PriceRepository(AbstractRepository[Price]):
         offset: int | None = None,
     ) -> tuple[list[Price], int]:
         """Получить отфильтрованный список с подсчётом общего количества."""
-        stmt = select(self.table)
-        count_stmt = select(func.count()).select_from(self.table)
+        stmt = select(self.table).where(self.table.c.equestrian_id == equestrian_id)
+        count_stmt = (
+            select(func.count())
+            .select_from(self.table)
+            .where(self.table.c.equestrian_id == equestrian_id)
+        )
 
         conditions = []
 
@@ -144,7 +166,8 @@ class PriceRepository(AbstractRepository[Price]):
 
             # Подзапрос для получения price_id через группы
             group_ids_subquery = select(price_groups.c.id).where(
-                or_(*[price_groups.c.name == g for g in groups])
+                or_(*[price_groups.c.name == g for g in groups]),
+                price_groups.c.equestrian_id == equestrian_id,
             )
 
             price_ids_subquery = (
@@ -186,10 +209,17 @@ class PriceRepository(AbstractRepository[Price]):
 
         return entities, total
 
-    async def get_price_groups(self, price_id: UUID) -> list[PriceGroupsRelation]:
+    async def get_price_groups(
+        self, price_id: UUID, *, equestrian_id: UUID
+    ) -> list[PriceGroupsRelation]:
         """Получить связи цены с группами."""
-        stmt = select(price_groups_relations).where(
-            price_groups_relations.c.price_id == price_id
+        stmt = (
+            select(price_groups_relations)
+            .join(prices, price_groups_relations.c.price_id == prices.c.id)
+            .where(
+                price_groups_relations.c.price_id == price_id,
+                prices.c.equestrian_id == equestrian_id,
+            )
         )
         rows = await self.session.execute(stmt)
         return [
@@ -197,11 +227,16 @@ class PriceRepository(AbstractRepository[Price]):
             for row in rows.mappings().all()
         ]
 
-    async def set_price_groups(self, price_id: UUID, group_ids: list[UUID]) -> None:
+    async def set_price_groups(
+        self, price_id: UUID, group_ids: list[UUID], *, equestrian_id: UUID
+    ) -> None:
         """Установить связи цены с группами (заменяет все существующие)."""
         # Удаляем все существующие связи
         delete_stmt = delete(price_groups_relations).where(
-            price_groups_relations.c.price_id == price_id
+            price_groups_relations.c.price_id == price_id,
+            price_groups_relations.c.price_id.in_(
+                select(prices.c.id).where(prices.c.equestrian_id == equestrian_id)
+            ),
         )
         await self.session.execute(delete_stmt)
 
@@ -215,9 +250,18 @@ class PriceRepository(AbstractRepository[Price]):
 
         await self.session.flush()
 
-    async def get_price_photos(self, price_id: UUID) -> list[PricePhotos]:
+    async def get_price_photos(
+        self, price_id: UUID, *, equestrian_id: UUID
+    ) -> list[PricePhotos]:
         """Получить связи цены с фотографиями."""
-        stmt = select(price_photos).where(price_photos.c.price_id == price_id)
+        stmt = (
+            select(price_photos)
+            .join(prices, price_photos.c.price_id == prices.c.id)
+            .where(
+                price_photos.c.price_id == price_id,
+                prices.c.equestrian_id == equestrian_id,
+            )
+        )
         rows = await self.session.execute(stmt)
         return [PricePhotos.model_validate(dict(row)) for row in rows.mappings().all()]
 
@@ -226,13 +270,18 @@ class PriceRepository(AbstractRepository[Price]):
         price_id: UUID,
         photo_ids: list[UUID] | None = None,
         main_photo_id: UUID | None = None,
+        *,
+        equestrian_id: UUID,
     ) -> None:
         """Установить связи цены с фотографиями."""
         # Если передан photo_ids, заменяем все связи
         if photo_ids is not None:
             # Удаляем все существующие связи
             delete_stmt = delete(price_photos).where(
-                price_photos.c.price_id == price_id
+                price_photos.c.price_id == price_id,
+                price_photos.c.price_id.in_(
+                    select(prices.c.id).where(prices.c.equestrian_id == equestrian_id)
+                ),
             )
             await self.session.execute(delete_stmt)
 
@@ -250,7 +299,14 @@ class PriceRepository(AbstractRepository[Price]):
             # Сбрасываем все is_main на False для этой цены
             update_all_stmt = (
                 update(price_photos)
-                .where(price_photos.c.price_id == price_id)
+                .where(
+                    price_photos.c.price_id == price_id,
+                    price_photos.c.price_id.in_(
+                        select(prices.c.id).where(
+                            prices.c.equestrian_id == equestrian_id
+                        )
+                    ),
+                )
                 .values(is_main=False)
             )
             await self.session.execute(update_all_stmt)

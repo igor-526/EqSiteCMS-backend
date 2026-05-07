@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from core.entities.base import _generate_slug
+from core.entities.equestrian import EquestrianContext
 from core.entities.prices import Price, PriceGroup
 from core.exceptions.base import ClientError
 from core.protocols.media import PhotoUrlBuilderProtocol
@@ -81,31 +82,49 @@ class PriceGroupService:
             )
 
     async def _ensure_unique_name(
-        self, name: str, exclude_id: UUID | None = None
+        self,
+        name: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         """Обеспечивает уникальность name."""
-        existing = await self.price_group_repository.find_by_name(name)
+        existing = await self.price_group_repository.find_by_name(
+            name, equestrian_id=equestrian_context.id
+        )
         if existing is None or (exclude_id is not None and existing.id == exclude_id):
             return name
         raise ClientError(f"Группа с названием '{name}' уже существует")
 
-    async def create(self, data: PriceGroupCreateDto) -> PriceGroup:
+    async def create(
+        self, data: PriceGroupCreateDto, *, equestrian_context: EquestrianContext
+    ) -> PriceGroup:
         """Создать новую группу."""
         group_data = data.model_dump(exclude_none=True)
         self._validate_group_data(group_data, partial=False)
 
         # Проверяем уникальность name
-        await self._ensure_unique_name(group_data["name"])
+        await self._ensure_unique_name(
+            group_data["name"], equestrian_context=equestrian_context
+        )
 
         try:
-            price_group = PriceGroup(**group_data)
+            price_group = PriceGroup(**group_data, equestrian_id=equestrian_context.id)
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
         return await self.price_group_repository.create(price_group)
 
-    async def update(self, id: UUID, data: PriceGroupUpdateDto) -> PriceGroup:
+    async def update(
+        self,
+        id: UUID,
+        data: PriceGroupUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> PriceGroup:
         """Обновить группу."""
-        price_group = await self.price_group_repository.get_by_id(id)
+        price_group = await self.price_group_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if price_group is None:
             raise ClientError("Группа не найдена")
 
@@ -117,7 +136,9 @@ class PriceGroupService:
         # Если обновляется name, проверяем уникальность
         if "name" in update_data:
             await self._ensure_unique_name(
-                update_data["name"], exclude_id=price_group.id
+                update_data["name"],
+                equestrian_context=equestrian_context,
+                exclude_id=price_group.id,
             )
 
         for key, value in update_data.items():
@@ -125,23 +146,32 @@ class PriceGroupService:
 
         return await self.price_group_repository.update(price_group)
 
-    async def get_by_id(self, id: UUID) -> PriceGroup:
+    async def get_by_id(
+        self, id: UUID, *, equestrian_context: EquestrianContext
+    ) -> PriceGroup:
         """Получить группу по UUID."""
-        price_group = await self.price_group_repository.get_by_id(id)
+        price_group = await self.price_group_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if price_group is None:
             raise ClientError("Группа не найдена")
         return price_group
 
-    async def delete(self, id: UUID) -> None:
+    async def delete(self, id: UUID, *, equestrian_context: EquestrianContext) -> None:
         """Удалить группу."""
-        price_group = await self.price_group_repository.get_by_id(id)
+        price_group = await self.price_group_repository.get_by_id(
+            id, equestrian_id=equestrian_context.id
+        )
         if price_group is None:
             raise ClientError("Группа не найдена")
-        await self.price_group_repository.delete(id)
+        await self.price_group_repository.delete(
+            id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | None = None,
         description: str | None = None,
         sort: list[Literal["name", "-name"]] | None = None,
@@ -150,6 +180,7 @@ class PriceGroupService:
     ) -> tuple[list[PriceGroup], int]:
         """Получить отфильтрованный список групп."""
         return await self.price_group_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             description=description,
             sort=sort,
@@ -233,39 +264,57 @@ class PriceService:
     def _deduplicate_ids(self, ids: Sequence[UUID]) -> list[UUID]:
         return list(dict.fromkeys(ids))
 
-    async def _ensure_groups_exist(self, group_ids: Sequence[UUID]) -> list[UUID]:
+    async def _ensure_groups_exist(
+        self, group_ids: Sequence[UUID], *, equestrian_context: EquestrianContext
+    ) -> list[UUID]:
         unique_group_ids = self._deduplicate_ids(group_ids)
         if not unique_group_ids:
             return []
 
-        groups = await self.price_group_repository.get_by_ids(unique_group_ids)
+        groups = await self.price_group_repository.get_by_ids(
+            unique_group_ids, equestrian_id=equestrian_context.id
+        )
         for group_id in unique_group_ids:
             if group_id not in groups:
                 raise ClientError(f"Группа с ID '{group_id}' не найдена")
         return unique_group_ids
 
-    async def _ensure_photos_exist(self, photo_ids: Sequence[UUID]) -> list[UUID]:
+    async def _ensure_photos_exist(
+        self, photo_ids: Sequence[UUID], *, equestrian_context: EquestrianContext
+    ) -> list[UUID]:
         unique_photo_ids = self._deduplicate_ids(photo_ids)
         if not unique_photo_ids:
             return []
 
-        photos = await self.photo_repository.get_by_ids(unique_photo_ids)
+        photos = await self.photo_repository.get_by_ids(
+            unique_photo_ids, equestrian_id=equestrian_context.id
+        )
         for photo_id in unique_photo_ids:
             if photo_id not in photos:
                 raise ClientError(f"Фотография с ID '{photo_id}' не найдена")
         return unique_photo_ids
 
     async def _ensure_unique_name(
-        self, name: str, exclude_id: UUID | None = None
+        self,
+        name: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         """Обеспечивает уникальность name."""
-        existing = await self.price_repository.find_by_name(name)
+        existing = await self.price_repository.find_by_name(
+            name, equestrian_id=equestrian_context.id
+        )
         if existing is None or (exclude_id is not None and existing.id == exclude_id):
             return name
         raise ClientError(f"Цена с названием '{name}' уже существует")
 
     async def _ensure_unique_slug(
-        self, slug: str, exclude_id: UUID | None = None
+        self,
+        slug: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         """Обеспечивает уникальность slug."""
         slug = self._validate_required_text(
@@ -278,7 +327,9 @@ class PriceService:
         current_slug = base_slug
 
         while True:
-            existing = await self.price_repository.get_by_slug_or_id(current_slug)
+            existing = await self.price_repository.get_by_slug_or_id(
+                current_slug, equestrian_id=equestrian_context.id
+            )
             if existing is None or (
                 exclude_id is not None and existing.id == exclude_id
             ):
@@ -290,29 +341,37 @@ class PriceService:
             current_slug = f"{base_slug[:max_base_length]}{suffix}"
             counter += 1
 
-    async def create(self, data: PriceCreateDto) -> Price:
+    async def create(
+        self, data: PriceCreateDto, *, equestrian_context: EquestrianContext
+    ) -> Price:
         """Создать новую цену."""
         price_data = data.model_dump(exclude_none=True)
         groups = price_data.pop("groups", [])
         self._validate_price_data(price_data, partial=False)
-        group_ids = await self._ensure_groups_exist(groups)
+        group_ids = await self._ensure_groups_exist(
+            groups, equestrian_context=equestrian_context
+        )
 
         # Проверяем уникальность name
-        await self._ensure_unique_name(price_data["name"])
+        await self._ensure_unique_name(
+            price_data["name"], equestrian_context=equestrian_context
+        )
 
         # Если slug не задан, генерируем из name
         if "slug" not in price_data or price_data["slug"] is None:
             price_data["slug"] = _generate_slug(price_data["name"])
 
         # Обеспечиваем уникальность slug
-        price_data["slug"] = await self._ensure_unique_slug(price_data["slug"])
+        price_data["slug"] = await self._ensure_unique_slug(
+            price_data["slug"], equestrian_context=equestrian_context
+        )
 
         # Устанавливаем page_data по умолчанию, если не задан
         if "page_data" not in price_data or price_data["page_data"] is None:
             price_data["page_data"] = DEFAULT_PAGE_DATA
 
         try:
-            price = Price(**price_data)
+            price = Price(**price_data, equestrian_id=equestrian_context.id)
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
 
@@ -320,14 +379,24 @@ class PriceService:
         # while creating relations propagates and rolls back the created price.
         price = await self.price_repository.create(price)
         if group_ids:
-            await self.price_repository.set_price_groups(price.id, group_ids)
+            await self.price_repository.set_price_groups(
+                price.id, group_ids, equestrian_id=equestrian_context.id
+            )
 
         return price
 
-    async def update(self, slug_or_id: str, data: PriceUpdateDto) -> Price:
+    async def update(
+        self,
+        slug_or_id: str,
+        data: PriceUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> Price:
         """Обновить цену."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        price = await self.price_repository.get_by_slug_or_id(parsed)
+        price = await self.price_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if price is None:
             raise ClientError("Цена не найдена")
 
@@ -338,23 +407,31 @@ class PriceService:
         self._validate_price_data(update_data, partial=True)
         group_ids = None
         if groups is not None:
-            group_ids = await self._ensure_groups_exist(groups)
+            group_ids = await self._ensure_groups_exist(
+                groups, equestrian_context=equestrian_context
+            )
 
         # Если обновляется name, проверяем уникальность
         if "name" in update_data:
-            await self._ensure_unique_name(update_data["name"], exclude_id=price.id)
+            await self._ensure_unique_name(
+                update_data["name"],
+                equestrian_context=equestrian_context,
+                exclude_id=price.id,
+            )
 
         # Если обновляется slug, проверяем уникальность
         if "slug" in update_data:
             update_data["slug"] = await self._ensure_unique_slug(
-                update_data["slug"], exclude_id=price.id
+                update_data["slug"],
+                equestrian_context=equestrian_context,
+                exclude_id=price.id,
             )
 
         # Если обновляется name и slug не задан, генерируем slug из name
         if "name" in update_data and "slug" not in update_data:
             new_slug = _generate_slug(update_data["name"])
             update_data["slug"] = await self._ensure_unique_slug(
-                new_slug, exclude_id=price.id
+                new_slug, equestrian_context=equestrian_context, exclude_id=price.id
             )
 
         for key, value in update_data.items():
@@ -366,29 +443,42 @@ class PriceService:
             price = await self.price_repository.update(price)
 
         if group_ids is not None:
-            await self.price_repository.set_price_groups(price.id, group_ids)
+            await self.price_repository.set_price_groups(
+                price.id, group_ids, equestrian_id=equestrian_context.id
+            )
 
         return price
 
-    async def get_by_slug_or_id(self, slug_or_id: str) -> Price:
+    async def get_by_slug_or_id(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> Price:
         """Получить цену по slug или UUID."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        price = await self.price_repository.get_by_slug_or_id(parsed)
+        price = await self.price_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if price is None:
             raise ClientError("Цена не найдена")
         return price
 
-    async def delete(self, slug_or_id: str) -> None:
+    async def delete(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> None:
         """Удалить цену."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        price = await self.price_repository.get_by_slug_or_id(parsed)
+        price = await self.price_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if price is None:
             raise ClientError("Цена не найдена")
-        await self.price_repository.delete(price.id)
+        await self.price_repository.delete(
+            price.id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | list[str] | None = None,
         description: str | None = None,
         groups: str | list[str] | None = None,
@@ -398,6 +488,7 @@ class PriceService:
     ) -> tuple[list[Price], int]:
         """Получить отфильтрованный список цен."""
         return await self.price_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             description=description,
             groups=groups,
@@ -407,11 +498,17 @@ class PriceService:
         )
 
     async def update_price_photos(
-        self, slug_or_id: str, data: PricePhotosUpdateDto
+        self,
+        slug_or_id: str,
+        data: PricePhotosUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
     ) -> None:
         """Обновить фотографии цены."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        price = await self.price_repository.get_by_slug_or_id(parsed)
+        price = await self.price_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if price is None:
             raise ClientError("Цена не найдена")
 
@@ -422,7 +519,9 @@ class PriceService:
 
         unique_photo_ids = None
         if photo_ids is not None:
-            unique_photo_ids = await self._ensure_photos_exist(photo_ids)
+            unique_photo_ids = await self._ensure_photos_exist(
+                photo_ids, equestrian_context=equestrian_context
+            )
 
         if main_photo_id is not None:
             if unique_photo_ids is not None:
@@ -431,34 +530,48 @@ class PriceService:
                         "Главная фотография должна входить в список фотографий"
                     )
             else:
-                photo = await self.photo_repository.get_by_id(main_photo_id)
+                photo = await self.photo_repository.get_by_id(
+                    main_photo_id, equestrian_id=equestrian_context.id
+                )
                 if photo is None:
                     raise ClientError(f"Фотография с ID '{main_photo_id}' не найдена")
 
-                relations = await self.price_repository.get_price_photos(price.id)
+                relations = await self.price_repository.get_price_photos(
+                    price.id, equestrian_id=equestrian_context.id
+                )
                 if main_photo_id not in {relation.photo_id for relation in relations}:
                     raise ClientError(
                         "Главная фотография должна входить в список фотографий"
                     )
 
         await self.price_repository.set_price_photos(
-            price.id, photo_ids=unique_photo_ids, main_photo_id=main_photo_id
+            price.id,
+            photo_ids=unique_photo_ids,
+            main_photo_id=main_photo_id,
+            equestrian_id=equestrian_context.id,
         )
 
     async def build_out_dto(
         self,
         price: Price,
         *,
+        equestrian_context: EquestrianContext,
         include_page_data: bool = False,
         include_tables: bool = False,
     ) -> PriceOutDto | PriceOutWithPageDataDto | PriceOutWithTablesDto:
         """Собрать DTO цены с группами, фотографиями и URL на service boundary."""
-        groups_relations = await self.price_repository.get_price_groups(price.id)
+        groups_relations = await self.price_repository.get_price_groups(
+            price.id, equestrian_id=equestrian_context.id
+        )
         group_ids = self._deduplicate_ids(
             [relation.group_id for relation in groups_relations]
         )
         groups_data = (
-            await self.price_group_repository.get_by_ids(group_ids) if group_ids else {}
+            await self.price_group_repository.get_by_ids(
+                group_ids, equestrian_id=equestrian_context.id
+            )
+            if group_ids
+            else {}
         )
         groups = [
             PriceGroupSimpleDto(id=group.id, name=group.name)
@@ -466,7 +579,9 @@ class PriceService:
             if (group := groups_data.get(group_id)) is not None
         ]
 
-        photos_relations = await self.price_repository.get_price_photos(price.id)
+        photos_relations = await self.price_repository.get_price_photos(
+            price.id, equestrian_id=equestrian_context.id
+        )
         sorted_photo_relations = sorted(
             photos_relations,
             key=lambda relation: not relation.is_main,
@@ -475,7 +590,11 @@ class PriceService:
             [relation.photo_id for relation in sorted_photo_relations]
         )
         photos_data = (
-            await self.photo_repository.get_by_ids(photo_ids) if photo_ids else {}
+            await self.photo_repository.get_by_ids(
+                photo_ids, equestrian_id=equestrian_context.id
+            )
+            if photo_ids
+            else {}
         )
         photos = [
             PhotoOutShortDto(
@@ -523,16 +642,26 @@ class PriceService:
             updated_at=price.updated_at,
         )
 
-    async def create_out(self, data: PriceCreateDto) -> PriceOutDto:
-        price = await self.create(data)
-        dto = await self.build_out_dto(price)
+    async def create_out(
+        self, data: PriceCreateDto, *, equestrian_context: EquestrianContext
+    ) -> PriceOutDto:
+        price = await self.create(data, equestrian_context=equestrian_context)
+        dto = await self.build_out_dto(price, equestrian_context=equestrian_context)
         if not isinstance(dto, PriceOutDto):
             raise RuntimeError("Unexpected price output DTO")
         return dto
 
-    async def update_out(self, slug_or_id: str, data: PriceUpdateDto) -> PriceOutDto:
-        price = await self.update(slug_or_id, data)
-        dto = await self.build_out_dto(price)
+    async def update_out(
+        self,
+        slug_or_id: str,
+        data: PriceUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> PriceOutDto:
+        price = await self.update(
+            slug_or_id, data, equestrian_context=equestrian_context
+        )
+        dto = await self.build_out_dto(price, equestrian_context=equestrian_context)
         if not isinstance(dto, PriceOutDto):
             raise RuntimeError("Unexpected price output DTO")
         return dto
@@ -541,12 +670,16 @@ class PriceService:
         self,
         slug_or_id: str,
         *,
+        equestrian_context: EquestrianContext,
         include_page_data: bool = False,
         include_tables: bool = True,
     ) -> PriceOutDto | PriceOutWithPageDataDto | PriceOutWithTablesDto:
-        price = await self.get_by_slug_or_id(slug_or_id)
+        price = await self.get_by_slug_or_id(
+            slug_or_id, equestrian_context=equestrian_context
+        )
         return await self.build_out_dto(
             price,
+            equestrian_context=equestrian_context,
             include_page_data=include_page_data,
             include_tables=include_tables,
         )
@@ -554,6 +687,7 @@ class PriceService:
     async def get_filtered_out(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | list[str] | None = None,
         description: str | None = None,
         groups: str | list[str] | None = None,
@@ -565,6 +699,7 @@ class PriceService:
         list[PriceOutDto | PriceOutWithPageDataDto | PriceOutWithTablesDto], int
     ]:
         entities, total = await self.get_filtered(
+            equestrian_context=equestrian_context,
             name=name,
             description=description,
             groups=groups,
@@ -573,7 +708,11 @@ class PriceService:
             offset=offset,
         )
         items = [
-            await self.build_out_dto(entity, include_tables=include_tables)
+            await self.build_out_dto(
+                entity,
+                equestrian_context=equestrian_context,
+                include_tables=include_tables,
+            )
             for entity in entities
         ]
         return items, total

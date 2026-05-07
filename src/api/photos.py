@@ -13,6 +13,7 @@ from fastapi import (
 )
 
 from core.entities.base import PaginatedEntities
+from core.entities.equestrian import EquestrianContext
 from core.schemas.photos import (
     PhotoBatchDeleteDto,
     PhotoCreateDto,
@@ -21,7 +22,12 @@ from core.schemas.photos import (
     PhotoUploadDto,
 )
 from core.services.photos import PhotoService
-from depends.services import get_photo_service
+from depends.services import (
+    get_current_user,
+    get_photo_service,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 
 router = APIRouter()
 
@@ -51,6 +57,9 @@ async def to_photo_upload_dto(file: UploadFile) -> PhotoUploadDto:
 )
 async def get_photos(
     photo_service: Annotated[PhotoService, Depends(get_photo_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
     price_ids: list[UUID] | None = Query(None, description="Фильтр по UUID услуг"),
@@ -72,6 +81,7 @@ async def get_photos(
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[PhotoOutDto]:
     entities, total = await photo_service.get_filtered(
+        equestrian_context=equestrian_context,
         name=name,
         description=description,
         price_ids=price_ids,
@@ -93,8 +103,11 @@ async def get_photos(
 async def get_photo(
     id: UUID,
     photo_service: Annotated[PhotoService, Depends(get_photo_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
 ) -> PhotoOutDto:
-    photo = await photo_service.get_by_id(id)
+    photo = await photo_service.get_by_id(id, equestrian_context=equestrian_context)
     if photo is None:
         raise HTTPException(status_code=404, detail="Фотография не найдена")
 
@@ -109,6 +122,10 @@ async def get_photo(
 )
 async def create_photo(
     photo_service: Annotated[PhotoService, Depends(get_photo_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
     file: UploadFile = File(..., description="Файл фотографии или видео"),
     name: str | None = Form(
         None, description="Название (опционально, генерируется из имени файла)"
@@ -119,7 +136,9 @@ async def create_photo(
 ) -> PhotoOutDto:
     data = PhotoCreateDto(name=name, description=description)
     upload = await to_photo_upload_dto(file)
-    photo = await photo_service.create(data, upload)
+    photo = await photo_service.create(
+        data, upload, equestrian_context=equestrian_context
+    )
 
     return to_photo_out_dto(photo_service, photo)
 
@@ -132,6 +151,10 @@ async def create_photo(
 )
 async def update_photo(
     photo_service: Annotated[PhotoService, Depends(get_photo_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
     id: UUID,
     file: UploadFile | None = File(
         None, description="Новый файл фотографии или видео (опционально)"
@@ -145,7 +168,9 @@ async def update_photo(
     upload = None
     if file is not None:
         upload = await to_photo_upload_dto(file)
-    photo = await photo_service.update(id, data, upload)
+    photo = await photo_service.update(
+        id, data, upload=upload, equestrian_context=equestrian_context
+    )
 
     return to_photo_out_dto(photo_service, photo)
 
@@ -159,8 +184,12 @@ async def update_photo(
 async def delete_photo(
     id: UUID,
     photo_service: Annotated[PhotoService, Depends(get_photo_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await photo_service.delete(id)
+    await photo_service.delete(id, equestrian_context=equestrian_context)
 
 
 @router.post(
@@ -171,6 +200,10 @@ async def delete_photo(
 )
 async def batch_delete_photos(
     photo_service: Annotated[PhotoService, Depends(get_photo_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
     data: PhotoBatchDeleteDto = Body(...),
 ) -> None:
-    await photo_service.batch_delete(data.ids)
+    await photo_service.batch_delete(data.ids, equestrian_context=equestrian_context)

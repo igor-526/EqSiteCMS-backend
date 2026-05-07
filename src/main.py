@@ -21,6 +21,7 @@ from api import (
 )
 from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
+from core.exceptions.tenant import TenantNotFound
 from settings import settings
 from utils.configure_logger import configure_logger
 from utils.media import resolve_media_base_dir
@@ -46,8 +47,8 @@ router.include_router(auth_router, prefix="/auth", tags=["Auth"])
 router.include_router(breeds_router)
 router.include_router(coat_color_router)
 router.include_router(horse_owner_router)
-router.include_router(horses_router, prefix="/horses", tags=["Horses"])
 router.include_router(horse_service_router)
+router.include_router(horses_router, prefix="/horses", tags=["Horses"])
 router.include_router(photos_router)
 router.include_router(prices_router)
 router.include_router(site_settings_router)
@@ -85,6 +86,11 @@ app.add_middleware(
 @app.exception_handler(ClientError)
 def client_error_handler(_: Request, exc: ClientError) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=400)
+
+
+@app.exception_handler(TenantNotFound)
+def tenant_not_found_handler(_: Request, exc: TenantNotFound) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=404)
 
 
 @app.exception_handler(InvalidCredentials)

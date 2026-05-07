@@ -3,10 +3,16 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
+from core.entities.equestrian import EquestrianContext
 from core.schemas import CoatColorOutDto, CoatColorOutWithPageDataDto
 from core.schemas.coat_color import CoatColorCreateDto, CoatColorUpdateDto
 from core.services.coat_color import CoatColorService
-from depends.services import get_coat_color_service
+from depends.services import (
+    get_coat_color_service,
+    get_current_user,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 
 router = APIRouter()
 
@@ -19,6 +25,9 @@ router = APIRouter()
 )
 async def get_coat_colors(
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
     slug: str | None = Query(None, description="Фильтр по slug (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
@@ -31,6 +40,7 @@ async def get_coat_colors(
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[CoatColorOutDto]:
     entities, total = await coat_color_service.get_filtered(
+        equestrian_context=equestrian_context,
         name=name,
         slug=slug,
         description=description,
@@ -53,10 +63,15 @@ async def get_coat_colors(
 )
 async def get_coat_color(
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     slug_or_id: str,
     page_data: bool = Query(False, description="Включить page_data в ответ"),
 ) -> CoatColorOutDto | CoatColorOutWithPageDataDto:
-    coat_color = await coat_color_service.get_by_slug_or_id(slug_or_id)
+    coat_color = await coat_color_service.get_by_slug_or_id(
+        slug_or_id, equestrian_context=equestrian_context
+    )
     if page_data:
         return CoatColorOutWithPageDataDto.model_validate(coat_color)
     return CoatColorOutDto.model_validate(coat_color)
@@ -71,8 +86,14 @@ async def get_coat_color(
 async def create_coat_color(
     data: CoatColorCreateDto,
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> CoatColorOutDto:
-    coat_color = await coat_color_service.create(data)
+    coat_color = await coat_color_service.create(
+        data, equestrian_context=equestrian_context
+    )
     return CoatColorOutDto.model_validate(coat_color)
 
 
@@ -86,8 +107,14 @@ async def update_coat_color(
     slug_or_id: str,
     data: CoatColorUpdateDto,
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> CoatColorOutDto:
-    coat_color = await coat_color_service.update(slug_or_id, data)
+    coat_color = await coat_color_service.update(
+        slug_or_id, data, equestrian_context=equestrian_context
+    )
     return CoatColorOutDto.model_validate(coat_color)
 
 
@@ -100,5 +127,9 @@ async def update_coat_color(
 async def delete_coat_color(
     slug_or_id: str,
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await coat_color_service.delete(slug_or_id)
+    await coat_color_service.delete(slug_or_id, equestrian_context=equestrian_context)

@@ -11,20 +11,20 @@ from core.entities import (
 )
 from core.schemas import HorseOutDto, HorseWithPedigreeOutDto
 
-from .base_repository import BaseRepositoryProtocol
+from .base_repository import TenantBaseRepositoryProtocol
 
 
-class HorseRepositoryProtocol(BaseRepositoryProtocol[Horse], Protocol):
+class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
     """Протокол для работы с лошадьми."""
 
     async def get_horse_full_info_by_slug(
-        self, *, horse_slug: str, pedigree: int | None = None
+        self, *, horse_slug: str, equestrian_id: UUID, pedigree: int | None = None
     ) -> HorseOutDto | HorseWithPedigreeOutDto | None:
         """Получить полную информацию о лошади c породой, мастью, владельцем, фотографиями и услугами"""
         ...
 
     async def get_horse_full_info_by_id(
-        self, *, horse_id: UUID, pedigree: int | None = None
+        self, *, horse_id: UUID, equestrian_id: UUID, pedigree: int | None = None
     ) -> HorseOutDto | HorseWithPedigreeOutDto | None:
         """Получить полную информацию о лошади c породой, мастью, владельцем, фотографиями и услугами"""
         ...
@@ -32,6 +32,7 @@ class HorseRepositoryProtocol(BaseRepositoryProtocol[Horse], Protocol):
     async def get_horse_list_full_info(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         description: str | None = None,
         breed_ids: list[UUID] | None = None,
@@ -58,7 +59,7 @@ class HorseRepositoryProtocol(BaseRepositoryProtocol[Horse], Protocol):
         sort: list[_HORSE_AVAILABLE_SORT_FIELDS] | None = None,
         pedigree: int | None = None,
     ) -> tuple[Mapping[UUID, HorseOutDto | HorseWithPedigreeOutDto], int]:
-        """Получить полную информацию о лошадях c породой, мастью, владельцем, фотографиями и услугами с возможностью фильтрации и сортировки"""
+        """Получить полную информацию о лошадях с фильтрацией и сортировкой."""
         ...
 
     async def get_available_dams(
@@ -95,7 +96,9 @@ class HorseRepositoryProtocol(BaseRepositoryProtocol[Horse], Protocol):
         ...
 
 
-class HorseChildrenRepositoryProtocol(BaseRepositoryProtocol[HorseChildren], Protocol):
+class HorseChildrenRepositoryProtocol(
+    TenantBaseRepositoryProtocol[HorseChildren], Protocol
+):
     """Протокол для работы с родословной лошади (связи родитель–потомок)."""
 
     async def clear_pedigree(

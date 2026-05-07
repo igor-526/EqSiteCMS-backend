@@ -1,8 +1,8 @@
 from datetime import date
-from typing import Any, Awaitable, Callable, Literal, Mapping, cast
+from typing import Awaitable, Callable, Literal, Mapping, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ValidationError, model_validator
+from pydantic import ValidationError
 
 from core.entities import (
     _HORSE_AVAILABLE_SORT_FIELDS,
@@ -16,6 +16,7 @@ from core.entities import (
     PaginatedEntities,
     Photo,
 )
+from core.entities.equestrian import EquestrianContext
 from core.exceptions.base import ClientError
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
@@ -29,9 +30,7 @@ from core.schemas import (
     CoatColorOutDto,
     HorseCreateInDto,
     HorseOutDto,
-    HorseOwnerCreateInDto,
     HorseOwnerOutDto,
-    HorsePedigree,
     HorseServiceOutDto,
     HorseSetPedigreeInDto,
     HorseUpdateInDto,
@@ -124,50 +123,78 @@ class HorseService:
         )
 
     async def _get_horse_by_id(
-        self, *, horse_id: UUID, pedigree: int | None = None
+        self,
+        *,
+        horse_id: UUID,
+        equestrian_context: EquestrianContext,
+        pedigree: int | None = None,
     ) -> HorseOutDto | HorseWithPedigreeOutDto:
         """Получить лошадь по ID."""
         horse = await self.horse_repository.get_horse_full_info_by_id(
-            horse_id=horse_id, pedigree=pedigree
+            horse_id=horse_id,
+            equestrian_id=equestrian_context.id,
+            pedigree=pedigree,
         )
         if horse is None:
             raise ClientError("Лошадь не найдена")
         return horse
 
     async def _get_horse_by_slug(
-        self, *, horse_slug: str, pedigree: int | None = None
+        self,
+        *,
+        horse_slug: str,
+        equestrian_context: EquestrianContext,
+        pedigree: int | None = None,
     ) -> HorseOutDto | HorseWithPedigreeOutDto:
         """Получить лошадь по slug."""
         horse = await self.horse_repository.get_horse_full_info_by_slug(
-            horse_slug=horse_slug, pedigree=pedigree
+            horse_slug=horse_slug,
+            equestrian_id=equestrian_context.id,
+            pedigree=pedigree,
         )
         if horse is None:
             raise ClientError("Лошадь не найдена")
         return horse
 
-    async def _get_breed_by_id(self, *, breed_id: UUID) -> Breed:
+    async def _get_breed_by_id(
+        self, *, breed_id: UUID, equestrian_context: EquestrianContext
+    ) -> Breed:
         """Получить породу по ID."""
-        breed = await self.breed_repository.get_by_id(breed_id)
+        breed = await self.breed_repository.get_by_id(
+            breed_id, equestrian_id=equestrian_context.id
+        )
         if breed is None:
             raise ClientError("Порода не найдена")
         return breed
 
-    async def _get_coat_color_by_id(self, *, coat_color_id: UUID) -> CoatColor:
+    async def _get_coat_color_by_id(
+        self, *, coat_color_id: UUID, equestrian_context: EquestrianContext
+    ) -> CoatColor:
         """Получить масть по ID."""
-        coat_color = await self.coat_color_repository.get_by_id(coat_color_id)
+        coat_color = await self.coat_color_repository.get_by_id(
+            coat_color_id, equestrian_id=equestrian_context.id
+        )
         if coat_color is None:
             raise ClientError("Масть не найдена")
         return coat_color
 
-    async def _get_horse_owner_by_id(self, *, horse_owner_id: UUID) -> HorseOwner:
+    async def _get_horse_owner_by_id(
+        self, *, horse_owner_id: UUID, equestrian_context: EquestrianContext
+    ) -> HorseOwner:
         """Получить владельца по ID."""
-        horse_owner = await self.horse_owner_repository.get_by_id(horse_owner_id)
+        horse_owner = await self.horse_owner_repository.get_by_id(
+            horse_owner_id, equestrian_id=equestrian_context.id
+        )
         if horse_owner is None:
             raise ClientError("Владелец не найден")
         return horse_owner
 
     async def create_horse(
-        self, *, create_data: HorseCreateInDto, user: UserOutDto | None = None
+        self,
+        *,
+        create_data: HorseCreateInDto,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> HorseOutDto:
         """Создать новую лошадь."""
         await self._check_admin_permission(user=user, raise_exception=True)
@@ -175,17 +202,22 @@ class HorseService:
         horse_coat_color: CoatColor | None = None
         horse_owner: HorseOwner | None = None
         if create_data.breed_id is not None:
-            horse_breed = await self._get_breed_by_id(breed_id=create_data.breed_id)
+            horse_breed = await self._get_breed_by_id(
+                breed_id=create_data.breed_id, equestrian_context=equestrian_context
+            )
         if create_data.coat_color_id is not None:
             horse_coat_color = await self._get_coat_color_by_id(
-                coat_color_id=create_data.coat_color_id
+                coat_color_id=create_data.coat_color_id,
+                equestrian_context=equestrian_context,
             )
         if create_data.horse_owner_id is not None:
             horse_owner = await self._get_horse_owner_by_id(
-                horse_owner_id=create_data.horse_owner_id
+                horse_owner_id=create_data.horse_owner_id,
+                equestrian_context=equestrian_context,
             )
         try:
             horse = Horse(
+                equestrian_id=equestrian_context.id,
                 name=create_data.name,
                 description=create_data.description,
                 breed_id=create_data.breed_id,
@@ -213,39 +245,57 @@ class HorseService:
         )
 
     async def update_horse(
-        self, *, horse_id: UUID, data: HorseUpdateInDto, user: UserOutDto | None = None
+        self,
+        *,
+        horse_id: UUID,
+        data: HorseUpdateInDto,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> HorseOutDto:
         """Обновить лошадь."""
         await self._check_admin_permission(user=user, raise_exception=True)
-        horse = await self.horse_repository.get_by_id(horse_id)
+        horse = await self.horse_repository.get_by_id(
+            horse_id, equestrian_id=equestrian_context.id
+        )
         if horse is None:
             raise ClientError("Лошадь не найдена")
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
             raise ClientError("Нет данных для обновления")
         if "breed_id" in update_data and update_data["breed_id"] is not None:
-            await self._get_breed_by_id(breed_id=update_data["breed_id"])
+            await self._get_breed_by_id(
+                breed_id=update_data["breed_id"], equestrian_context=equestrian_context
+            )
         if "coat_color_id" in update_data and update_data["coat_color_id"] is not None:
-            await self._get_coat_color_by_id(coat_color_id=update_data["coat_color_id"])
+            await self._get_coat_color_by_id(
+                coat_color_id=update_data["coat_color_id"],
+                equestrian_context=equestrian_context,
+            )
         if (
             "horse_owner_id" in update_data
             and update_data["horse_owner_id"] is not None
         ):
             await self._get_horse_owner_by_id(
-                horse_owner_id=update_data["horse_owner_id"]
+                horse_owner_id=update_data["horse_owner_id"],
+                equestrian_context=equestrian_context,
             )
         for key, value in update_data.items():
             setattr(horse, key, value)
         await self.horse_repository.update(horse)
         updated_horse = await self.horse_repository.get_horse_full_info_by_id(
-            horse_id=horse.id
+            horse_id=horse.id, equestrian_id=equestrian_context.id
         )
         if updated_horse is None:
             raise ClientError("Лошадь не найдена")
         return HorseOutDto.model_validate(updated_horse)
 
     async def get_horse_by_slug_or_id(
-        self, *, slug_or_id: str, pedigree: int | None = None, user: UserOutDto | None
+        self,
+        *,
+        slug_or_id: str,
+        equestrian_context: EquestrianContext,
+        pedigree: int | None = None,
+        user: UserOutDto | None,
     ) -> HorseOutDto | HorseWithPedigreeOutDto:
         """Получить лошадь по slug или ID."""
         mode: Literal["slug", "id"] = "slug"
@@ -261,17 +311,22 @@ class HorseService:
         match mode:
             case "slug":
                 horse_dto = await self._get_horse_by_slug(
-                    horse_slug=cast(str, value), pedigree=pedigree
+                    horse_slug=cast(str, value),
+                    equestrian_context=equestrian_context,
+                    pedigree=pedigree,
                 )
             case "id":
                 horse_dto = await self._get_horse_by_id(
-                    horse_id=cast(UUID, value), pedigree=pedigree
+                    horse_id=cast(UUID, value),
+                    equestrian_context=equestrian_context,
+                    pedigree=pedigree,
                 )
         return horse_dto
 
     async def get_available_pedigree(
         self,
         *,
+        equestrian_context: EquestrianContext,
         user: UserOutDto | None = None,
         horse_id: UUID,
         mode: Literal["sire", "dam", "children"],
@@ -286,8 +341,9 @@ class HorseService:
             limit = 1
         if offset is not None and offset < 0:
             offset = 0
-        await self._check_admin_permission(user=user, raise_exception=True)
-        target_horse = await self.horse_repository.get_by_id(horse_id)
+        target_horse = await self.horse_repository.get_by_id(
+            horse_id, equestrian_id=equestrian_context.id
+        )
         if target_horse is None:
             raise ClientError("Лошадь не найдена")
         _PEDIGREE_METHODS_REGISTRY: dict[
@@ -317,6 +373,7 @@ class HorseService:
         *,
         horse_id: UUID,
         pedigree_data: HorseSetPedigreeInDto,
+        equestrian_context: EquestrianContext,
         user: UserOutDto | None = None,
     ) -> None:
         """Установить родословное древо лошади."""
@@ -339,7 +396,7 @@ class HorseService:
             horses_ids_to_check.extend(pedigree_data.foals)
         horses_ids_to_check_unique = list(dict.fromkeys(horses_ids_to_check))
         horses_mapping: Mapping[UUID, Horse] = await self.horse_repository.get_by_ids(
-            horses_ids_to_check_unique
+            horses_ids_to_check_unique, equestrian_id=equestrian_context.id
         )
         if len(horses_mapping) != len(horses_ids_to_check_unique):
             raise ClientError("Некоторые лошади не найдены")
@@ -394,19 +451,28 @@ class HorseService:
             ) from ex
 
     async def delete_horse(
-        self, *, horse_id: UUID, user: UserOutDto | None = None
+        self,
+        *,
+        horse_id: UUID,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> None:
         """Удалить лошадь."""
         await self._check_admin_permission(user=user, raise_exception=True)
 
-        horse = await self.horse_repository.get_by_id(horse_id)
+        horse = await self.horse_repository.get_by_id(
+            horse_id, equestrian_id=equestrian_context.id
+        )
         if horse is None:
             raise ClientError("Лошадь не найдена")
-        await self.horse_repository.delete(horse_id)
+        await self.horse_repository.delete(
+            horse_id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered_horses(
         self,
         *,
+        equestrian_context: EquestrianContext,
         user: UserOutDto | None = None,
         name: str | None = None,
         description: str | None = None,
@@ -441,6 +507,7 @@ class HorseService:
         if pedigree is not None and pedigree < 0:
             pedigree = None
         horses, total = await self.horse_repository.get_horse_list_full_info(
+            equestrian_id=equestrian_context.id,
             name=name,
             description=description,
             breed_ids=breed_ids,

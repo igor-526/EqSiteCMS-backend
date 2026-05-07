@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from core.entities.base import _generate_slug
+from core.entities.equestrian import EquestrianContext
 from core.entities.horse_service import HorseServiceEntity
 from core.exceptions.base import ClientError
 from core.protocols.repositories.horse_service_repository import (
@@ -159,7 +160,11 @@ class HorseServiceService:
         return list(sort)
 
     async def _ensure_unique_slug(
-        self, slug: str, exclude_id: UUID | None = None
+        self,
+        slug: str,
+        *,
+        equestrian_context: EquestrianContext,
+        exclude_id: UUID | None = None,
     ) -> str:
         """Обеспечивает уникальность slug, добавляя суффиксы -1, -2 и т.д."""
         base_slug = slug
@@ -167,7 +172,9 @@ class HorseServiceService:
         current_slug = base_slug
 
         while True:
-            existing = await self.horse_service_repository.find_by_slug(current_slug)
+            existing = await self.horse_service_repository.find_by_slug(
+                current_slug, equestrian_id=equestrian_context.id
+            )
             if existing is None or (
                 exclude_id is not None and existing.id == exclude_id
             ):
@@ -175,14 +182,16 @@ class HorseServiceService:
             current_slug = f"{base_slug}-{counter}"
             counter += 1
 
-    async def create(self, data: HorseServiceCreateDto) -> HorseServiceEntity:
+    async def create(
+        self, data: HorseServiceCreateDto, *, equestrian_context: EquestrianContext
+    ) -> HorseServiceEntity:
         """Создать новую услугу."""
         horse_service_data = data.model_dump(exclude_none=True)
         self._validate_service_data(horse_service_data, partial=False)
 
         # Проверяем уникальность name
         existing = await self.horse_service_repository.find_by_name(
-            horse_service_data["name"]
+            horse_service_data["name"], equestrian_id=equestrian_context.id
         )
         if existing is not None:
             raise ClientError(
@@ -195,7 +204,7 @@ class HorseServiceService:
 
         # Обеспечиваем уникальность slug
         horse_service_data["slug"] = await self._ensure_unique_slug(
-            horse_service_data["slug"]
+            horse_service_data["slug"], equestrian_context=equestrian_context
         )
 
         # Устанавливаем page_data по умолчанию, если не задан
@@ -203,17 +212,25 @@ class HorseServiceService:
             horse_service_data["page_data"] = DEFAULT_PAGE_DATA
 
         try:
-            horse_service = HorseServiceEntity(**horse_service_data)
+            horse_service = HorseServiceEntity(
+                **horse_service_data, equestrian_id=equestrian_context.id
+            )
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
         return await self.horse_service_repository.create(horse_service)
 
     async def update(
-        self, slug_or_id: str, data: HorseServiceUpdateDto
+        self,
+        slug_or_id: str,
+        data: HorseServiceUpdateDto,
+        *,
+        equestrian_context: EquestrianContext,
     ) -> HorseServiceEntity:
         """Обновить услугу."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        horse_service = await self.horse_service_repository.get_by_slug_or_id(parsed)
+        horse_service = await self.horse_service_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if horse_service is None:
             raise ClientError("Услуга не найдена")
 
@@ -225,7 +242,7 @@ class HorseServiceService:
         # Если обновляется name, проверяем уникальность
         if "name" in update_data:
             existing = await self.horse_service_repository.find_by_name(
-                update_data["name"]
+                update_data["name"], equestrian_id=equestrian_context.id
             )
             if existing is not None and existing.id != horse_service.id:
                 raise ClientError(
@@ -235,14 +252,18 @@ class HorseServiceService:
         # Если обновляется slug, проверяем уникальность
         if "slug" in update_data:
             update_data["slug"] = await self._ensure_unique_slug(
-                update_data["slug"], exclude_id=horse_service.id
+                update_data["slug"],
+                equestrian_context=equestrian_context,
+                exclude_id=horse_service.id,
             )
 
         # Если обновляется name и slug не задан, генерируем slug из name
         if "name" in update_data and "slug" not in update_data:
             new_slug = _generate_slug(update_data["name"])
             update_data["slug"] = await self._ensure_unique_slug(
-                new_slug, exclude_id=horse_service.id
+                new_slug,
+                equestrian_context=equestrian_context,
+                exclude_id=horse_service.id,
             )
 
         for key, value in update_data.items():
@@ -250,25 +271,36 @@ class HorseServiceService:
 
         return await self.horse_service_repository.update(horse_service)
 
-    async def get_by_slug_or_id(self, slug_or_id: str) -> HorseServiceEntity:
+    async def get_by_slug_or_id(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> HorseServiceEntity:
         """Получить услугу по slug или UUID."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        horse_service = await self.horse_service_repository.get_by_slug_or_id(parsed)
+        horse_service = await self.horse_service_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if horse_service is None:
             raise ClientError("Услуга не найдена")
         return horse_service
 
-    async def delete(self, slug_or_id: str) -> None:
+    async def delete(
+        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+    ) -> None:
         """Удалить услугу."""
         parsed = self._parse_slug_or_id(slug_or_id)
-        horse_service = await self.horse_service_repository.get_by_slug_or_id(parsed)
+        horse_service = await self.horse_service_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
         if horse_service is None:
             raise ClientError("Услуга не найдена")
-        await self.horse_service_repository.delete(horse_service.id)
+        await self.horse_service_repository.delete(
+            horse_service.id, equestrian_id=equestrian_context.id
+        )
 
     async def get_filtered(
         self,
         *,
+        equestrian_context: EquestrianContext,
         name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
@@ -295,6 +327,7 @@ class HorseServiceService:
         self._validate_pagination(limit=limit, offset=offset)
         validated_sort = self._validate_sort(sort)
         return await self.horse_service_repository.get_filtered(
+            equestrian_id=equestrian_context.id,
             name=name,
             slug=slug,
             description=description,

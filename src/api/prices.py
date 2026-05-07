@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
+from core.entities.equestrian import EquestrianContext
 from core.schemas.prices import (
     PriceCreateDto,
     PriceGroupCreateDto,
@@ -15,7 +16,13 @@ from core.schemas.prices import (
     PriceUpdateDto,
 )
 from core.services.prices import PriceGroupService, PriceService
-from depends.services import get_price_group_service, get_price_service
+from depends.services import (
+    get_current_user,
+    get_price_group_service,
+    get_price_service,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 
 router = APIRouter()
 
@@ -31,6 +38,9 @@ router = APIRouter()
 )
 async def get_price_groups(
     price_group_service: Annotated[PriceGroupService, Depends(get_price_group_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
     sort: list[Literal["name", "-name"]] | None = Query(None, description="Сортировка"),
@@ -38,6 +48,7 @@ async def get_price_groups(
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[PriceGroupOutDto]:
     entities, total = await price_group_service.get_filtered(
+        equestrian_context=equestrian_context,
         name=name,
         description=description,
         sort=sort,
@@ -59,8 +70,13 @@ async def get_price_groups(
 async def get_price_group(
     id: UUID,
     price_group_service: Annotated[PriceGroupService, Depends(get_price_group_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
 ) -> PriceGroupOutDto:
-    price_group = await price_group_service.get_by_id(id)
+    price_group = await price_group_service.get_by_id(
+        id, equestrian_context=equestrian_context
+    )
     return PriceGroupOutDto.model_validate(price_group)
 
 
@@ -73,8 +89,14 @@ async def get_price_group(
 async def create_price_group(
     data: PriceGroupCreateDto,
     price_group_service: Annotated[PriceGroupService, Depends(get_price_group_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> PriceGroupOutDto:
-    price_group = await price_group_service.create(data)
+    price_group = await price_group_service.create(
+        data, equestrian_context=equestrian_context
+    )
     return PriceGroupOutDto.model_validate(price_group)
 
 
@@ -88,8 +110,14 @@ async def update_price_group(
     id: UUID,
     data: PriceGroupUpdateDto,
     price_group_service: Annotated[PriceGroupService, Depends(get_price_group_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> PriceGroupOutDto:
-    price_group = await price_group_service.update(id, data)
+    price_group = await price_group_service.update(
+        id, data, equestrian_context=equestrian_context
+    )
     return PriceGroupOutDto.model_validate(price_group)
 
 
@@ -102,8 +130,12 @@ async def update_price_group(
 async def delete_price_group(
     id: UUID,
     price_group_service: Annotated[PriceGroupService, Depends(get_price_group_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await price_group_service.delete(id)
+    await price_group_service.delete(id, equestrian_context=equestrian_context)
 
 
 # ==================== Price API ====================
@@ -117,6 +149,9 @@ async def delete_price_group(
 )
 async def get_prices(
     price_service: Annotated[PriceService, Depends(get_price_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     name: str | list[str] | None = Query(
         None, description="Фильтр по названию (вхождение или список)"
     ),
@@ -133,6 +168,7 @@ async def get_prices(
     groups_list = groups if isinstance(groups, list) else [groups] if groups else None
 
     items, total = await price_service.get_filtered_out(
+        equestrian_context=equestrian_context,
         name=name_list if name_list else None,
         description=description,
         groups=groups_list if groups_list else None,
@@ -157,10 +193,14 @@ async def get_prices(
 async def get_price(
     slug_or_id: str,
     price_service: Annotated[PriceService, Depends(get_price_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     page_data: bool = Query(False, description="Включить page_data в ответ"),
 ) -> PriceOutWithTablesDto:
     price = await price_service.get_by_slug_or_id_out(
         slug_or_id,
+        equestrian_context=equestrian_context,
         include_page_data=page_data,
         include_tables=True,
     )
@@ -176,8 +216,12 @@ async def get_price(
 async def create_price(
     data: PriceCreateDto,
     price_service: Annotated[PriceService, Depends(get_price_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> PriceOutDto:
-    return await price_service.create_out(data)
+    return await price_service.create_out(data, equestrian_context=equestrian_context)
 
 
 @router.patch(
@@ -190,8 +234,14 @@ async def update_price(
     slug_or_id: str,
     data: PriceUpdateDto,
     price_service: Annotated[PriceService, Depends(get_price_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> PriceOutDto:
-    return await price_service.update_out(slug_or_id, data)
+    return await price_service.update_out(
+        slug_or_id, data, equestrian_context=equestrian_context
+    )
 
 
 @router.delete(
@@ -203,8 +253,12 @@ async def update_price(
 async def delete_price(
     slug_or_id: str,
     price_service: Annotated[PriceService, Depends(get_price_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await price_service.delete(slug_or_id)
+    await price_service.delete(slug_or_id, equestrian_context=equestrian_context)
 
 
 @router.post(
@@ -217,5 +271,11 @@ async def update_price_photos(
     slug_or_id: str,
     data: PricePhotosUpdateDto,
     price_service: Annotated[PriceService, Depends(get_price_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await price_service.update_price_photos(slug_or_id, data)
+    await price_service.update_price_photos(
+        slug_or_id, data, equestrian_context=equestrian_context
+    )

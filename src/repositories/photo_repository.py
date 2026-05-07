@@ -8,15 +8,18 @@ from models.horse import horse_photos
 from models.photos import photos
 from models.prices import price_photos
 
-from .abstract_repository import AbstractRepository
+from .abstract_repository import TenantScopedRepository
 
 
-class PhotoRepository(AbstractRepository[Photo]):
+class PhotoRepository(TenantScopedRepository[Photo]):
     table: Table = photos
     entity = Photo
 
-    async def find_by_name(self, name: str) -> Photo | None:
-        stmt = select(self.table).where(self.table.c.name == name)
+    async def find_by_name(self, name: str, *, equestrian_id: UUID) -> Photo | None:
+        stmt = select(self.table).where(
+            self.table.c.name == name,
+            self.table.c.equestrian_id == equestrian_id,
+        )
         row = await self.session.execute(stmt)
         mapping = row.mappings().first()
         if mapping is None:
@@ -26,6 +29,7 @@ class PhotoRepository(AbstractRepository[Photo]):
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         description: str | None = None,
         price_ids: list[UUID] | None = None,
@@ -76,6 +80,8 @@ class PhotoRepository(AbstractRepository[Photo]):
         if description:
             conditions.append(self.table.c.description.ilike(f"%{description}%"))
 
+        conditions.append(self.table.c.equestrian_id == equestrian_id)
+
         stmt = select(self.table).distinct()
         count_stmt = select(func.count(func.distinct(self.table.c.id)))
 
@@ -117,10 +123,13 @@ class PhotoRepository(AbstractRepository[Photo]):
 
         return entities, total
 
-    async def batch_delete(self, ids: list[UUID]) -> None:
+    async def batch_delete(self, ids: list[UUID], *, equestrian_id: UUID) -> None:
         if not ids:
             return
 
-        stmt = self.table.delete().where(self.table.c.id.in_(ids))
+        stmt = self.table.delete().where(
+            self.table.c.id.in_(ids),
+            self.table.c.equestrian_id == equestrian_id,
+        )
         await self.session.execute(stmt)
         await self.session.flush()

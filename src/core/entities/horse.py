@@ -59,6 +59,7 @@ _HORSE_AVAILABLE_SORT_FIELDS: TypeAlias = Literal[
 class Horse(Entity, TimeStampMixin, SlugMixin):
     """Лошадь."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         min_length=2,

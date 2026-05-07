@@ -1,4 +1,5 @@
 from enum import StrEnum, auto
+from uuid import UUID
 
 from pydantic import Field
 
@@ -15,6 +16,7 @@ class HorseOwnerType(StrEnum):
 class HorseOwner(Entity, TimeStampMixin):
     """Владелец лошади."""
 
+    equestrian_id: UUID = Field(default=...)
     name: str = Field(
         default=...,
         description="Имя владельца",

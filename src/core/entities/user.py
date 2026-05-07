@@ -8,6 +8,11 @@ from .base import Entity, TimeStampMixin
 class User(Entity, TimeStampMixin):
     """Пользователь системы."""
 
+    equestrian_id: UUID = Field(
+        default=...,
+        description="Идентификатор конюшни пользователя",
+        examples=["123e4567-e89b-12d3-a456-426614174000"],
+    )
     username: str = Field(
         default=...,
         description="Уникальное имя пользователя",

@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import ConfigDict, Field, field_serializer
 
-from core.entities.prices import Price, PriceGroup
 from core.entities.table import Table as TableEntity
 from core.schemas.baseschema import BaseSchema
 from core.schemas.photos import PhotoOutShortDto

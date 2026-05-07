@@ -1,20 +1,22 @@
 from typing import Literal
+from uuid import UUID
 
 from sqlalchemy import Table, func, or_, select
 
 from core.entities.breeds import Breed
 from models.breeds import breeds
 
-from .abstract_repository import AbstractRepository
+from .abstract_repository import TenantScopedRepository
 
 
-class BreedRepository(AbstractRepository[Breed]):
+class BreedRepository(TenantScopedRepository[Breed]):
     table: Table = breeds
     entity = Breed
 
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
@@ -29,8 +31,12 @@ class BreedRepository(AbstractRepository[Breed]):
         offset: int | None = None,
     ) -> tuple[list[Breed], int]:
         """Получить отфильтрованный список с подсчётом общего количества."""
-        stmt = select(self.table)
-        count_stmt = select(func.count()).select_from(self.table)
+        stmt = select(self.table).where(self.table.c.equestrian_id == equestrian_id)
+        count_stmt = (
+            select(func.count())
+            .select_from(self.table)
+            .where(self.table.c.equestrian_id == equestrian_id)
+        )
 
         conditions = []
         if name:

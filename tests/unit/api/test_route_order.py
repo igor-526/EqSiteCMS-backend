@@ -47,6 +47,27 @@ def test_coat_color_routes_are_registered_before_horse_slug_catch_all() -> None:
     ) < route_paths.index("/api/horses/{slug_or_id}")
 
 
+def test_horse_service_routes_are_registered_before_horse_slug_catch_all() -> None:
+    route_paths = [
+        route.path
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and route.path
+        in {
+            "/api/horses/services",
+            "/api/horses/services/{slug_or_id}",
+            "/api/horses/{slug_or_id}",
+        }
+    ]
+
+    assert route_paths.index("/api/horses/services") < route_paths.index(
+        "/api/horses/{slug_or_id}"
+    )
+    assert route_paths.index("/api/horses/services/{slug_or_id}") < route_paths.index(
+        "/api/horses/{slug_or_id}"
+    )
+
+
 def test_horse_pedigree_route_registered_with_path_separator() -> None:
     pedigree_paths = [
         route.path

@@ -1,14 +1,16 @@
 from typing import Literal, Protocol
+from uuid import UUID
 
 from core.entities.horse_owner import HorseOwner
 
-from .base_repository import BaseRepositoryProtocol
+from .base_repository import TenantBaseRepositoryProtocol
 
 
-class HorseOwnerRepositoryProtocol(BaseRepositoryProtocol[HorseOwner], Protocol):
+class HorseOwnerRepositoryProtocol(TenantBaseRepositoryProtocol[HorseOwner], Protocol):
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         description: str | None = None,
         type: list[str] | None = None,

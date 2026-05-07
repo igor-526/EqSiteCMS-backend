@@ -1,4 +1,5 @@
 from enum import StrEnum, auto
+from uuid import UUID
 
 from pydantic import Field
 
@@ -21,6 +22,7 @@ class SiteSettingType(StrEnum):
 class SiteSetting(Entity, TimeStampMixin):
     """Настройка сайта."""
 
+    equestrian_id: UUID = Field(default=...)
     key: str = Field(
         default=...,
         description="Ключ настройки",

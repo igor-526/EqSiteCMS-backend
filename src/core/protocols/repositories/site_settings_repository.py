@@ -1,16 +1,26 @@
 from typing import Literal, Protocol
+from uuid import UUID
 
 from core.entities.site_settings import SiteSetting
 
-from .base_repository import BaseRepositoryProtocol
+from .base_repository import TenantBaseRepositoryProtocol
 
 
-class SiteSettingsRepositoryProtocol(BaseRepositoryProtocol[SiteSetting], Protocol):
-    async def find_by_key(self, key: str) -> SiteSetting | None: ...
-    async def find_by_name(self, name: str) -> SiteSetting | None: ...
+class SiteSettingsRepositoryProtocol(
+    TenantBaseRepositoryProtocol[SiteSetting], Protocol
+):
+    async def find_by_key(
+        self, key: str, *, equestrian_id: UUID
+    ) -> SiteSetting | None: ...
+
+    async def find_by_name(
+        self, name: str, *, equestrian_id: UUID
+    ) -> SiteSetting | None: ...
+
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         key: list[str] | None = None,
         name: str | None = None,
         value: str | None = None,

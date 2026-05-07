@@ -1,5 +1,6 @@
 from .breed_repository import BreedRepository
 from .coat_color_repository import CoatColorRepository
+from .equestrian_repository import EquestrianRepository
 from .horse_owner_repository import HorseOwnerRepository
 from .horse_repository import HorseChildrenRepository, HorseRepository
 from .horse_service_repository import HorseServiceRepository

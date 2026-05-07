@@ -3,17 +3,24 @@ from uuid import UUID
 
 from core.entities.breeds import Breed
 
-from .base_repository import BaseRepositoryProtocol
+from .base_repository import TenantBaseRepositoryProtocol
 
 
-class BreedRepositoryProtocol(BaseRepositoryProtocol[Breed], Protocol):
-    async def get_by_slug(self, slug: str) -> Breed | None: ...
-    async def get_by_slug_or_id(self, slug_or_id: str | UUID) -> Breed | None: ...
-    async def find_by_slug(self, slug: str) -> Breed | None: ...
-    async def find_by_name(self, name: str) -> Breed | None: ...
+class BreedRepositoryProtocol(TenantBaseRepositoryProtocol[Breed], Protocol):
+    async def get_by_slug(self, slug: str, *, equestrian_id: UUID) -> Breed | None: ...
+
+    async def get_by_slug_or_id(
+        self, slug_or_id: str | UUID, *, equestrian_id: UUID
+    ) -> Breed | None: ...
+
+    async def find_by_slug(self, slug: str, *, equestrian_id: UUID) -> Breed | None: ...
+
+    async def find_by_name(self, name: str, *, equestrian_id: UUID) -> Breed | None: ...
+
     async def get_filtered(
         self,
         *,
+        equestrian_id: UUID,
         name: str | None = None,
         slug: str | None = None,
         description: str | None = None,

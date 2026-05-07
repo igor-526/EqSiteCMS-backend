@@ -3,7 +3,6 @@ from uuid import UUID
 
 from pydantic import Field, field_serializer
 
-from core.entities.horse_service import HorseServiceEntity
 from core.entities.price import PriceFormatter
 from core.schemas.baseschema import BaseSchema
 

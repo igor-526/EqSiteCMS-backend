@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
+from core.entities.equestrian import EquestrianContext
 from core.schemas.horse_service import (
     HorseServiceCreateDto,
     HorseServiceOutDto,
@@ -10,7 +11,12 @@ from core.schemas.horse_service import (
     HorseServiceUpdateDto,
 )
 from core.services.horse_service import HorseServiceService
-from depends.services import get_horse_service_service
+from depends.services import (
+    get_current_user,
+    get_horse_service_service,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 
 router = APIRouter()
 
@@ -24,6 +30,9 @@ router = APIRouter()
 async def get_horse_services(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
+    ],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
     ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
     slug: str | None = Query(None, description="Фильтр по slug (вхождение)"),
@@ -48,6 +57,7 @@ async def get_horse_services(
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[HorseServiceOutDto]:
     entities, total = await horse_service_service.get_filtered(
+        equestrian_context=equestrian_context,
         name=name,
         slug=slug,
         description=description,
@@ -72,10 +82,15 @@ async def get_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_read_equestrian_context)
+    ],
     slug_or_id: str,
     page_data: bool = Query(False, description="Включить page_data в ответ"),
 ) -> HorseServiceOutDto | HorseServiceOutWithPageDataDto:
-    horse_service = await horse_service_service.get_by_slug_or_id(slug_or_id)
+    horse_service = await horse_service_service.get_by_slug_or_id(
+        slug_or_id, equestrian_context=equestrian_context
+    )
     if page_data:
         return HorseServiceOutWithPageDataDto.model_validate(horse_service)
     return HorseServiceOutDto.model_validate(horse_service)
@@ -92,8 +107,14 @@ async def create_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> HorseServiceOutDto:
-    horse_service = await horse_service_service.create(data)
+    horse_service = await horse_service_service.create(
+        data, equestrian_context=equestrian_context
+    )
     return HorseServiceOutDto.model_validate(horse_service)
 
 
@@ -109,8 +130,14 @@ async def update_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> HorseServiceOutDto:
-    horse_service = await horse_service_service.update(slug_or_id, data)
+    horse_service = await horse_service_service.update(
+        slug_or_id, data, equestrian_context=equestrian_context
+    )
     return HorseServiceOutDto.model_validate(horse_service)
 
 
@@ -125,5 +152,11 @@ async def delete_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
 ) -> None:
-    await horse_service_service.delete(slug_or_id)
+    await horse_service_service.delete(
+        slug_or_id, equestrian_context=equestrian_context
+    )

@@ -1,8 +1,11 @@
 from typing import Annotated
 
-from fastapi import Cookie, Depends
+from fastapi import Cookie, Depends, Header
 
+from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import InvalidCredentials
+from core.exceptions.base import ClientError
+from core.exceptions.tenant import TenantNotFound
 from core.protocols.media import (
     MediaStorageProtocol,
     MediaTypeValidatorProtocol,
@@ -11,6 +14,7 @@ from core.protocols.media import (
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
+    EquestrianRepositoryProtocol,
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
     HorseServiceRepositoryProtocol,
@@ -36,6 +40,7 @@ from core.services.users import UserService
 from depends.repositories import (
     get_breed_repository,
     get_coat_color_repository,
+    get_equestrian_repository,
     get_horse_children_repository,
     get_horse_owner_repository,
     get_horse_repository,
@@ -75,6 +80,53 @@ async def get_current_user(
         raise InvalidCredentials("Отсутствуют учетные данные")
 
     return await auth_service.get_current_user(token=access_token)
+
+
+async def get_optional_current_user(
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    access_token: Annotated[str | None, Cookie(alias="access_token")] = None,
+) -> UserOutDto | None:
+    if access_token is None:
+        return None
+    return await auth_service.get_current_user(token=access_token)
+
+
+async def get_public_equestrian_context(
+    equestrian_repository: Annotated[
+        EquestrianRepositoryProtocol, Depends(get_equestrian_repository)
+    ],
+    service_key: Annotated[str | None, Header(alias="X-Equestrian-Service-Key")] = None,
+) -> EquestrianContext:
+    if service_key is None or not service_key.strip():
+        raise ClientError("Отсутствует X-Equestrian-Service-Key")
+
+    equestrian = await equestrian_repository.get_by_service_key(service_key.strip())
+    if equestrian is None:
+        raise TenantNotFound("Конюшня не найдена")
+    return EquestrianContext(id=equestrian.id, source="public")
+
+
+async def get_protected_equestrian_context(
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
+) -> EquestrianContext:
+    return EquestrianContext(id=current_user.equestrian_id, source="authenticated")
+
+
+async def get_read_equestrian_context(
+    current_user: Annotated[UserOutDto | None, Depends(get_optional_current_user)],
+    equestrian_repository: Annotated[
+        EquestrianRepositoryProtocol, Depends(get_equestrian_repository)
+    ],
+    service_key: Annotated[str | None, Header(alias="X-Equestrian-Service-Key")] = None,
+) -> EquestrianContext:
+    if current_user is not None:
+        return EquestrianContext(id=current_user.equestrian_id, source="authenticated")
+    if service_key is None or not service_key.strip():
+        raise ClientError("Отсутствует X-Equestrian-Service-Key")
+    equestrian = await equestrian_repository.get_by_service_key(service_key.strip())
+    if equestrian is None:
+        raise TenantNotFound("Конюшня не найдена")
+    return EquestrianContext(id=equestrian.id, source="public")
 
 
 async def get_breed_service(
