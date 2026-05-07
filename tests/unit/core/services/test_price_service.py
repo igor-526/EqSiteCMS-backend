@@ -429,6 +429,7 @@ async def test_update_uc19_uc22_updates_entity_then_group_relations() -> None:
         "find_by_name",
         "get_by_slug_or_id",
         "update",
+        "get_price_groups",
         "set_price_groups",
     ]
 
@@ -493,6 +494,7 @@ async def test_update_uc19_groups_only_can_clear_relations_without_entity_update
     assert updated == price
     assert [name for name, _ in price_repo.calls] == [
         "get_by_slug_or_id",
+        "get_price_groups",
         "set_price_groups",
     ]
     assert price_repo.calls[-1][1] == (price.id, [])

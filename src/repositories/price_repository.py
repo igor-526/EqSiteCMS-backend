@@ -192,6 +192,32 @@ class PriceRepository(TenantScopedRepository[Price]):
                 else:
                     order_by_clauses.append(self.table.c[field].asc())
             stmt = stmt.order_by(*order_by_clauses)
+        elif groups:
+            # Дефолтная сортировка по display_order при groups-фильтре
+            group_ids_for_sort = select(price_groups.c.id).where(
+                or_(
+                    *[
+                        price_groups.c.name == g
+                        for g in (groups if isinstance(groups, list) else [groups])
+                    ]
+                ),
+                price_groups.c.equestrian_id == equestrian_id,
+            )
+            min_order_subq = (
+                select(
+                    price_groups_relations.c.price_id,
+                    func.min(price_groups_relations.c.display_order).label("min_order"),
+                )
+                .where(price_groups_relations.c.group_id.in_(group_ids_for_sort))
+                .group_by(price_groups_relations.c.price_id)
+                .subquery()
+            )
+            stmt = stmt.outerjoin(
+                min_order_subq, self.table.c.id == min_order_subq.c.price_id
+            )
+            stmt = stmt.order_by(min_order_subq.c.min_order.asc().nullslast())
+        else:
+            stmt = stmt.order_by(self.table.c.created_at.desc())
 
         # Пагинация
         if limit is not None:
@@ -240,13 +266,19 @@ class PriceRepository(TenantScopedRepository[Price]):
         )
         await self.session.execute(delete_stmt)
 
-        # Добавляем новые связи
-        if group_ids:
-            values = [
-                {"price_id": price_id, "group_id": group_id} for group_id in group_ids
-            ]
-            insert_stmt = insert(price_groups_relations).values(values)
-            await self.session.execute(insert_stmt)
+        # Добавляем новые связи с назначением display_order = MAX + 1
+        for group_id in group_ids:
+            max_stmt = select(func.max(price_groups_relations.c.display_order)).where(
+                price_groups_relations.c.group_id == group_id
+            )
+            max_result = await self.session.execute(max_stmt)
+            current_max = max_result.scalar() or 0
+            values = {
+                "price_id": price_id,
+                "group_id": group_id,
+                "display_order": current_max + 1,
+            }
+            await self.session.execute(insert(price_groups_relations).values(values))
 
         await self.session.flush()
 
@@ -340,4 +372,55 @@ class PriceRepository(TenantScopedRepository[Price]):
                 )
                 await self.session.execute(insert_main_stmt)
 
+        await self.session.flush()
+
+    async def get_group_relations_ordered(
+        self, group_id: UUID, *, equestrian_id: UUID
+    ) -> list[PriceGroupsRelation]:
+        """Получить связи группы, упорядоченные по display_order."""
+        stmt = (
+            select(price_groups_relations)
+            .join(price_groups, price_groups_relations.c.group_id == price_groups.c.id)
+            .where(
+                price_groups_relations.c.group_id == group_id,
+                price_groups.c.equestrian_id == equestrian_id,
+            )
+            .order_by(price_groups_relations.c.display_order.asc().nullslast())
+        )
+        rows = await self.session.execute(stmt)
+        return [
+            PriceGroupsRelation.model_validate(dict(row))
+            for row in rows.mappings().all()
+        ]
+
+    async def set_display_orders(
+        self, group_id: UUID, order_map: dict[UUID, int], *, equestrian_id: UUID
+    ) -> None:
+        """Двухфазное обновление display_order для избегания UniqueViolation."""
+        # Сначала проверяем что group_id принадлежит нужному equestrian
+        group_check = select(price_groups).where(
+            price_groups.c.id == group_id,
+            price_groups.c.equestrian_id == equestrian_id,
+        )
+        if not (await self.session.execute(group_check)).mappings().first():
+            return
+
+        # Фаза 1: сбрасываем display_order в NULL для всех строк группы
+        await self.session.execute(
+            update(price_groups_relations)
+            .where(price_groups_relations.c.group_id == group_id)
+            .values(display_order=None)
+        )
+        await self.session.flush()
+
+        # Фаза 2: выставляем финальные значения
+        for price_id, order in order_map.items():
+            await self.session.execute(
+                update(price_groups_relations)
+                .where(
+                    price_groups_relations.c.price_id == price_id,
+                    price_groups_relations.c.group_id == group_id,
+                )
+                .values(display_order=order)
+            )
         await self.session.flush()

@@ -190,8 +190,12 @@ async def get_price_group_service(
     price_group_repository: Annotated[
         PriceGroupRepositoryProtocol, Depends(get_price_group_repository)
     ],
+    price_repository: Annotated[PriceRepositoryProtocol, Depends(get_price_repository)],
 ) -> PriceGroupService:
-    return PriceGroupService(price_group_repository=price_group_repository)
+    return PriceGroupService(
+        price_group_repository=price_group_repository,
+        price_repository=price_repository,
+    )
 
 
 async def get_price_service(

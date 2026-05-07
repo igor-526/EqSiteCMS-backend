@@ -9,12 +9,14 @@ from core.schemas.prices import (
     PriceCreateDto,
     PriceGroupCreateDto,
     PriceGroupOutDto,
+    PriceGroupReorderDto,
     PriceGroupUpdateDto,
     PriceOutDto,
     PriceOutWithTablesDto,
     PricePhotosUpdateDto,
     PriceUpdateDto,
 )
+from core.schemas.users import UserOutDto
 from core.services.prices import PriceGroupService, PriceService
 from depends.services import (
     get_current_user,
@@ -136,6 +138,26 @@ async def delete_price_group(
     ],
 ) -> None:
     await price_group_service.delete(id, equestrian_context=equestrian_context)
+
+
+@router.post(
+    "/prices/groups/{id}/reorder",
+    status_code=204,
+    tags=["Price Group"],
+    description="Переупорядочить услуги внутри группы (только SUPERUSER/ADMIN/DEVELOPER)",
+)
+async def reorder_prices_in_group(
+    id: UUID,
+    data: PriceGroupReorderDto,
+    price_group_service: Annotated[PriceGroupService, Depends(get_price_group_service)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
+) -> None:
+    await price_group_service.reorder_prices_in_group(
+        id, data, equestrian_context=equestrian_context, user=current_user
+    )
 
 
 # ==================== Price API ====================

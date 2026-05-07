@@ -127,3 +127,18 @@ class PricePhotosUpdateDto(BaseSchema):
 
     photo_ids: list[UUID] | None = Field(None, description="Список UUID фотографий")
     main: UUID | None = Field(None, description="UUID главной фотографии")
+
+
+class PriceGroupReorderItemDto(BaseSchema):
+    """Один элемент в запросе на reorder."""
+
+    id: UUID = Field(..., description="UUID услуги")
+    order: int = Field(..., ge=1, description="Желаемая позиция (1-based)")
+
+
+class PriceGroupReorderDto(BaseSchema):
+    """Тело запроса POST /prices/groups/{id}/reorder."""
+
+    changes: list[PriceGroupReorderItemDto] = Field(
+        ..., min_length=1, description="Список изменений позиций"
+    )

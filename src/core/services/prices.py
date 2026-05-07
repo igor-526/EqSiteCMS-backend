@@ -17,6 +17,7 @@ from core.schemas.photos import PhotoOutShortDto
 from core.schemas.prices import (
     PriceCreateDto,
     PriceGroupCreateDto,
+    PriceGroupReorderDto,
     PriceGroupSimpleDto,
     PriceGroupUpdateDto,
     PriceOutDto,
@@ -25,6 +26,7 @@ from core.schemas.prices import (
     PricePhotosUpdateDto,
     PriceUpdateDto,
 )
+from core.schemas.users import UserOutDto
 
 PRICE_NAME_MAX_LENGTH = 63
 PRICE_SLUG_MAX_LENGTH = 63
@@ -35,8 +37,15 @@ DEFAULT_PAGE_DATA = "<div></div>"
 
 
 class PriceGroupService:
-    def __init__(self, price_group_repository: PriceGroupRepositoryProtocol):
+    _ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
+
+    def __init__(
+        self,
+        price_group_repository: PriceGroupRepositoryProtocol,
+        price_repository: PriceRepositoryProtocol,
+    ):
         self.price_group_repository = price_group_repository
+        self.price_repository = price_repository
 
     def _validate_required_text(
         self, *, field: str, value: str | None, max_length: int
@@ -186,6 +195,79 @@ class PriceGroupService:
             sort=sort,
             limit=limit,
             offset=offset,
+        )
+
+    async def _check_admin_permission(self, *, user: UserOutDto) -> None:
+        has_admin_scope = any(
+            scope.scope_name in self._ADMIN_SCOPE_NAMES for scope in user.scopes
+        )
+        if not has_admin_scope:
+            raise ClientError("Недостаточно прав для выполнения операции")
+
+    async def reorder_prices_in_group(
+        self,
+        group_id: UUID,
+        data: PriceGroupReorderDto,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto,
+    ) -> None:
+        """Reorder prices within a group. Only SUPERUSER/ADMIN/DEVELOPER allowed."""
+        await self._check_admin_permission(user=user)
+
+        # Проверяем что группа существует
+        group = await self.price_group_repository.get_by_id(
+            group_id, equestrian_id=equestrian_context.id
+        )
+        if group is None:
+            raise ClientError("Группа не найдена")
+
+        # Получаем текущий упорядоченный список
+        relations = await self.price_repository.get_group_relations_ordered(
+            group_id, equestrian_id=equestrian_context.id
+        )
+        if not relations:
+            raise ClientError("В группе нет услуг")
+
+        n = len(relations)
+        # Строим current_order: price_id → display_order (1-based)
+        # Если display_order is None (legacy), инициализируем по позиции
+        current_order: dict[UUID, int] = {}
+        for i, rel in enumerate(relations):
+            current_order[rel.price_id] = (
+                rel.display_order if rel.display_order is not None else (i + 1)
+            )
+
+        price_ids_in_group = set(current_order.keys())
+
+        # Проверяем что все UUID из changes принадлежат группе
+        for item in data.changes:
+            if item.id not in price_ids_in_group:
+                raise ClientError(f"Услуга {item.id} не входит в эту группу")
+
+        # Применяем изменения последовательно
+        for item in data.changes:
+            target_order = max(1, min(item.order, n))  # клипируем в 1..N
+            current_pos = current_order[item.id]
+            if current_pos == target_order:
+                continue
+
+            if target_order < current_pos:
+                # Двигаем вперёд: сдвигаем промежуточные на +1
+                for pid in current_order:
+                    if target_order <= current_order[pid] < current_pos:
+                        current_order[pid] += 1
+            else:
+                # Двигаем назад: сдвигаем промежуточные на -1
+                for pid in current_order:
+                    if current_pos < current_order[pid] <= target_order:
+                        current_order[pid] -= 1
+
+            current_order[item.id] = target_order
+
+        # Применяем через двухфазное обновление
+        await self.price_repository.set_display_orders(
+            group_id, current_order, equestrian_id=equestrian_context.id
         )
 
 
@@ -443,9 +525,31 @@ class PriceService:
             price = await self.price_repository.update(price)
 
         if group_ids is not None:
+            # Capture the groups the price belonged to BEFORE the update so we
+            # can renumber any groups that will lose this price.
+            old_relations = await self.price_repository.get_price_groups(
+                price.id, equestrian_id=equestrian_context.id
+            )
+            old_group_ids = {rel.group_id for rel in old_relations}
+            new_group_ids_set = set(group_ids)
+            removed_group_ids = old_group_ids - new_group_ids_set
+
             await self.price_repository.set_price_groups(
                 price.id, group_ids, equestrian_id=equestrian_context.id
             )
+
+            # Renumber remaining prices in each group that lost this price
+            for removed_group_id in removed_group_ids:
+                remaining = await self.price_repository.get_group_relations_ordered(
+                    removed_group_id, equestrian_id=equestrian_context.id
+                )
+                if remaining:
+                    new_order = {
+                        rel.price_id: idx + 1 for idx, rel in enumerate(remaining)
+                    }
+                    await self.price_repository.set_display_orders(
+                        removed_group_id, new_order, equestrian_id=equestrian_context.id
+                    )
 
         return price
 
@@ -471,9 +575,27 @@ class PriceService:
         )
         if price is None:
             raise ClientError("Цена не найдена")
+
+        # Получаем связи до удаления для последующей перенумерации
+        groups_relations = await self.price_repository.get_price_groups(
+            price.id, equestrian_id=equestrian_context.id
+        )
+        group_ids = [rel.group_id for rel in groups_relations]
+
         await self.price_repository.delete(
             price.id, equestrian_id=equestrian_context.id
         )
+
+        # Перенумеровываем оставшиеся в каждой затронутой группе
+        for group_id in group_ids:
+            remaining = await self.price_repository.get_group_relations_ordered(
+                group_id, equestrian_id=equestrian_context.id
+            )
+            if remaining:
+                new_order = {rel.price_id: idx + 1 for idx, rel in enumerate(remaining)}
+                await self.price_repository.set_display_orders(
+                    group_id, new_order, equestrian_id=equestrian_context.id
+                )
 
     async def get_filtered(
         self,

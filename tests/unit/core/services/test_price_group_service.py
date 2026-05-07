@@ -101,8 +101,17 @@ def make_group(**overrides: Any) -> PriceGroup:
 
 
 def make_service() -> tuple[PriceGroupService, FakePriceGroupRepository]:
+    from unittest.mock import AsyncMock
+
     repo = FakePriceGroupRepository()
-    return PriceGroupService(price_group_repository=cast(Any, repo)), repo
+    price_repo = AsyncMock()
+    return (
+        PriceGroupService(
+            price_group_repository=cast(Any, repo),
+            price_repository=cast(Any, price_repo),
+        ),
+        repo,
+    )
 
 
 async def test_ensure_unique_name_uc01_uc15_allows_missing_and_self() -> None:

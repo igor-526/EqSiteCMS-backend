@@ -62,3 +62,11 @@ class PriceRepositoryProtocol(TenantBaseRepositoryProtocol[Price], Protocol):
         *,
         equestrian_id: UUID,
     ) -> None: ...
+
+    async def get_group_relations_ordered(
+        self, group_id: UUID, *, equestrian_id: UUID
+    ) -> list[PriceGroupsRelation]: ...
+
+    async def set_display_orders(
+        self, group_id: UUID, order_map: dict[UUID, int], *, equestrian_id: UUID
+    ) -> None: ...

@@ -61,6 +61,10 @@ class PriceGroupsRelation(Entity):
         description="Идентификатор группы",
         examples=["123e4567-e89b-12d3-a456-426614174000"],
     )
+    display_order: int | None = Field(
+        default=None,
+        description="Порядок отображения услуги в группе (1-based, nullable)",
+    )
 
 
 class PricePhotos(Entity):

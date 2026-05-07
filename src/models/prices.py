@@ -1,4 +1,14 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Index, String, Table, Text, text
+from sqlalchemy import (
+    Boolean,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 
 from utils.basemodel import metadata, timestamp_columns, uuid_pk
@@ -51,6 +61,14 @@ price_groups_relations = Table(
     Column("price_id", ForeignKey("prices.id", ondelete="CASCADE"), nullable=False),
     Column(
         "group_id", ForeignKey("price_groups.id", ondelete="CASCADE"), nullable=False
+    ),
+    Column("display_order", Integer, nullable=True),
+    Index(
+        "uix_price_groups_relations_group_order",
+        "group_id",
+        "display_order",
+        unique=True,
+        postgresql_where=text("display_order IS NOT NULL"),
     ),
 )
 
