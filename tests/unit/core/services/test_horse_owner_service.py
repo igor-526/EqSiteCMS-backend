@@ -338,9 +338,10 @@ async def test_create_uc17_valid_call_is_not_blocked() -> None:
     assert owner is not None
 
 
+@pytest.mark.skip(reason="No auth in HorseOwnerService — permission tests belong to API layer")
 async def test_create_uc18_permission_denied_na() -> None:
     """UC18: N/A — no auth in this service layer; skipped by design."""
-    pytest.skip("No auth in HorseOwnerService — permission tests belong to API layer")
+    ...
 
 
 async def test_create_uc19_partial_create_uses_defaults() -> None:
@@ -665,9 +666,10 @@ async def test_update_uc17_valid_call_not_blocked() -> None:
     assert result is not None
 
 
+@pytest.mark.skip(reason="No auth in HorseOwnerService — permission tests belong to API layer")
 async def test_update_uc18_permission_denied_na() -> None:
     """UC18: N/A — no auth in service layer."""
-    pytest.skip("No auth in HorseOwnerService — permission tests belong to API layer")
+    ...
 
 
 async def test_update_uc19_partial_update_only_specified_fields() -> None:
@@ -747,19 +749,22 @@ async def test_update_uc24_idempotency_multiple_updates() -> None:
     assert first.name == second.name
 
 
+@pytest.mark.skip(reason="sort parameter does not apply to update()")
 async def test_update_uc25_sorting_na() -> None:
     """UC25: N/A for update — sort is not applicable."""
-    pytest.skip("sort parameter does not apply to update()")
+    ...
 
 
+@pytest.mark.skip(reason="filter parameters do not apply to update()")
 async def test_update_uc26_filtering_na() -> None:
     """UC26: N/A for update — filter parameters not applicable."""
-    pytest.skip("filter parameters do not apply to update()")
+    ...
 
 
+@pytest.mark.skip(reason="pagination does not apply to update()")
 async def test_update_uc27_pagination_na() -> None:
     """UC27: N/A for update — pagination not applicable."""
-    pytest.skip("pagination does not apply to update()")
+    ...
 
 
 async def test_update_uc28_serialization_updated_fields_returned() -> None:
@@ -797,7 +802,6 @@ async def test_update_uc30_architecture_boundary() -> None:
     """UC30: service module does not import FastAPI or SQLAlchemy."""
     import core.services.horse_owner as svc_module
 
-    source = svc_module.__file__ or ""
     assert "fastapi" not in dir(svc_module)
     assert "sqlalchemy" not in dir(svc_module)
 

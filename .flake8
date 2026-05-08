@@ -10,3 +10,4 @@ exclude =
 per-file-ignores =
     src/**/__init__.py:F401,W391
     src/migration/env.py:F401,F403
+    maintain/horse_generator/generate_horses.py:W293,E303

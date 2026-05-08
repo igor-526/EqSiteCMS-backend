@@ -1,7 +1,6 @@
 import asyncio
 import datetime
 import json
-import logging
 import os
 import random
 from core.entities.horse import Horse, HorseDateModeEnum, HorseKindEnum, HorseSexEnum

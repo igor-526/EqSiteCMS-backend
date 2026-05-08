@@ -413,7 +413,7 @@ async def test_update_uc16_uc23_validates_groups_before_price_update() -> None:
 
 async def test_update_uc19_uc22_updates_entity_then_group_relations() -> None:
     service, price_repo, group_repo, *_ = make_service()
-    price = price_repo.add(make_price(name="Old", slug="old"))
+    price_repo.add(make_price(name="Old", slug="old"))
     group = group_repo.add(make_group())
 
     updated = await service.update(
