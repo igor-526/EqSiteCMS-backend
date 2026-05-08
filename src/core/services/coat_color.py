@@ -9,6 +9,7 @@ from core.entities.equestrian import EquestrianContext
 from core.exceptions.base import ClientError
 from core.protocols.repositories import CoatColorRepositoryProtocol
 from core.schemas import CoatColorCreateDto, CoatColorUpdateDto
+from core.utils.html_security import validate_no_js_in_html
 
 COAT_COLOR_NAME_MAX_LENGTH = 63
 COAT_COLOR_SHORT_NAME_MAX_LENGTH = 63
@@ -88,6 +89,8 @@ class CoatColorService:
                 field="Данные страницы масти",
                 value=data["page_data"],
             )
+            if data["page_data"] is not None:
+                validate_no_js_in_html("Данные страницы масти", data["page_data"])
 
     def _validate_pagination(self, *, limit: int | None, offset: int | None) -> None:
         if limit is not None and limit < 0:

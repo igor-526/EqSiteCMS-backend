@@ -27,6 +27,7 @@ from core.schemas.prices import (
     PriceUpdateDto,
 )
 from core.schemas.users import UserOutDto
+from core.utils.html_security import validate_no_js_in_html
 
 PRICE_NAME_MAX_LENGTH = 63
 PRICE_SLUG_MAX_LENGTH = 63
@@ -342,6 +343,8 @@ class PriceService:
                 field="Данные страницы цены",
                 value=data["page_data"],
             )
+            if data["page_data"] is not None:
+                validate_no_js_in_html("Данные страницы цены", data["page_data"])
 
     def _deduplicate_ids(self, ids: Sequence[UUID]) -> list[UUID]:
         return list(dict.fromkeys(ids))

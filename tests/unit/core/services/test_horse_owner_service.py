@@ -338,7 +338,9 @@ async def test_create_uc17_valid_call_is_not_blocked() -> None:
     assert owner is not None
 
 
-@pytest.mark.skip(reason="No auth in HorseOwnerService — permission tests belong to API layer")
+@pytest.mark.skip(
+    reason="No auth in HorseOwnerService — permission tests belong to API layer"
+)
 async def test_create_uc18_permission_denied_na() -> None:
     """UC18: N/A — no auth in this service layer; skipped by design."""
     ...
@@ -666,7 +668,9 @@ async def test_update_uc17_valid_call_not_blocked() -> None:
     assert result is not None
 
 
-@pytest.mark.skip(reason="No auth in HorseOwnerService — permission tests belong to API layer")
+@pytest.mark.skip(
+    reason="No auth in HorseOwnerService — permission tests belong to API layer"
+)
 async def test_update_uc18_permission_denied_na() -> None:
     """UC18: N/A — no auth in service layer."""
     ...

@@ -11,6 +11,7 @@ from core.protocols.repositories.horse_service_repository import (
     HorseServiceRepositoryProtocol,
 )
 from core.schemas.horse_service import HorseServiceCreateDto, HorseServiceUpdateDto
+from core.utils.html_security import validate_no_js_in_html
 
 HORSE_SERVICE_NAME_MAX_LENGTH = 63
 HORSE_SERVICE_SLUG_MAX_LENGTH = 63
@@ -107,6 +108,9 @@ class HorseServiceService:
                 field="Данные страницы услуги",
                 value=page_data_value if isinstance(page_data_value, str) else None,
             )
+            validated_page_data = data["page_data"]
+            if isinstance(validated_page_data, str):
+                validate_no_js_in_html("Данные страницы услуги", validated_page_data)
 
         if "price" in data:
             data["price"] = self._validate_non_negative_int(

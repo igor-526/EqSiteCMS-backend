@@ -9,6 +9,7 @@ from core.entities.equestrian import EquestrianContext
 from core.exceptions.base import ClientError
 from core.protocols.repositories.breed_repository import BreedRepositoryProtocol
 from core.schemas.breeds import BreedCreateDto, BreedUpdateDto
+from core.utils.html_security import validate_no_js_in_html
 
 BREED_NAME_MAX_LENGTH = 63
 BREED_SHORT_NAME_MAX_LENGTH = 63
@@ -87,6 +88,8 @@ class BreedService:
                 field="Данные страницы породы",
                 value=data["page_data"],
             )
+            if data["page_data"] is not None:
+                validate_no_js_in_html("Данные страницы породы", data["page_data"])
 
     async def _ensure_unique_slug(
         self,
