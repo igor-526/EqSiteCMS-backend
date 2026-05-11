@@ -4,6 +4,7 @@ from .equestrian_repository import EquestrianRepository
 from .horse_owner_repository import HorseOwnerRepository
 from .horse_repository import HorseChildrenRepository, HorseRepository
 from .horse_service_repository import HorseServiceRepository
+from .news_repository import NewsRepository
 from .photo_repository import PhotoRepository
 from .price_repository import PriceGroupRepository, PriceRepository
 from .site_settings_repository import SiteSettingsRepository

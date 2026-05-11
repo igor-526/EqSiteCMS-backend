@@ -5,6 +5,13 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class SoftDeleteMixin(BaseModel):
+    """Миксин для soft delete (is_deleted + deleted_at)."""
+
+    is_deleted: bool = Field(default=False)
+    deleted_at: datetime | None = Field(default=None)
+
+
 def _generate_slug(text: str) -> str:
     """Генерирует slug из текста."""
     # Таблица транслитерации русских символов

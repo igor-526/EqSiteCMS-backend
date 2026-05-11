@@ -18,6 +18,7 @@ from core.protocols.repositories import (
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
     HorseServiceRepositoryProtocol,
+    NewsRepositoryProtocol,
     PhotoRepositoryProtocol,
     PriceGroupRepositoryProtocol,
     PriceRepositoryProtocol,
@@ -33,6 +34,7 @@ from core.services.coat_color import CoatColorService
 from core.services.horse import HorseService
 from core.services.horse_owner import HorseOwnerService
 from core.services.horse_service import HorseServiceService
+from core.services.news import NewsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
@@ -45,6 +47,7 @@ from depends.repositories import (
     get_horse_owner_repository,
     get_horse_repository,
     get_horse_service_repository,
+    get_news_repository,
     get_photo_repository,
     get_price_group_repository,
     get_price_repository,
@@ -235,4 +238,18 @@ async def get_horse_service(
         breed_repository=breed_repository,
         coat_color_repository=coat_color_repository,
         horse_owner_repository=horse_owner_repository,
+    )
+
+
+async def get_news_service(
+    news_repository: Annotated[NewsRepositoryProtocol, Depends(get_news_repository)],
+    photo_repository: Annotated[PhotoRepositoryProtocol, Depends(get_photo_repository)],
+    photo_url_builder: Annotated[
+        PhotoUrlBuilderProtocol, Depends(get_photo_url_builder)
+    ],
+) -> NewsService:
+    return NewsService(
+        news_repository=news_repository,
+        photo_repository=photo_repository,
+        photo_url_builder=photo_url_builder,
     )

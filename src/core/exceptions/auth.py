@@ -8,3 +8,7 @@ class UserAlreadyExists(ClientError):
 class InvalidCredentials(ClientError):
     def __str__(self):
         return "Неверный логин или пароль"
+
+
+class ForbiddenError(ClientError):
+    pass

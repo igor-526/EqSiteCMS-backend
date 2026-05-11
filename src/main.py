@@ -15,12 +15,13 @@ from api import (
     horse_owner_router,
     horse_service_router,
     horses_router,
+    news_router,
     photos_router,
     prices_router,
     site_settings_router,
 )
-from core.exceptions.auth import InvalidCredentials
-from core.exceptions.base import ClientError
+from core.exceptions.auth import ForbiddenError, InvalidCredentials
+from core.exceptions.base import ClientError, NotFoundError
 from core.exceptions.tenant import TenantNotFound
 from settings import settings
 from utils.configure_logger import configure_logger
@@ -49,6 +50,7 @@ router.include_router(coat_color_router)
 router.include_router(horse_owner_router)
 router.include_router(horse_service_router)
 router.include_router(horses_router, prefix="/horses", tags=["Horses"])
+router.include_router(news_router)
 router.include_router(photos_router)
 router.include_router(prices_router)
 router.include_router(site_settings_router)
@@ -81,6 +83,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(ForbiddenError)
+def forbidden_error_handler(_: Request, exc: ForbiddenError) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=403)
+
+
+@app.exception_handler(NotFoundError)
+def not_found_error_handler(_: Request, exc: NotFoundError) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=404)
 
 
 @app.exception_handler(ClientError)

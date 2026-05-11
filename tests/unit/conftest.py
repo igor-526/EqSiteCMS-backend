@@ -15,6 +15,7 @@ from core.entities.equestrian import EquestrianContext
 from core.entities.horse import Horse
 from core.entities.horse_owner import HorseOwner
 from core.entities.horse_service import HorseServiceEntity
+from core.entities.news import News
 from core.entities.photos import Photo
 from core.entities.prices import Price, PriceGroup
 from core.entities.site_settings import SiteSetting
@@ -25,6 +26,7 @@ from core.services.coat_color import CoatColorService
 from core.services.horse import HorseService
 from core.services.horse_owner import HorseOwnerService
 from core.services.horse_service import HorseServiceService
+from core.services.news import NewsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
@@ -41,6 +43,7 @@ _TENANT_ENTITY_CLASSES = (
     Horse,
     HorseOwner,
     HorseServiceEntity,
+    News,
     Photo,
     Price,
     PriceGroup,
@@ -55,6 +58,7 @@ _TENANT_SERVICE_CLASSES = (
     HorseOwnerService,
     HorseService,
     HorseServiceService,
+    NewsService,
     PhotoService,
     PriceGroupService,
     PriceService,

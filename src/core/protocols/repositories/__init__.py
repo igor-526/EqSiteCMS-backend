@@ -5,6 +5,7 @@ from .equestrian_repository import EquestrianRepositoryProtocol
 from .horse_owner_repository import HorseOwnerRepositoryProtocol
 from .horse_repository import HorseChildrenRepositoryProtocol, HorseRepositoryProtocol
 from .horse_service_repository import HorseServiceRepositoryProtocol
+from .news_repository import NewsRepositoryProtocol
 from .photo_repository import PhotoRepositoryProtocol
 from .price_repository import PriceGroupRepositoryProtocol, PriceRepositoryProtocol
 from .site_settings_repository import SiteSettingsRepositoryProtocol

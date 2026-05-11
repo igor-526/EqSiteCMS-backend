@@ -4,6 +4,7 @@ from models.equestrian import equestrians
 from models.horse import horse, horse_children, horse_photos
 from models.horse_owner import horse_owner
 from models.horse_service import horse_service, horse_service_relations
+from models.news import news, news_photos
 from models.photos import photos
 from models.prices import price_groups, price_groups_relations, price_photos, prices
 from models.site_settings import site_settings

@@ -11,6 +11,7 @@ from core.protocols.repositories import (
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
     HorseServiceRepositoryProtocol,
+    NewsRepositoryProtocol,
     PhotoRepositoryProtocol,
     PriceGroupRepositoryProtocol,
     PriceRepositoryProtocol,
@@ -26,6 +27,7 @@ from repositories import (
     HorseOwnerRepository,
     HorseRepository,
     HorseServiceRepository,
+    NewsRepository,
     PhotoRepository,
     PriceGroupRepository,
     PriceRepository,
@@ -104,3 +106,9 @@ async def get_horse_children_repository(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> HorseChildrenRepositoryProtocol:
     return HorseChildrenRepository(session=session)
+
+
+async def get_news_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> NewsRepositoryProtocol:
+    return NewsRepository(session=session)

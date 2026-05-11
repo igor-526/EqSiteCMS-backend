@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, MetaData, func
+from sqlalchemy import Boolean, Column, DateTime, MetaData, func, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 metadata = MetaData()
@@ -26,4 +26,18 @@ def timestamp_columns() -> tuple[Column, Column]:
             nullable=False,
         ),
         Column("updated_at", DateTime(timezone=True), onupdate=func.now()),
+    )
+
+
+def soft_delete_columns() -> tuple[Column, Column]:
+    """Soft-delete columns: is_deleted + deleted_at."""
+    return (
+        Column(
+            "is_deleted",
+            Boolean(),
+            nullable=False,
+            default=False,
+            server_default=text("false"),
+        ),
+        Column("deleted_at", DateTime(timezone=True), nullable=True),
     )
