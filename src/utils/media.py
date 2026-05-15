@@ -1,45 +1,73 @@
 from __future__ import annotations
 
-import asyncio
-from os import getenv
 from pathlib import Path
 
 from core.exceptions.base import ClientError
 
 
-class LocalMediaStorage:
-    def __init__(self, base_dir: Path) -> None:
-        self.base_dir = base_dir
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-
-    def _path(self, filename: str) -> Path:
-        return self.base_dir / filename
+class S3MediaStorage:
+    def __init__(
+        self,
+        endpoint_url: str,
+        access_key: str,
+        secret_key: str,
+        bucket_name: str,
+    ) -> None:
+        self.endpoint_url = endpoint_url
+        self.access_key = access_key
+        self.secret_key = secret_key
+        self.bucket_name = bucket_name
 
     async def save(self, file_content: bytes, filename: str) -> str:
-        file_path = self._path(filename)
-        await asyncio.to_thread(file_path.write_bytes, file_content)
+        import aioboto3
+
+        session = aioboto3.Session()
+        async with session.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+        ) as s3:
+            await s3.put_object(
+                Bucket=self.bucket_name,
+                Key=filename,
+                Body=file_content,
+            )
         return filename
 
     async def load(self, filename: str) -> bytes:
-        file_path = self._path(filename)
-        if not file_path.exists():
-            raise FileNotFoundError(filename)
-        return await asyncio.to_thread(file_path.read_bytes)
+        import aioboto3
+
+        session = aioboto3.Session()
+        async with session.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+        ) as s3:
+            response = await s3.get_object(Bucket=self.bucket_name, Key=filename)
+            return await response["Body"].read()
 
     async def delete(self, filename: str) -> None:
-        file_path = self._path(filename)
-        if file_path.exists():
-            await asyncio.to_thread(file_path.unlink)
+        import aioboto3
+
+        session = aioboto3.Session()
+        async with session.client(
+            "s3",
+            endpoint_url=self.endpoint_url,
+            aws_access_key_id=self.access_key,
+            aws_secret_access_key=self.secret_key,
+        ) as s3:
+            await s3.delete_object(Bucket=self.bucket_name, Key=filename)
 
 
-class SettingsPhotoUrlBuilder:
-    def __init__(self, cms_backend_domain: str, debug: bool) -> None:
-        self.cms_backend_domain = cms_backend_domain
-        self.debug = debug
+class S3PhotoUrlBuilder:
+    def __init__(self, public_endpoint_url: str, bucket_name: str) -> None:
+        self.public_endpoint_url = public_endpoint_url.rstrip("/")
+        self.bucket_name = bucket_name
 
     def build(self, filename: str) -> str:
-        protocol = "https" if not self.debug else "http"
-        return f"{protocol}://{self.cms_backend_domain}/media/{filename}"
+        return f"{self.public_endpoint_url}/{self.bucket_name}/{filename}"
 
 
 class AllowedMediaTypeValidator:
@@ -82,10 +110,3 @@ class AllowedMediaTypeValidator:
                 f"Недопустимый тип файла: {extension}. "
                 f"Разрешены только изображения и видео файлы"
             )
-
-
-def resolve_media_base_dir() -> Path:
-    configured_path = getenv("MEDIA_STORAGE_PATH")
-    if configured_path:
-        return Path(configured_path).expanduser().resolve()
-    return Path(__file__).resolve().parents[2] / "storage" / "media"

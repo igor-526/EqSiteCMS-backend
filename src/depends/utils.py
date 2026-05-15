@@ -12,9 +12,8 @@ from settings import settings
 from utils.database import AsyncSessionLocal
 from utils.media import (
     AllowedMediaTypeValidator,
-    LocalMediaStorage,
-    SettingsPhotoUrlBuilder,
-    resolve_media_base_dir,
+    S3MediaStorage,
+    S3PhotoUrlBuilder,
 )
 from utils.security import Security
 
@@ -36,14 +35,18 @@ async def get_security() -> SecurityProtocol:
 
 
 async def get_media_storage() -> MediaStorageProtocol:
-    base_dir = resolve_media_base_dir()
-    return LocalMediaStorage(base_dir=base_dir)
+    return S3MediaStorage(
+        endpoint_url=settings.s3_endpoint_url,
+        access_key=settings.s3_access_key,
+        secret_key=settings.s3_secret_key,
+        bucket_name=settings.s3_bucket_name,
+    )
 
 
 async def get_photo_url_builder() -> PhotoUrlBuilderProtocol:
-    return SettingsPhotoUrlBuilder(
-        cms_backend_domain=settings.cms_backend_domain,
-        debug=settings.debug,
+    return S3PhotoUrlBuilder(
+        public_endpoint_url=settings.s3_public_endpoint_url,
+        bucket_name=settings.s3_bucket_name,
     )
 
 

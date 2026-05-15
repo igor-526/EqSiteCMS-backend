@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     db_name: str = Field(default="eqsitecmsdev", alias="POSTGRES_NAME")
     db_port: int = Field(default=5432, alias="POSTGRES_PORT")
 
+    # S3 / Minio
+    s3_endpoint_url: str = Field(default="http://minio:9000", alias="S3_ENDPOINT_URL")
+    s3_access_key: str = Field(default="eqsitecmsminio", alias="S3_ACCESS_KEY")
+    s3_secret_key: str = Field(default="eqsitecmsminio", alias="S3_SECRET_KEY")
+    s3_bucket_name: str = Field(default="gallery", alias="S3_BUCKET_NAME")
+    s3_public_endpoint_url: str = Field(
+        default="http://localhost:9000", alias="S3_PUBLIC_ENDPOINT_URL"
+    )
+
     model_config = SettingsConfigDict(populate_by_name=True)
 
     @property

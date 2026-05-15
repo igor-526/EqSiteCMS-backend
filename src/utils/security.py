@@ -48,5 +48,5 @@ class Security:
     def hash_password(self, password: str) -> str:
         return pbkdf2_sha256.hash(password)
 
-    def verify_password(self, password: str, hashed_password: str) -> bool:
-        return pbkdf2_sha256.verify(password, hashed_password)
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        return pbkdf2_sha256.verify(plain_password, hashed_password)

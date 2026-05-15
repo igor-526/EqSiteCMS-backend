@@ -1,4 +1,6 @@
 {
   "extraPaths": ["src"],
-  "exclude": ["**/__pycache__"]
+  "exclude": ["**/__pycache__"],
+  "venvPath": ".",
+  "venv": ".venv"
 }
