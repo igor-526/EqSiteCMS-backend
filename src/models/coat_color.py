@@ -14,7 +14,7 @@ coat_color = Table(
         index=True,
     ),
     Column("name", String(63), nullable=False, index=True),
-    Column("short_name", String(63), nullable=True),
+    Column("short_name", String(63), nullable=False),
     Column("slug", String(63), nullable=False, index=True),
     Column("description", String(511), nullable=True),
     Column("page_data", Text(), nullable=False, default="<div></div>"),

@@ -394,6 +394,7 @@ def make_breed(**overrides: Any) -> Breed:
     data: dict[str, Any] = {
         "name": "Arabian",
         "slug": "arabian",
+        "short_name": "Arabian",
         "page_data": "<div>Arabian</div>",
     }
     data.update(overrides)
@@ -404,6 +405,7 @@ def make_coat_color(**overrides: Any) -> CoatColor:
     data: dict[str, Any] = {
         "name": "Bay",
         "slug": "bay",
+        "short_name": "Bay",
         "page_data": "<div>Bay</div>",
     }
     data.update(overrides)

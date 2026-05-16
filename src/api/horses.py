@@ -14,6 +14,7 @@ from core.entities.equestrian import EquestrianContext
 from core.schemas import (
     HorseCreateInDto,
     HorseOutDto,
+    HorsePhotosUpdateInDto,
     HorseSetPedigreeInDto,
     HorseUpdateInDto,
     HorseWithPedigreeOutDto,
@@ -203,6 +204,28 @@ async def set_horse_pedigree(
     return await horse_service.set_horse_pedigree(
         horse_id=horse_id,
         pedigree_data=data,
+        user=current_user,
+        equestrian_context=equestrian_context,
+    )
+
+
+@router.post(
+    "/{horse_id}/photos",
+    response_model=HorseOutDto,
+    description="Обновить список фотографий лошади (полная замена)",
+)
+async def update_horse_photos(
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
+    horse_id: UUID,
+    data: HorsePhotosUpdateInDto,
+    horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
+) -> HorseOutDto:
+    return await horse_service.update_horse_photos(
+        horse_id=horse_id,
+        data=data,
         user=current_user,
         equestrian_context=equestrian_context,
     )

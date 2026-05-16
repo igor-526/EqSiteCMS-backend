@@ -95,6 +95,16 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         """Получить доступных детей."""
         ...
 
+    async def set_horse_photos(
+        self,
+        horse_id: UUID,
+        photo_ids: list[UUID],
+        *,
+        equestrian_id: UUID,
+    ) -> None:
+        """Заменить список фотографий лошади."""
+        ...
+
 
 class HorseChildrenRepositoryProtocol(
     TenantBaseRepositoryProtocol[HorseChildren], Protocol

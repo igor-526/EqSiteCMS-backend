@@ -10,7 +10,7 @@ class CoatColorOutDto(BaseSchema):
 
     id: UUID = Field(..., description="Идентификатор масти")
     name: str = Field(..., description="Название масти")
-    short_name: str | None = Field(default=None, description="Короткое название масти")
+    short_name: str = Field(..., description="Короткое название масти")
     slug: str = Field(..., description="Slug")
     description: str | None = Field(None, description="Описание масти")
 

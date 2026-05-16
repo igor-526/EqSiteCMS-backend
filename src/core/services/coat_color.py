@@ -18,6 +18,11 @@ COAT_COLOR_DESCRIPTION_MAX_LENGTH = 511
 DEFAULT_PAGE_DATA = "<div></div>"
 
 
+def _derive_short_name(name: str) -> str:
+    """Генерировать short_name из name, обрезая до максимально допустимой длины."""
+    return name[:COAT_COLOR_SHORT_NAME_MAX_LENGTH]
+
+
 class CoatColorService:
     def __init__(self, coat_color_repository: CoatColorRepositoryProtocol):
         self.coat_color_repository = coat_color_repository
@@ -67,11 +72,17 @@ class CoatColorService:
             )
 
         if "short_name" in data:
-            data["short_name"] = self._validate_optional_text(
-                field="Короткое название масти",
-                value=data["short_name"],
-                max_length=COAT_COLOR_SHORT_NAME_MAX_LENGTH,
-            )
+            raw = data["short_name"]
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                # Пустое/None short_name — удаляем, чтобы автоматически
+                # сгенерировать из name после валидации.
+                del data["short_name"]
+            else:
+                data["short_name"] = self._validate_optional_text(
+                    field="Короткое название масти",
+                    value=raw,
+                    max_length=COAT_COLOR_SHORT_NAME_MAX_LENGTH,
+                )
         if "slug" in data:
             data["slug"] = self._validate_required_text(
                 field="Slug",
@@ -152,6 +163,9 @@ class CoatColorService:
                     f"Масть со slug '{coat_color_data['slug']}' уже существует"
                 )
 
+        if "short_name" not in coat_color_data:
+            coat_color_data["short_name"] = _derive_short_name(coat_color_data["name"])
+
         if "page_data" not in coat_color_data or coat_color_data["page_data"] is None:
             coat_color_data["page_data"] = DEFAULT_PAGE_DATA
 
@@ -181,7 +195,9 @@ class CoatColorService:
         update_data = data.model_dump(exclude_none=True)
         if not update_data:
             raise ClientError("Нет данных для обновления")
+        had_short_name = "short_name" in update_data
         self._validate_coat_color_data(update_data, partial=True)
+        short_name_cleared = had_short_name and "short_name" not in update_data
 
         if "name" in update_data:
             existing = await self.coat_color_repository.find_by_name(
@@ -208,6 +224,10 @@ class CoatColorService:
                 equestrian_context=equestrian_context,
                 exclude_id=coat_color.id,
             )
+
+        if short_name_cleared:
+            source_name = update_data.get("name", coat_color.name)
+            update_data["short_name"] = _derive_short_name(source_name)
 
         for key, value in update_data.items():
             setattr(coat_color, key, value)

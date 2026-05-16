@@ -18,6 +18,11 @@ BREED_DESCRIPTION_MAX_LENGTH = 511
 DEFAULT_PAGE_DATA = "<div></div>"
 
 
+def _derive_short_name(name: str) -> str:
+    """Генерировать short_name из name, обрезая до максимально допустимой длины."""
+    return name[:BREED_SHORT_NAME_MAX_LENGTH]
+
+
 class BreedService:
     def __init__(self, breed_repository: BreedRepositoryProtocol):
         self.breed_repository = breed_repository
@@ -66,11 +71,17 @@ class BreedService:
             )
 
         if "short_name" in data:
-            data["short_name"] = self._validate_optional_text(
-                field="Короткое название породы",
-                value=data["short_name"],
-                max_length=BREED_SHORT_NAME_MAX_LENGTH,
-            )
+            raw = data["short_name"]
+            if raw is None or (isinstance(raw, str) and not raw.strip()):
+                # Пустое/None short_name — удаляем, чтобы автоматически
+                # сгенерировать из name после валидации.
+                del data["short_name"]
+            else:
+                data["short_name"] = self._validate_optional_text(
+                    field="Короткое название породы",
+                    value=raw,
+                    max_length=BREED_SHORT_NAME_MAX_LENGTH,
+                )
         if "slug" in data:
             data["slug"] = self._validate_required_text(
                 field="Slug",
@@ -137,6 +148,9 @@ class BreedService:
             breed_data["slug"], equestrian_context=equestrian_context
         )
 
+        if "short_name" not in breed_data:
+            breed_data["short_name"] = _derive_short_name(breed_data["name"])
+
         if "page_data" not in breed_data:
             breed_data["page_data"] = DEFAULT_PAGE_DATA
 
@@ -165,7 +179,9 @@ class BreedService:
         update_data = data.model_dump(exclude_none=True)
         if not update_data:
             raise ClientError("Нет данных для обновления")
+        had_short_name = "short_name" in update_data
         self._validate_breed_data(update_data, partial=True)
+        short_name_cleared = had_short_name and "short_name" not in update_data
 
         if "name" in update_data:
             existing = await self.breed_repository.find_by_name(
@@ -188,6 +204,10 @@ class BreedService:
             update_data["slug"] = await self._ensure_unique_slug(
                 new_slug, equestrian_context=equestrian_context, exclude_id=breed.id
             )
+
+        if short_name_cleared:
+            source_name = update_data.get("name", breed.name)
+            update_data["short_name"] = _derive_short_name(source_name)
 
         for key, value in update_data.items():
             setattr(breed, key, value)

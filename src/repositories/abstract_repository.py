@@ -1,4 +1,5 @@
 from abc import ABC
+from datetime import datetime, timezone
 from typing import Sequence
 from uuid import UUID
 
@@ -45,11 +46,10 @@ class AbstractRepository[E: Entity](ABC):
         }
 
     async def update(self, entity: E) -> E:
-        stmt = (
-            update(self.table)
-            .where(self.table.c.id == entity.id)
-            .values(**entity.model_dump())
-        )
+        data = entity.model_dump()
+        if "updated_at" in self.table.c:
+            data["updated_at"] = datetime.now(timezone.utc)
+        stmt = update(self.table).where(self.table.c.id == entity.id).values(**data)
         await self.session.execute(stmt)
         await self.session.flush()
         return entity
@@ -138,6 +138,8 @@ class TenantScopedRepository[E: Entity]:
 
     async def update(self, entity: E) -> E:
         data = entity.model_dump()
+        if "updated_at" in self.table.c:
+            data["updated_at"] = datetime.now(timezone.utc)
         stmt = (
             update(self.table)
             .where(

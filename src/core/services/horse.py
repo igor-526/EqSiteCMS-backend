@@ -25,12 +25,14 @@ from core.protocols.repositories import (
     HorseRepositoryProtocol,
 )
 from core.protocols.repositories.horse_repository import HorseChildrenRepositoryProtocol
+from core.protocols.repositories.photo_repository import PhotoRepositoryProtocol
 from core.schemas import (
     BreedOutDto,
     CoatColorOutDto,
     HorseCreateInDto,
     HorseOutDto,
     HorseOwnerOutDto,
+    HorsePhotosUpdateInDto,
     HorseServiceOutDto,
     HorseSetPedigreeInDto,
     HorseUpdateInDto,
@@ -53,12 +55,14 @@ class HorseService:
         breed_repository: BreedRepositoryProtocol,
         coat_color_repository: CoatColorRepositoryProtocol,
         horse_owner_repository: HorseOwnerRepositoryProtocol,
+        photo_repository: PhotoRepositoryProtocol | None = None,
     ):
         self.horse_repository = horse_repository
         self.horse_children_repository = horse_children_repository
         self.breed_repository = breed_repository
         self.coat_color_repository = coat_color_repository
         self.horse_owner_repository = horse_owner_repository
+        self.photo_repository = photo_repository
 
     async def _check_admin_permission(
         self, *, user: UserOutDto | None, raise_exception: bool = False
@@ -533,6 +537,49 @@ class HorseService:
             items=list(horses.values()),
             total=total,
         )
+
+    async def update_horse_photos(
+        self,
+        *,
+        horse_id: UUID,
+        data: HorsePhotosUpdateInDto,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
+    ) -> HorseOutDto:
+        """Обновить список фотографий лошади (полная замена)."""
+        await self._check_admin_permission(user=user, raise_exception=True)
+
+        horse = await self.horse_repository.get_by_id(
+            horse_id, equestrian_id=equestrian_context.id
+        )
+        if horse is None:
+            raise ClientError("Лошадь не найдена")
+
+        if self.photo_repository is None:
+            raise ClientError("Фото-репозиторий не подключён")
+
+        # Дедупликация и проверка существования фотографий
+        unique_ids = list(dict.fromkeys(data.photo_ids))
+        if unique_ids:
+            existing = await self.photo_repository.get_by_ids(
+                unique_ids, equestrian_id=equestrian_context.id
+            )
+            for photo_id in unique_ids:
+                if photo_id not in existing:
+                    raise ClientError(f"Фотография с ID '{photo_id}' не найдена")
+
+        await self.horse_repository.set_horse_photos(
+            horse_id,
+            unique_ids,
+            equestrian_id=equestrian_context.id,
+        )
+
+        updated = await self.horse_repository.get_horse_full_info_by_id(
+            horse_id=horse_id, equestrian_id=equestrian_context.id
+        )
+        if updated is None:
+            raise ClientError("Лошадь не найдена")
+        return HorseOutDto.model_validate(updated)
 
     async def add_horse_service(self):
         """Добавить услугу к лошади."""

@@ -231,6 +231,7 @@ async def get_horse_service(
     horse_owner_repository: Annotated[
         HorseOwnerRepositoryProtocol, Depends(get_horse_owner_repository)
     ],
+    photo_repository: Annotated[PhotoRepositoryProtocol, Depends(get_photo_repository)],
 ) -> HorseService:
     return HorseService(
         horse_repository=horse_repository,
@@ -238,6 +239,7 @@ async def get_horse_service(
         breed_repository=breed_repository,
         coat_color_repository=coat_color_repository,
         horse_owner_repository=horse_owner_repository,
+        photo_repository=photo_repository,
     )
 
 

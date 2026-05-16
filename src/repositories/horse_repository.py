@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from typing import Mapping, Union
 from uuid import UUID
@@ -33,9 +34,36 @@ from settings import settings
 
 from .abstract_repository import TenantScopedRepository
 
+# Explicit column label prefixes for JOIN queries.
+# breeds and coat_color share columns (short_name, page_data) that are NOT in
+# the horse table.  SQLAlchemy auto-deduplication assigns those columns the
+# same _1 suffix for both tables, so reading them with a suffix heuristic is
+# ambiguous.  We avoid that by using unambiguous per-table prefixes in SELECT.
+_BREED_PREFIX = "breed__"
+_COAT_COLOR_PREFIX = "coat_color__"
+_HORSE_OWNER_PREFIX = "horse_owner__"
+
+
+def _labeled_columns(table: Table, prefix: str) -> list:
+    """Return a list of explicitly labeled column expressions for *table*."""
+    return [c.label(f"{prefix}{c.key}") for c in table.c]
+
+
+def _extract_prefixed(row: Mapping, prefix: str, table: Table) -> dict | None:
+    """Extract a table's columns from a JOIN row using explicit *prefix* labels.
+
+    Returns ``None`` when the primary-key column is NULL (LEFT JOIN miss).
+    """
+    pk_key = f"{prefix}id"
+    if row.get(pk_key) is None:
+        return None
+    return {
+        c.key: row[f"{prefix}{c.key}"] for c in table.c if f"{prefix}{c.key}" in row
+    }
+
 
 class HorseRepository(TenantScopedRepository[Horse]):
-    """Протокол для работы с лошадьми."""
+    """Репозиторий для работы с лошадьми."""
 
     table: Table = horse
     entity = Horse
@@ -73,7 +101,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
 
         photos_dto = [
             PhotoOutShortDto(
-                id=UUID(photo["photo_id"]),
+                id=UUID(str(photo["photo_id"])),
                 is_main=photo["is_main"],
                 url=self._build_photo_url(photo["path"]),
             )
@@ -126,9 +154,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
         stmt = (
             select(
                 horse,
-                breeds,
-                coat_color,
-                horse_owner,
+                *_labeled_columns(breeds, _BREED_PREFIX),
+                *_labeled_columns(coat_color, _COAT_COLOR_PREFIX),
+                *_labeled_columns(horse_owner, _HORSE_OWNER_PREFIX),
             )
             .outerjoin(
                 breeds,
@@ -163,21 +191,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
         horse_id = UUID(str(row["id"]))
         horse_keys = {c.key for c in horse.c}
         horse_data = {k: v for k, v in row.items() if k in horse_keys}
-        breed_data = (
-            self._row_to_joined_table(row, breeds, ["_1", ""])
-            if row.get("id_1") is not None
-            else None
-        )
-        coat_color_data = (
-            self._row_to_joined_table(row, coat_color, ["_2", "_1", ""])
-            if row.get("id_2") is not None
-            else None
-        )
-        horse_owner_data = (
-            self._row_to_joined_table(row, horse_owner, ["_3", ""])
-            if row.get("id_3") is not None
-            else None
-        )
+        breed_data = _extract_prefixed(row, _BREED_PREFIX, breeds)
+        coat_color_data = _extract_prefixed(row, _COAT_COLOR_PREFIX, coat_color)
+        horse_owner_data = _extract_prefixed(row, _HORSE_OWNER_PREFIX, horse_owner)
 
         photos_stmt = (
             select(horse_photos.c.photo_id, horse_photos.c.is_main, photos.c.path)
@@ -228,9 +244,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
         stmt = (
             select(
                 horse,
-                breeds,
-                coat_color,
-                horse_owner,
+                *_labeled_columns(breeds, _BREED_PREFIX),
+                *_labeled_columns(coat_color, _COAT_COLOR_PREFIX),
+                *_labeled_columns(horse_owner, _HORSE_OWNER_PREFIX),
             )
             .outerjoin(
                 breeds,
@@ -264,21 +280,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
 
         horse_keys = {c.key for c in horse.c}
         horse_data = {k: v for k, v in row.items() if k in horse_keys}
-        breed_data = (
-            self._row_to_joined_table(row, breeds, ["_1", ""])
-            if row.get("id_1") is not None
-            else None
-        )
-        coat_color_data = (
-            self._row_to_joined_table(row, coat_color, ["_2", "_1", ""])
-            if row.get("id_2") is not None
-            else None
-        )
-        horse_owner_data = (
-            self._row_to_joined_table(row, horse_owner, ["_3", ""])
-            if row.get("id_3") is not None
-            else None
-        )
+        breed_data = _extract_prefixed(row, _BREED_PREFIX, breeds)
+        coat_color_data = _extract_prefixed(row, _COAT_COLOR_PREFIX, coat_color)
+        horse_owner_data = _extract_prefixed(row, _HORSE_OWNER_PREFIX, horse_owner)
 
         photos_stmt = (
             select(horse_photos.c.photo_id, horse_photos.c.is_main, photos.c.path)
@@ -345,7 +349,12 @@ class HorseRepository(TenantScopedRepository[Horse]):
         pedigree: int | None = None,
     ) -> tuple[Mapping[UUID, Union[HorseOutDto, HorseWithPedigreeOutDto]], int]:
         base_stmt = (
-            select(horse, breeds, coat_color, horse_owner)
+            select(
+                horse,
+                *_labeled_columns(breeds, _BREED_PREFIX),
+                *_labeled_columns(coat_color, _COAT_COLOR_PREFIX),
+                *_labeled_columns(horse_owner, _HORSE_OWNER_PREFIX),
+            )
             .outerjoin(
                 breeds,
                 and_(
@@ -395,9 +404,11 @@ class HorseRepository(TenantScopedRepository[Horse]):
 
         conditions: list[ColumnElement[bool]] = [horse.c.equestrian_id == equestrian_id]
         if name:
-            conditions.append(horse.c.name.ilike(f"%{name}%"))
+            safe = re.escape(name)
+            conditions.append(horse.c.name.op("~*")(safe))
         if description:
-            conditions.append(horse.c.description.ilike(f"%{description}%"))
+            safe = re.escape(description)
+            conditions.append(horse.c.description.op("~*")(safe))
         if breed_ids:
             conditions.append(horse.c.breed_id.in_(breed_ids))
         if coat_color_ids:
@@ -465,9 +476,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
             for field in sort:
                 field_name = field[1:] if field.startswith("-") else field
                 if field_name == "breed_name":
-                    column = breeds.c.name
+                    column = breeds.c.short_name
                 elif field_name == "coat_color_name":
-                    column = coat_color.c.name
+                    column = coat_color.c.short_name
                 else:
                     column = horse.c[field_name]
 
@@ -476,6 +487,11 @@ class HorseRepository(TenantScopedRepository[Horse]):
                 else:
                     order_by_clauses.append(column.asc().nulls_first())
             base_stmt = base_stmt.order_by(*order_by_clauses)
+        else:
+            base_stmt = base_stmt.order_by(
+                horse.c.updated_at.desc().nulls_last(),
+                horse.c.created_at.desc().nulls_last(),
+            )
 
         if limit is not None:
             base_stmt = base_stmt.limit(limit)
@@ -538,21 +554,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
         for row in rows:
             horse_id = UUID(str(row["id"]))
             horse_data = {k: v for k, v in row.items() if k in horse_keys}
-            breed_data = (
-                self._row_to_joined_table(row, breeds, ["_1", ""])
-                if row.get("id_1") is not None
-                else None
-            )
-            coat_color_data = (
-                self._row_to_joined_table(row, coat_color, ["_2", "_1", ""])
-                if row.get("id_2") is not None
-                else None
-            )
-            horse_owner_data = (
-                self._row_to_joined_table(row, horse_owner, ["_3", ""])
-                if row.get("id_3") is not None
-                else None
-            )
+            breed_data = _extract_prefixed(row, _BREED_PREFIX, breeds)
+            coat_color_data = _extract_prefixed(row, _COAT_COLOR_PREFIX, coat_color)
+            horse_owner_data = _extract_prefixed(row, _HORSE_OWNER_PREFIX, horse_owner)
 
             photos_data = photos_by_horse.get(horse_id, [])
             services_data = services_by_horse.get(horse_id, [])
@@ -702,6 +706,34 @@ class HorseRepository(TenantScopedRepository[Horse]):
             return result_dict, total
 
         return horses_dict, total
+
+    async def set_horse_photos(
+        self,
+        horse_id: UUID,
+        photo_ids: list[UUID],
+        *,
+        equestrian_id: UUID,
+    ) -> None:
+        """Заменить список фотографий лошади (полная замена связей)."""
+        # Удаляем все существующие связи для этой лошади
+        delete_stmt = delete(horse_photos).where(
+            horse_photos.c.horse_id == horse_id,
+            horse_photos.c.horse_id.in_(
+                select(horse.c.id).where(horse.c.equestrian_id == equestrian_id)
+            ),
+        )
+        await self.session.execute(delete_stmt)
+
+        # Вставляем новые связи
+        if photo_ids:
+            values = [
+                {"horse_id": horse_id, "photo_id": photo_id, "is_main": False}
+                for photo_id in photo_ids
+            ]
+            insert_stmt = insert(horse_photos).values(values)
+            await self.session.execute(insert_stmt)
+
+        await self.session.flush()
 
     async def get_available_dams(
         self,

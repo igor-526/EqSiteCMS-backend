@@ -566,3 +566,92 @@ async def test_coat_color_service_uc30_architecture_boundary_has_no_fastapi_depe
             max_length=63,
         )
     )
+
+
+# --- short_name auto-generation tests ---
+
+
+async def test_create_short_name_none_generates_from_name() -> None:
+    """Если short_name не передан (None) — автоматически берётся из name."""
+    service, _ = make_service()
+
+    coat_color = await service.create(
+        CoatColorCreateDto(name="Гнедая", short_name=None)
+    )
+
+    assert coat_color.short_name == "Гнедая"
+
+
+async def test_create_short_name_empty_string_generates_from_name() -> None:
+    """Если short_name передан как пустая строка — автоматически берётся из name."""
+    service, _ = make_service()
+
+    coat_color = await service.create(CoatColorCreateDto(name="Гнедая", short_name=""))
+
+    assert coat_color.short_name == "Гнедая"
+
+
+async def test_create_short_name_explicit_value_is_preserved() -> None:
+    """Если short_name передан явно — используется как есть."""
+    service, _ = make_service()
+
+    coat_color = await service.create(
+        CoatColorCreateDto(name="Гнедая", short_name="ГН")
+    )
+
+    assert coat_color.short_name == "ГН"
+
+
+async def test_create_short_name_long_name_truncated_to_max_len() -> None:
+    """Если name длиннее MAX_LEN и short_name не передан — обрезается до MAX_LEN."""
+    service, _ = make_service()
+    long_name = "А" * 63  # exactly at boundary
+    coat_color = await service.create(
+        CoatColorCreateDto(name=long_name, short_name=None)
+    )
+
+    assert coat_color.short_name == long_name[:63]
+    assert len(coat_color.short_name) == 63
+
+
+async def test_create_short_name_whitespace_only_generates_from_name() -> None:
+    """Если short_name — только пробелы — автоматически берётся из name."""
+    service, _ = make_service()
+
+    coat_color = await service.create(
+        CoatColorCreateDto(name="Серая", short_name="   ")
+    )
+
+    assert coat_color.short_name == "Серая"
+
+
+async def test_update_short_name_empty_string_generates_from_current_name() -> None:
+    """При обновлении short_name='' — автоматически берётся из существующего name."""
+    service, repo = make_service()
+    repo.add(make_coat_color(name="Bay", slug="bay", short_name="B"))
+
+    updated = await service.update("bay", CoatColorUpdateDto(short_name=""))
+
+    assert updated.short_name == "Bay"
+
+
+async def test_update_short_name_empty_with_new_name_uses_new_name() -> None:
+    """При обновлении name + short_name='' — short_name берётся из нового name."""
+    service, repo = make_service()
+    repo.add(make_coat_color(name="Old", slug="old", short_name="O"))
+
+    updated = await service.update(
+        "old", CoatColorUpdateDto(name="Рыжая", short_name="")
+    )
+
+    assert updated.short_name == "Рыжая"
+
+
+async def test_update_short_name_explicit_value_is_preserved() -> None:
+    """При обновлении short_name с явным значением — значение сохраняется."""
+    service, repo = make_service()
+    repo.add(make_coat_color(name="Bay", slug="bay", short_name="B"))
+
+    updated = await service.update("bay", CoatColorUpdateDto(short_name="ГН"))
+
+    assert updated.short_name == "ГН"
