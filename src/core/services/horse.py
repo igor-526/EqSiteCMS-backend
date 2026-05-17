@@ -40,7 +40,8 @@ from core.schemas import (
     PhotoOutShortDto,
     UserOutDto,
 )
-from core.schemas.horses import SetPedigreeEntities
+
+_PedigreeMode = Literal["sire", "dam", "children"]
 
 
 class HorseService:
@@ -192,6 +193,100 @@ class HorseService:
         if horse_owner is None:
             raise ClientError("Владелец не найден")
         return horse_owner
+
+    async def _get_current_pedigree_ids(
+        self, *, horse_id: UUID, equestrian_context: EquestrianContext
+    ) -> tuple[UUID | None, UUID | None, list[UUID]]:
+        horse_with_pedigree = await self.horse_repository.get_horse_full_info_by_id(
+            horse_id=horse_id,
+            equestrian_id=equestrian_context.id,
+            pedigree=1,
+        )
+        if horse_with_pedigree is None:
+            raise ClientError("Лошадь не найдена")
+
+        pedigree = getattr(horse_with_pedigree, "pedigree", None)
+        if pedigree is None:
+            return None, None, []
+
+        sire_id = pedigree.sire.id if pedigree.sire is not None else None
+        dam_id = pedigree.dam.id if pedigree.dam is not None else None
+        foal_ids = [foal.id for foal in pedigree.foals]
+        return sire_id, dam_id, foal_ids
+
+    @staticmethod
+    def _validate_parent_candidate(
+        *,
+        mode: Literal["sire", "dam"],
+        target: Horse,
+        parent: Horse,
+        other_parent_id: UUID | None,
+        final_foal_ids: set[UUID],
+    ) -> None:
+        role_title = "Отец" if mode == "sire" else "Мать"
+        if parent.id == target.id:
+            raise ClientError(f"{role_title} не может совпадать с целевой лошадью")
+        if other_parent_id is not None and parent.id == other_parent_id:
+            raise ClientError("Отец и мать не могут совпадать")
+        if parent.id in final_foal_ids:
+            raise ClientError(f"{role_title} не может быть потомком целевой лошади")
+        if parent.kind != target.kind:
+            raise ClientError(
+                f"{role_title} должен быть того же вида, что и целевая лошадь"
+            )
+        if mode == "sire":
+            if parent.sex != HorseSexEnum.MALE:
+                raise ClientError("Отец должен быть мужского пола")
+            if target.bdate is not None and parent.bdate is not None:
+                if parent.bdate >= target.bdate:
+                    raise ClientError(
+                        "Дата рождения отца должна быть раньше даты рождения целевой лошади"
+                    )
+            return
+
+        if parent.sex != HorseSexEnum.FEMALE:
+            raise ClientError("Мать должна быть женского пола")
+        if target.bdate is not None:
+            if parent.bdate is not None and parent.bdate >= target.bdate:
+                raise ClientError(
+                    "Дата рождения матери должна быть раньше даты рождения целевой лошади"
+                )
+            if parent.ddate is not None and parent.ddate < target.bdate:
+                raise ClientError(
+                    "Дата смерти матери не может быть раньше даты рождения целевой лошади"
+                )
+
+    @staticmethod
+    def _validate_child_candidate(
+        *,
+        target: Horse,
+        child: Horse,
+        final_parent_ids: set[UUID],
+        current_foal_ids: set[UUID],
+        allow_existing_foal: bool,
+    ) -> None:
+        if child.id == target.id:
+            raise ClientError("Ребёнок не может совпадать с целевой лошадью")
+        if child.id in final_parent_ids:
+            raise ClientError("Ребёнок не может совпадать с родителем целевой лошади")
+        if child.id in current_foal_ids and not allow_existing_foal:
+            raise ClientError("Ребёнок уже указан потомком целевой лошади")
+        if child.kind != target.kind:
+            raise ClientError("Все дети должны быть того же вида, что и целевая лошадь")
+        if target.bdate is not None and child.bdate is not None:
+            if child.bdate <= target.bdate:
+                raise ClientError(
+                    "Дата рождения ребёнка должна быть позже даты рождения целевой лошади"
+                )
+        if (
+            target.sex == HorseSexEnum.FEMALE
+            and target.ddate is not None
+            and child.bdate is not None
+        ):
+            if child.bdate > target.ddate:
+                raise ClientError(
+                    "Дата рождения ребёнка не может быть позже даты смерти матери (целевой лошади)"
+                )
 
     async def create_horse(
         self,
@@ -350,8 +445,27 @@ class HorseService:
         )
         if target_horse is None:
             raise ClientError("Лошадь не найдена")
+        current_sire_id, current_dam_id, current_foal_ids = (
+            await self._get_current_pedigree_ids(
+                horse_id=horse_id,
+                equestrian_context=equestrian_context,
+            )
+        )
+        exclude_ids = list(
+            dict.fromkeys(
+                [
+                    id_
+                    for id_ in (
+                        current_sire_id,
+                        current_dam_id,
+                        *current_foal_ids,
+                    )
+                    if id_ is not None
+                ]
+            )
+        )
         _PEDIGREE_METHODS_REGISTRY: dict[
-            Literal["sire", "dam", "children"],
+            _PedigreeMode,
             Callable[..., Awaitable[tuple[Mapping[UUID, HorseOutDto], int]]],
         ] = {
             "sire": self.horse_repository.get_available_sires,
@@ -364,6 +478,7 @@ class HorseService:
         horses, total = await repo_method(
             target_horse=target_horse,
             search=search,
+            exclude_ids=exclude_ids,
             limit=limit,
             offset=offset,
         )
@@ -384,19 +499,26 @@ class HorseService:
 
         await self._check_admin_permission(user=user, raise_exception=True)
 
-        target: Horse | None = None
-        sire: Horse | None = None
-        dam: Horse | None = None
-        foals: list[Horse] | None = None
+        fields_set = pedigree_data.model_fields_set
+        sire_set = "sire_id" in fields_set
+        dam_set = "dam_id" in fields_set
+        foals_set = "foals" in fields_set
+        if not sire_set and not dam_set and not foals_set:
+            raise ClientError("Необходимо указать хотя бы одного родителя или потомка")
+
+        if (
+            foals_set
+            and pedigree_data.foals is not None
+            and len(set(pedigree_data.foals)) != len(pedigree_data.foals)
+        ):
+            raise ClientError("Список потомков содержит дубликаты")
 
         horses_ids_to_check: list[UUID] = [horse_id]
-        if pedigree_data.sire_id is not None:
+        if sire_set and pedigree_data.sire_id is not None:
             horses_ids_to_check.append(pedigree_data.sire_id)
-        if pedigree_data.dam_id is not None:
+        if dam_set and pedigree_data.dam_id is not None:
             horses_ids_to_check.append(pedigree_data.dam_id)
-        if pedigree_data.foals is not None:
-            if len(set(pedigree_data.foals)) != len(pedigree_data.foals):
-                raise ClientError("Список потомков содержит дубликаты")
+        if foals_set and pedigree_data.foals is not None:
             horses_ids_to_check.extend(pedigree_data.foals)
         horses_ids_to_check_unique = list(dict.fromkeys(horses_ids_to_check))
         horses_mapping: Mapping[UUID, Horse] = await self.horse_repository.get_by_ids(
@@ -405,48 +527,71 @@ class HorseService:
         if len(horses_mapping) != len(horses_ids_to_check_unique):
             raise ClientError("Некоторые лошади не найдены")
 
-        target = horses_mapping.get(horse_id)
-        if pedigree_data.sire_id is not None:
-            sire = horses_mapping.get(pedigree_data.sire_id)
-        if pedigree_data.dam_id is not None:
-            dam = horses_mapping.get(pedigree_data.dam_id)
-        if pedigree_data.foals is not None:
-            foals = [horses_mapping[foal_id] for foal_id in pedigree_data.foals]
-
-        try:
-            set_pedigree_entities = SetPedigreeEntities(
-                target_horse=cast(Horse, target),
-                sire=cast(Horse, sire),
-                dam=cast(Horse, dam),
-                foals=cast(list[Horse], foals),
+        target = cast(Horse, horses_mapping.get(horse_id))
+        current_sire_id, current_dam_id, current_foal_ids = (
+            await self._get_current_pedigree_ids(
+                horse_id=horse_id,
+                equestrian_context=equestrian_context,
             )
-        except ValidationError as ex:
-            raise ClientError(str(ex))
+        )
+        current_foal_ids_set = set(current_foal_ids)
+
+        final_sire_id = pedigree_data.sire_id if sire_set else current_sire_id
+        final_dam_id = pedigree_data.dam_id if dam_set else current_dam_id
+        final_foal_ids: list[UUID] = (
+            pedigree_data.foals or [] if foals_set else current_foal_ids
+        )
+
+        if final_sire_id is not None and final_sire_id == final_dam_id:
+            raise ClientError("Отец и мать не могут совпадать")
+        final_foal_ids_set = set(final_foal_ids)
+
+        if sire_set and pedigree_data.sire_id is not None:
+            sire = horses_mapping[pedigree_data.sire_id]
+            self._validate_parent_candidate(
+                mode="sire",
+                target=target,
+                parent=sire,
+                other_parent_id=final_dam_id,
+                final_foal_ids=final_foal_ids_set,
+            )
+        if dam_set and pedigree_data.dam_id is not None:
+            dam = horses_mapping[pedigree_data.dam_id]
+            self._validate_parent_candidate(
+                mode="dam",
+                target=target,
+                parent=dam,
+                other_parent_id=final_sire_id,
+                final_foal_ids=final_foal_ids_set,
+            )
+        if foals_set and pedigree_data.foals is not None:
+            final_parent_ids = {
+                parent_id
+                for parent_id in (final_sire_id, final_dam_id)
+                if parent_id is not None
+            }
+            for foal_id in pedigree_data.foals:
+                foal = horses_mapping[foal_id]
+                self._validate_child_candidate(
+                    target=target,
+                    child=foal,
+                    final_parent_ids=final_parent_ids,
+                    current_foal_ids=current_foal_ids_set,
+                    allow_existing_foal=foal_id in current_foal_ids_set,
+                )
 
         try:
             await self.horse_children_repository.clear_pedigree(
-                target_horse_id=set_pedigree_entities.target_horse.id,
-                sire=set_pedigree_entities.sire is not None,
-                dam=set_pedigree_entities.dam is not None,
-                foals=set_pedigree_entities.foals is not None,
+                target_horse_id=target.id,
+                sire=sire_set,
+                dam=dam_set,
+                foals=foals_set,
             )
             await self.horse_children_repository.set_pedigree(
-                target_horse_id=set_pedigree_entities.target_horse.id,
-                sire_id=(
-                    set_pedigree_entities.sire.id
-                    if set_pedigree_entities.sire is not None
-                    else None
-                ),
-                dam_id=(
-                    set_pedigree_entities.dam.id
-                    if set_pedigree_entities.dam is not None
-                    else None
-                ),
-                foals_ids=(
-                    [foal.id for foal in set_pedigree_entities.foals]
-                    if set_pedigree_entities.foals is not None
-                    else None
-                ),
+                target_horse_id=target.id,
+                sire_id=pedigree_data.sire_id if sire_set else None,
+                dam_id=pedigree_data.dam_id if dam_set else None,
+                foals_ids=final_foal_ids if foals_set else None,
             )
         except Exception as ex:
             raise ClientError(

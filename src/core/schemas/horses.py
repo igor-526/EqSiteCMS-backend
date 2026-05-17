@@ -298,26 +298,36 @@ class SetPedigreeEntities(BaseSchema):
         if self.sire is not None:
             if self.sire.id == target.id:
                 raise ValueError("Отец не может совпадать с целевой лошадью")
+            if self.dam is not None and self.sire.id == self.dam.id:
+                raise ValueError("Отец и мать не могут совпадать")
+            if self.foals is not None and self.sire.id in {
+                foal.id for foal in self.foals
+            }:
+                raise ValueError("Отец не может быть потомком целевой лошади")
             if self.sire.sex != HorseSexEnum.MALE:
                 raise ValueError("Отец должен быть мужского пола")
             if self.sire.kind != target.kind:
                 raise ValueError("Отец должен быть того же вида, что и целевая лошадь")
             if target.bdate is not None and self.sire.bdate is not None:
-                if self.sire.bdate > target.bdate:
+                if self.sire.bdate >= target.bdate:
                     raise ValueError(
-                        "Дата рождения отца не может быть позже даты рождения целевой лошади"
+                        "Дата рождения отца должна быть раньше даты рождения целевой лошади"
                     )
         if self.dam is not None:
             if self.dam.id == target.id:
                 raise ValueError("Мать не может совпадать с целевой лошадью")
+            if self.foals is not None and self.dam.id in {
+                foal.id for foal in self.foals
+            }:
+                raise ValueError("Мать не может быть потомком целевой лошади")
             if self.dam.sex != HorseSexEnum.FEMALE:
                 raise ValueError("Мать должна быть женского пола")
             if self.dam.kind != target.kind:
                 raise ValueError("Мать должна быть того же вида, что и целевая лошадь")
             if target.bdate is not None:
-                if self.dam.bdate is not None and self.dam.bdate > target.bdate:
+                if self.dam.bdate is not None and self.dam.bdate >= target.bdate:
                     raise ValueError(
-                        "Дата рождения матери не может быть позже даты рождения целевой лошади"
+                        "Дата рождения матери должна быть раньше даты рождения целевой лошади"
                     )
                 if self.dam.ddate is not None and self.dam.ddate < target.bdate:
                     raise ValueError(
@@ -327,14 +337,22 @@ class SetPedigreeEntities(BaseSchema):
             for foal in self.foals:
                 if foal.id == target.id:
                     raise ValueError("Ребёнок не может совпадать с целевой лошадью")
+                if self.sire is not None and foal.id == self.sire.id:
+                    raise ValueError(
+                        "Ребёнок не может совпадать с отцом целевой лошади"
+                    )
+                if self.dam is not None and foal.id == self.dam.id:
+                    raise ValueError(
+                        "Ребёнок не может совпадать с матерью целевой лошади"
+                    )
                 if foal.kind != target.kind:
                     raise ValueError(
                         "Все дети должны быть того же вида, что и целевая лошадь"
                     )
                 if target.bdate is not None and foal.bdate is not None:
-                    if foal.bdate < target.bdate:
+                    if foal.bdate <= target.bdate:
                         raise ValueError(
-                            "Дата рождения ребёнка не может быть раньше даты рождения целевой лошади"
+                            "Дата рождения ребёнка должна быть позже даты рождения целевой лошади"
                         )
                 if (
                     target.sex == HorseSexEnum.FEMALE

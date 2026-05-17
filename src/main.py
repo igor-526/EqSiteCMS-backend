@@ -106,6 +106,9 @@ def invalid_token_error_handler(_: Request, exc: InvalidCredentials) -> JSONResp
 def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
     """Преобразует ошибки валидации FastAPI в ClientError."""
     errors = exc.errors()
+    status_code = (
+        422 if any(error.get("loc", [None])[0] == "path" for error in errors) else 400
+    )
     if errors:
         # Берем первую ошибку для сообщения
         error = errors[0]
@@ -114,7 +117,7 @@ def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONRes
         detail = f"{field}: {message}" if field else message
     else:
         detail = "Ошибка валидации данных"
-    return JSONResponse({"detail": detail}, status_code=400)
+    return JSONResponse({"detail": detail}, status_code=status_code)
 
 
 @app.exception_handler(ValidationError)

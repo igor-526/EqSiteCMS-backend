@@ -43,6 +43,8 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         sex: list[HorseSexEnum] | None = None,
         bdate_gte: date | None = None,
         bdate_lte: date | None = None,
+        bdate_gt_or_none: date | None = None,
+        bdate_lt_or_none: date | None = None,
         bdate_gte_or_none: date | None = None,
         bdate_lte_or_none: date | None = None,
         ddate_gte: date | None = None,
@@ -67,6 +69,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         *,
         target_horse: Horse,
         search: str | None = None,
+        exclude_ids: list[UUID] | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
@@ -78,6 +81,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         *,
         target_horse: Horse,
         search: str | None = None,
+        exclude_ids: list[UUID] | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
@@ -89,6 +93,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         *,
         target_horse: Horse,
         search: str | None = None,
+        exclude_ids: list[UUID] | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:

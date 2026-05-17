@@ -332,6 +332,8 @@ class HorseRepository(TenantScopedRepository[Horse]):
         sex: list[HorseSexEnum] | None = None,
         bdate_gte: date | None = None,
         bdate_lte: date | None = None,
+        bdate_gt_or_none: date | None = None,
+        bdate_lt_or_none: date | None = None,
         bdate_gte_or_none: date | None = None,
         bdate_lte_or_none: date | None = None,
         ddate_gte: date | None = None,
@@ -425,6 +427,14 @@ class HorseRepository(TenantScopedRepository[Horse]):
             conditions.append(horse.c.bdate >= bdate_gte)
         if bdate_lte is not None:
             conditions.append(horse.c.bdate <= bdate_lte)
+        if bdate_gt_or_none is not None:
+            conditions.append(
+                or_(horse.c.bdate > bdate_gt_or_none, horse.c.bdate.is_(None))
+            )
+        if bdate_lt_or_none is not None:
+            conditions.append(
+                or_(horse.c.bdate < bdate_lt_or_none, horse.c.bdate.is_(None))
+            )
         if bdate_gte_or_none is not None:
             conditions.append(
                 or_(horse.c.bdate >= bdate_gte_or_none, horse.c.bdate.is_(None))
@@ -740,6 +750,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         *,
         target_horse: Horse,
         search: str | None = None,
+        exclude_ids: list[UUID] | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
@@ -748,7 +759,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
             "equestrian_id": target_horse.equestrian_id,
             "sex": [HorseSexEnum.FEMALE],
             "kind": [target_horse.kind],
-            "exclude_ids": [target_horse.id],
+            "exclude_ids": list(dict.fromkeys([target_horse.id, *(exclude_ids or [])])),
             "sort": ["name"],
             "limit": limit,
             "offset": offset,
@@ -756,7 +767,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         if search:
             filters["name"] = search
         if target_horse.bdate is not None:
-            filters["bdate_lte_or_none"] = target_horse.bdate
+            filters["bdate_lt_or_none"] = target_horse.bdate
             filters["ddate_gte_or_none"] = target_horse.bdate
         return await self.get_horse_list_full_info(**filters)
 
@@ -765,6 +776,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         *,
         target_horse: Horse,
         search: str | None = None,
+        exclude_ids: list[UUID] | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
@@ -773,7 +785,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
             "equestrian_id": target_horse.equestrian_id,
             "sex": [HorseSexEnum.MALE],
             "kind": [target_horse.kind],
-            "exclude_ids": [target_horse.id],
+            "exclude_ids": list(dict.fromkeys([target_horse.id, *(exclude_ids or [])])),
             "sort": ["name"],
             "limit": limit,
             "offset": offset,
@@ -781,7 +793,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         if search:
             filters["name"] = search
         if target_horse.bdate is not None:
-            filters["bdate_lte_or_none"] = target_horse.bdate
+            filters["bdate_lt_or_none"] = target_horse.bdate
         return await self.get_horse_list_full_info(**filters)
 
     async def get_available_children(
@@ -789,6 +801,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         *,
         target_horse: Horse,
         search: str | None = None,
+        exclude_ids: list[UUID] | None = None,
         limit: int | None = 25,
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
@@ -796,7 +809,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         filters: dict = {
             "equestrian_id": target_horse.equestrian_id,
             "kind": [target_horse.kind],
-            "exclude_ids": [target_horse.id],
+            "exclude_ids": list(dict.fromkeys([target_horse.id, *(exclude_ids or [])])),
             "sort": ["name"],
             "limit": limit,
             "offset": offset,
@@ -804,7 +817,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         if search:
             filters["name"] = search
         if target_horse.bdate is not None:
-            filters["bdate_gte_or_none"] = target_horse.bdate
+            filters["bdate_gt_or_none"] = target_horse.bdate
         if target_horse.sex == HorseSexEnum.FEMALE and target_horse.ddate is not None:
             filters["bdate_lte_or_none"] = target_horse.ddate
         if target_horse.sex == HorseSexEnum.FEMALE:

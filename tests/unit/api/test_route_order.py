@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from fastapi.routing import APIRoute
+from uuid import UUID
 
+from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
+
+from core.entities.equestrian import EquestrianContext
+from depends.services import get_read_equestrian_context
 from main import app
 
 
@@ -85,3 +90,21 @@ def test_horse_pedigree_mode_contract_uses_dam() -> None:
     ][1]["schema"]
 
     assert mode_schema["enum"] == ["sire", "dam", "children"]
+
+
+def test_horse_pedigree_invalid_mode_returns_structural_422() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_read_equestrian_context] = lambda: EquestrianContext(
+        id=UUID("11111111-1111-4111-8111-111111111111"),
+        source="unit-test",
+    )
+
+    try:
+        response = client.get(
+            "/api/horses/11111111-1111-4111-8111-111111111111/pedigree/badmode"
+        )
+    finally:
+        app.dependency_overrides.pop(get_read_equestrian_context, None)
+
+    assert response.status_code == 422
+    assert "path -> mode" in response.json()["detail"]
