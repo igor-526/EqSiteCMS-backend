@@ -5,7 +5,6 @@ on:
     branches:
       - main
       - release
-      - feature/actions-ci
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -28,6 +27,6 @@ jobs:
       - name: ruff
         run: uv run ruff check src
 
-      - name: test
+      - name: pytest
         run: uv run pytest
 
