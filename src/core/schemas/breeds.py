@@ -2,6 +2,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from core.entities.horse import HorseKindEnum
 from core.schemas.baseschema import BaseSchema
 
 
@@ -13,6 +14,7 @@ class BreedOutDto(BaseSchema):
     short_name: str = Field(..., description="Короткое название породы")
     slug: str = Field(..., description="Slug")
     description: str | None = Field(None, description="Описание породы")
+    kind: HorseKindEnum = Field(HorseKindEnum.HORSE, description="Вид породы")
 
 
 class BreedOutWithPageDataDto(BreedOutDto):
@@ -33,6 +35,7 @@ class BreedCreateDto(BaseSchema):
     page_data: str | None = Field(
         None, description="Данные страницы в формате HTML/текста"
     )
+    kind: HorseKindEnum = Field(HorseKindEnum.HORSE, description="Вид породы")
 
 
 class BreedUpdateDto(BaseSchema):
@@ -45,3 +48,4 @@ class BreedUpdateDto(BaseSchema):
     page_data: str | None = Field(
         None, description="Данные страницы в формате HTML/текста"
     )
+    kind: HorseKindEnum | None = Field(None, description="Вид породы")

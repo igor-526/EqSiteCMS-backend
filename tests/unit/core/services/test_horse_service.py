@@ -99,7 +99,6 @@ class FakeHorseRepository:
             slug=horse.slug or "",
             name=horse.name,
             description=horse.description,
-            kind=horse.kind,
             height=horse.height,
             sex=horse.sex,
             bdate=horse.bdate,
@@ -400,6 +399,11 @@ async def test_create_horse_uc16_reference_validation_runs_before_create() -> No
     )
 
     assert created.name == "Новая"
+    assert "kind" not in created.model_dump()
+    created_entity = next(
+        payload for name, payload in horse_repo.calls if name == "create"
+    )
+    assert not hasattr(created_entity, "kind")
     assert [name for name, _ in horse_repo.calls] == ["create"]
 
 
@@ -961,6 +965,70 @@ async def test_set_horse_pedigree_replacement_allows_existing_foal_to_remain() -
     )
 
 
+async def test_horse_kind_to_breed_set_pedigree_rejects_mismatched_breed_kind() -> None:
+    service, horse_repo, _, breed_repo, _, _ = make_service()
+    horse_breed = breed_repo.add(
+        Breed(name="Horse Breed", slug="horse-breed", short_name="HB")
+    )
+    pony_breed = breed_repo.add(
+        Breed(
+            name="Pony Breed",
+            slug="pony-breed",
+            short_name="PB",
+            kind=HorseKindEnum.PONY,
+        )
+    )
+    target = horse_repo.add(
+        make_horse(sex=HorseSexEnum.FEMALE, breed_id=horse_breed.id)
+    )
+    sire = horse_repo.add(
+        make_horse(
+            name="Pony Sire",
+            slug="pony-sire",
+            sex=HorseSexEnum.MALE,
+            bdate=date(2018, 1, 1),
+            breed_id=pony_breed.id,
+        )
+    )
+
+    with pytest.raises(ClientError, match="того же вида"):
+        await service.set_horse_pedigree(
+            horse_id=target.id,
+            pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
+            user=make_user(),
+        )
+
+
+async def test_horse_kind_to_breed_set_pedigree_allows_matching_breed_kind() -> None:
+    service, horse_repo, children_repo, breed_repo, _, _ = make_service()
+    pony_breed = breed_repo.add(
+        Breed(
+            name="Pony Breed",
+            slug="pony-breed",
+            short_name="PB",
+            kind=HorseKindEnum.PONY,
+        )
+    )
+    target = horse_repo.add(make_horse(sex=HorseSexEnum.FEMALE, breed_id=pony_breed.id))
+    sire = horse_repo.add(
+        make_horse(
+            name="Pony Sire",
+            slug="pony-sire",
+            sex=HorseSexEnum.MALE,
+            bdate=date(2018, 1, 1),
+            breed_id=pony_breed.id,
+        )
+    )
+
+    await service.set_horse_pedigree(
+        horse_id=target.id,
+        pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
+        user=make_user(),
+    )
+
+    assert children_repo.calls[-1][0] == "set_pedigree"
+
+
 async def test_set_horse_pedigree_uc22_clear_then_set_order() -> None:
     service, horse_repo, children_repo, _, _, _ = make_service()
     target = horse_repo.add(make_horse(sex=HorseSexEnum.FEMALE))
@@ -1060,7 +1128,6 @@ def make_horse_out_dto(**overrides: Any) -> HorseOutDto:
         "id": uuid4(),
         "slug": "test-horse",
         "name": "Тест",
-        "kind": HorseKindEnum.HORSE,
         "sex": HorseSexEnum.MALE,
         "bdate_mode": HorseDateModeEnum.HIDE,
         "ddate_mode": HorseDateModeEnum.HIDE,
@@ -1068,6 +1135,39 @@ def make_horse_out_dto(**overrides: Any) -> HorseOutDto:
     }
     defaults.update(overrides)
     return HorseOutDto(**defaults)
+
+
+async def test_horse_kind_to_breed_horse_write_and_read_dtos_do_not_expose_kind() -> (
+    None
+):
+    assert "kind" not in HorseCreateInDto.model_fields
+    assert "kind" not in HorseUpdateInDto.model_fields
+    assert "kind" not in HorseOutDto.model_fields
+    assert "kind" not in HorseWithPedigreeOutDto.model_fields
+
+
+async def test_horse_kind_to_breed_pedigree_nested_dtos_do_not_expose_kind() -> None:
+    dto = HorseWithPedigreeOutDto(
+        **make_horse_out_dto().model_dump(),
+        pedigree=HorsePedigree(
+            sire=make_horse_out_dto(name="Sire"),
+            dam=make_horse_out_dto(name="Dam"),
+            foals=[make_horse_out_dto(name="Foal")],
+        ),
+    )
+
+    dumped = dto.model_dump()
+    assert "kind" not in dumped
+    assert "kind" not in dumped["pedigree"]["sire"]
+    assert "kind" not in dumped["pedigree"]["dam"]
+    assert "kind" not in dumped["pedigree"]["foals"][0]
+
+
+async def test_horse_kind_to_breed_horse_create_update_reject_extra_kind() -> None:
+    with pytest.raises(ValueError):
+        HorseCreateInDto.model_validate({"name": "Буран", "kind": "horse"})
+    with pytest.raises(ValueError):
+        HorseUpdateInDto.model_validate({"kind": "horse"})
 
 
 def get_list_call_kwargs(horse_repo: FakeHorseRepository) -> dict[str, Any]:

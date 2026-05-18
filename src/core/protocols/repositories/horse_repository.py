@@ -36,6 +36,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         name: str | None = None,
         description: str | None = None,
         breed_ids: list[UUID] | None = None,
+        breed_id_is_null: bool | None = None,
         coat_color_ids: list[UUID] | None = None,
         kind: list[HorseKindEnum] | None = None,
         height_gte: int | None = None,
@@ -61,7 +62,11 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         sort: list[_HORSE_AVAILABLE_SORT_FIELDS] | None = None,
         pedigree: int | None = None,
     ) -> tuple[Mapping[UUID, HorseOutDto | HorseWithPedigreeOutDto], int]:
-        """Получить полную информацию о лошадях с фильтрацией и сортировкой."""
+        """Получить полную информацию о лошадях.
+
+        Query ``kind`` остается контрактом списка лошадей, но реализация
+        фильтрует и сортирует по ``breeds.kind``, а не по полю лошади.
+        """
         ...
 
     async def get_available_dams(

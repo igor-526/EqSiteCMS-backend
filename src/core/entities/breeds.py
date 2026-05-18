@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import Field
 
 from .base import Entity, SlugMixin, TimeStampMixin
+from .horse import HorseKindEnum
 
 
 class Breed(Entity, TimeStampMixin, SlugMixin):
@@ -28,4 +29,9 @@ class Breed(Entity, TimeStampMixin, SlugMixin):
         default="<div></div>",
         description="Данные страницы в формате HTML/текста",
         examples=["<div><p>Описание породы</p></div>"],
+    )
+    kind: HorseKindEnum = Field(
+        default=HorseKindEnum.HORSE,
+        description="Вид породы",
+        examples=[HorseKindEnum.HORSE.value, HorseKindEnum.PONY.value],
     )

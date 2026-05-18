@@ -121,9 +121,16 @@ async def get_read_equestrian_context(
         EquestrianRepositoryProtocol, Depends(get_equestrian_repository)
     ],
     service_key: Annotated[str | None, Header(alias="X-Equestrian-Service-Key")] = None,
+    refresh_token: Annotated[str | None, Cookie(alias="refresh_token")] = None,
 ) -> EquestrianContext:
     if current_user is not None:
         return EquestrianContext(id=current_user.equestrian_id, source="authenticated")
+    if (
+        refresh_token is not None
+        and refresh_token.strip()
+        and (service_key is None or not service_key.strip())
+    ):
+        raise InvalidCredentials("Отсутствуют учетные данные")
     if service_key is None or not service_key.strip():
         raise ClientError("Отсутствует X-Equestrian-Service-Key")
     equestrian = await equestrian_repository.get_by_service_key(service_key.strip())

@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
+from core.entities.horse import HorseKindEnum
 from core.schemas.breeds import (
     BreedCreateDto,
     BreedOutDto,
     BreedOutWithPageDataDto,
     BreedUpdateDto,
 )
+from core.schemas.users import UserOutDto
 from core.services.breeds import BreedService
 from depends.services import (
     get_breed_service,
@@ -36,8 +38,20 @@ async def get_breeds(
     slug: str | None = Query(None, description="Фильтр по slug (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
     page_data: str | None = Query(None, description="Фильтр по page_data (вхождение)"),
+    kind: list[HorseKindEnum] | None = Query(None, description="Фильтр по виду породы"),
     sort: (
-        list[Literal["name", "description", "slug", "-name", "-description", "-slug"]]
+        list[
+            Literal[
+                "name",
+                "description",
+                "slug",
+                "kind",
+                "-name",
+                "-description",
+                "-slug",
+                "-kind",
+            ]
+        ]
         | None
     ) = Query(None, description="Сортировка"),
     limit: int | None = Query(None, description="Лимит"),
@@ -49,6 +63,7 @@ async def get_breeds(
         slug=slug,
         description=description,
         page_data=page_data,
+        kind=kind,
         sort=sort,
         limit=limit,
         offset=offset,
@@ -90,12 +105,14 @@ async def get_breed(
 async def create_breed(
     data: BreedCreateDto,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> BreedOutDto:
-    breed = await breed_service.create(data, equestrian_context=equestrian_context)
+    breed = await breed_service.create(
+        data, equestrian_context=equestrian_context, user=current_user
+    )
     return BreedOutDto.model_validate(breed)
 
 
@@ -109,13 +126,13 @@ async def update_breed(
     slug_or_id: str,
     data: BreedUpdateDto,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> BreedOutDto:
     breed = await breed_service.update(
-        slug_or_id, data, equestrian_context=equestrian_context
+        slug_or_id, data, equestrian_context=equestrian_context, user=current_user
     )
     return BreedOutDto.model_validate(breed)
 
@@ -129,9 +146,11 @@ async def update_breed(
 async def delete_breed(
     slug_or_id: str,
     breed_service: Annotated[BreedService, Depends(get_breed_service)],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> None:
-    await breed_service.delete(slug_or_id, equestrian_context=equestrian_context)
+    await breed_service.delete(
+        slug_or_id, equestrian_context=equestrian_context, user=current_user
+    )

@@ -52,7 +52,7 @@ async def get_horses(
     coat_color_ids: list[UUID] | None = Query(
         None, description="Фильтр по идентификаторам мастей"
     ),
-    kind: list[HorseKindEnum] | None = Query(None, description="Фильтр по виду"),
+    kind: list[HorseKindEnum] | None = Query(None, description="Фильтр по виду породы"),
     height_gte: int | None = Query(None, description="Фильтр по минимальному росту"),
     height_lte: int | None = Query(None, description="Фильтр по максимальному росту"),
     sex: list[HorseSexEnum] | None = Query(None, description="Фильтр по полу"),

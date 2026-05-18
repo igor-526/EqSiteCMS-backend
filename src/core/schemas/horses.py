@@ -1,9 +1,9 @@
 from datetime import date
 from uuid import UUID
 
-from pydantic import Field, computed_field, model_validator
+from pydantic import ConfigDict, Field, computed_field, model_validator
 
-from core.entities import HorseDateModeEnum, HorseKindEnum, HorseSexEnum
+from core.entities import HorseDateModeEnum, HorseSexEnum
 from core.entities.horse import Horse
 from core.schemas.baseschema import BaseSchema
 from core.schemas.breeds import BreedOutDto
@@ -34,10 +34,6 @@ class HorseOutDto(BaseSchema):
     coat_color: CoatColorOutDto | None = Field(
         default=None,
         description="Масть лошади",
-    )
-    kind: HorseKindEnum = Field(
-        default=HorseKindEnum.HORSE,
-        description="Вид лошади",
     )
     height: int | None = Field(
         default=None,
@@ -140,6 +136,8 @@ HorsePedigree.model_rebuild()
 class HorseCreateInDto(BaseSchema):
     """DTO для создания лошади."""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(
         default=...,
         description="Имя лошади",
@@ -156,10 +154,6 @@ class HorseCreateInDto(BaseSchema):
     coat_color_id: UUID | None = Field(
         default=None,
         description="Идентификатор масти",
-    )
-    kind: HorseKindEnum = Field(
-        default=HorseKindEnum.HORSE,
-        description="Вид лошади",
     )
     height: int | None = Field(
         default=None,
@@ -204,6 +198,8 @@ class HorseCreateInDto(BaseSchema):
 class HorseUpdateInDto(BaseSchema):
     """DTO для создания лошади."""
 
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(
         default=None,
         description="Имя лошади",
@@ -220,10 +216,6 @@ class HorseUpdateInDto(BaseSchema):
     coat_color_id: UUID | None = Field(
         default=None,
         description="Идентификатор масти",
-    )
-    kind: HorseKindEnum | None = Field(
-        default=None,
-        description="Вид лошади",
     )
     height: int | None = Field(
         default=None,
@@ -306,8 +298,6 @@ class SetPedigreeEntities(BaseSchema):
                 raise ValueError("Отец не может быть потомком целевой лошади")
             if self.sire.sex != HorseSexEnum.MALE:
                 raise ValueError("Отец должен быть мужского пола")
-            if self.sire.kind != target.kind:
-                raise ValueError("Отец должен быть того же вида, что и целевая лошадь")
             if target.bdate is not None and self.sire.bdate is not None:
                 if self.sire.bdate >= target.bdate:
                     raise ValueError(
@@ -322,8 +312,6 @@ class SetPedigreeEntities(BaseSchema):
                 raise ValueError("Мать не может быть потомком целевой лошади")
             if self.dam.sex != HorseSexEnum.FEMALE:
                 raise ValueError("Мать должна быть женского пола")
-            if self.dam.kind != target.kind:
-                raise ValueError("Мать должна быть того же вида, что и целевая лошадь")
             if target.bdate is not None:
                 if self.dam.bdate is not None and self.dam.bdate >= target.bdate:
                     raise ValueError(
@@ -344,10 +332,6 @@ class SetPedigreeEntities(BaseSchema):
                 if self.dam is not None and foal.id == self.dam.id:
                     raise ValueError(
                         "Ребёнок не может совпадать с матерью целевой лошади"
-                    )
-                if foal.kind != target.kind:
-                    raise ValueError(
-                        "Все дети должны быть того же вида, что и целевая лошадь"
                     )
                 if target.bdate is not None and foal.bdate is not None:
                     if foal.bdate <= target.bdate:

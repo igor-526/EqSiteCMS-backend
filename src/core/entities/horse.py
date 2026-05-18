@@ -85,11 +85,6 @@ class Horse(Entity, TimeStampMixin, SlugMixin):
         description="Идентификатор масти",
         examples=["123e4567-e89b-12d3-a456-426614174000"],
     )
-    kind: HorseKindEnum = Field(
-        default=HorseKindEnum.HORSE,
-        description="Вид лошади",
-        examples=[HorseKindEnum.HORSE.value, HorseKindEnum.PONY.value],
-    )
     height: int | None = Field(
         default=None,
         ge=0,

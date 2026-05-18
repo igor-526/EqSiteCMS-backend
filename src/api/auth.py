@@ -14,6 +14,42 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 secure_cookie = settings.debug is False
+ACCESS_COOKIE_PATH = "/"
+REFRESH_COOKIE_PATH = "/"
+LEGACY_REFRESH_COOKIE_PATH = "/api/auth/refresh"
+
+
+def set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        max_age=settings.access_token_expires_in_minutes * 60,
+        path=ACCESS_COOKIE_PATH,
+    )
+
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+        max_age=settings.refresh_token_expires_in_days * 24 * 60 * 60,
+        path=REFRESH_COOKIE_PATH,
+    )
+    delete_legacy_refresh_cookie(response)
+
+
+def delete_legacy_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key="refresh_token",
+        path=LEGACY_REFRESH_COOKIE_PATH,
+        httponly=True,
+        secure=secure_cookie,
+        samesite="lax",
+    )
 
 
 @router.post(
@@ -37,7 +73,7 @@ async def register(
         "Аутентифицирует пользователя по предоставленным данным (LoginData). "
         "В ответе тело пустое — сервис устанавливает два HTTP-only cookie: \n"
         " - `access_token` (короткоживущий, доступен всему приложению),\n"
-        " - `refresh_token` (долгоживущий, доступен только на пути /auth/refresh)."
+        " - `refresh_token` (долгоживущий, доступен всему API для refresh-aware CMS requests)."
     ),
 )
 async def login(
@@ -46,25 +82,7 @@ async def login(
 ) -> JSONResponse:
     tokens = await auth_service.login(data=data)
     response = JSONResponse({"status": "ok"}, status_code=200)
-    response.set_cookie(
-        key="access_token",
-        value=tokens.access_token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite="lax",
-        max_age=settings.access_token_expires_in_minutes * 60,
-        path="/",
-    )
-
-    response.set_cookie(
-        key="refresh_token",
-        value=tokens.refresh_token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite="lax",
-        max_age=settings.refresh_token_expires_in_days * 24 * 60 * 60,
-        path="/api/auth/refresh",
-    )
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
 
     logger.info(f"accessToken для локальной разработки: {tokens.access_token}")
     return response
@@ -86,24 +104,7 @@ async def refresh_access_token(
 
     tokens = await auth_service.refresh(refresh_token=refresh_token)
     response = JSONResponse({"status": "ok"}, status_code=200)
-    response.set_cookie(
-        key="access_token",
-        value=tokens.access_token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite="lax",
-        max_age=settings.access_token_expires_in_minutes * 60,
-        path="/",
-    )
-    response.set_cookie(
-        key="refresh_token",
-        value=tokens.refresh_token,
-        httponly=True,
-        secure=secure_cookie,
-        samesite="lax",
-        max_age=settings.refresh_token_expires_in_days * 24 * 60 * 60,
-        path="/api/auth/refresh",
-    )
+    set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
     return response
 
 
@@ -128,17 +129,18 @@ async def get_current_user_info(
 async def logout(response: Response) -> Response:
     response.delete_cookie(
         key="access_token",
-        path="/",
+        path=ACCESS_COOKIE_PATH,
         httponly=True,
         secure=secure_cookie,
         samesite="lax",
     )
     response.delete_cookie(
         key="refresh_token",
-        path="/api/auth/refresh",
+        path=REFRESH_COOKIE_PATH,
         httponly=True,
         secure=secure_cookie,
         samesite="lax",
     )
+    delete_legacy_refresh_cookie(response)
     response.status_code = 204
     return response

@@ -29,7 +29,6 @@ horse = Table(
     Column(
         "coat_color_id", ForeignKey("coat_color.id", ondelete="CASCADE"), nullable=True
     ),
-    Column("kind", String(7), nullable=False),
     Column("height", Integer(), nullable=True),
     Column("sex", String(7), nullable=False),
     Column("bdate", Date(), nullable=True),
@@ -46,7 +45,6 @@ horse = Table(
     ),
     Index("ix_horse_equestrian_slug", "equestrian_id", "slug", unique=True),
     Index("ix_horse_equestrian_name", "equestrian_id", "name"),
-    Index("ix_horse_equestrian_kind", "equestrian_id", "kind"),
     Index("ix_horse_equestrian_sex", "equestrian_id", "sex"),
 )
 

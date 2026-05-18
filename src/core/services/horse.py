@@ -17,6 +17,7 @@ from core.entities import (
     Photo,
 )
 from core.entities.equestrian import EquestrianContext
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
@@ -78,7 +79,7 @@ class HorseService:
         )
         if not has_admin_scope:
             if raise_exception:
-                raise ClientError("Недостаточно прав для выполнения операции")
+                raise ForbiddenError("Недостаточно прав для выполнения операции")
             return False
         return True
 
@@ -114,7 +115,6 @@ class HorseService:
             description=horse.description,
             breed=breed_dto,
             coat_color=coat_color_dto,
-            kind=horse.kind,
             height=horse.height,
             sex=horse.sex,
             bdate=horse.bdate,
@@ -172,6 +172,34 @@ class HorseService:
             raise ClientError("Порода не найдена")
         return breed
 
+    async def _get_breed_kind_for_horse(
+        self, *, horse: Horse, equestrian_context: EquestrianContext
+    ) -> HorseKindEnum | None:
+        if horse.breed_id is None:
+            return None
+        breed = await self._get_breed_by_id(
+            breed_id=horse.breed_id, equestrian_context=equestrian_context
+        )
+        return breed.kind
+
+    async def _get_breed_kinds_for_horses(
+        self, *, horses: Mapping[UUID, Horse], equestrian_context: EquestrianContext
+    ) -> dict[UUID, HorseKindEnum | None]:
+        kinds: dict[UUID, HorseKindEnum | None] = {}
+        breed_cache: dict[UUID, HorseKindEnum] = {}
+        for horse_item in horses.values():
+            if horse_item.breed_id is None:
+                kinds[horse_item.id] = None
+                continue
+            if horse_item.breed_id not in breed_cache:
+                breed = await self._get_breed_by_id(
+                    breed_id=horse_item.breed_id,
+                    equestrian_context=equestrian_context,
+                )
+                breed_cache[horse_item.breed_id] = breed.kind
+            kinds[horse_item.id] = breed_cache[horse_item.breed_id]
+        return kinds
+
     async def _get_coat_color_by_id(
         self, *, coat_color_id: UUID, equestrian_context: EquestrianContext
     ) -> CoatColor:
@@ -219,7 +247,9 @@ class HorseService:
         *,
         mode: Literal["sire", "dam"],
         target: Horse,
+        target_kind: HorseKindEnum | None,
         parent: Horse,
+        parent_kind: HorseKindEnum | None,
         other_parent_id: UUID | None,
         final_foal_ids: set[UUID],
     ) -> None:
@@ -230,7 +260,7 @@ class HorseService:
             raise ClientError("Отец и мать не могут совпадать")
         if parent.id in final_foal_ids:
             raise ClientError(f"{role_title} не может быть потомком целевой лошади")
-        if parent.kind != target.kind:
+        if parent_kind != target_kind:
             raise ClientError(
                 f"{role_title} должен быть того же вида, что и целевая лошадь"
             )
@@ -260,7 +290,9 @@ class HorseService:
     def _validate_child_candidate(
         *,
         target: Horse,
+        target_kind: HorseKindEnum | None,
         child: Horse,
+        child_kind: HorseKindEnum | None,
         final_parent_ids: set[UUID],
         current_foal_ids: set[UUID],
         allow_existing_foal: bool,
@@ -271,7 +303,7 @@ class HorseService:
             raise ClientError("Ребёнок не может совпадать с родителем целевой лошади")
         if child.id in current_foal_ids and not allow_existing_foal:
             raise ClientError("Ребёнок уже указан потомком целевой лошади")
-        if child.kind != target.kind:
+        if child_kind != target_kind:
             raise ClientError("Все дети должны быть того же вида, что и целевая лошадь")
         if target.bdate is not None and child.bdate is not None:
             if child.bdate <= target.bdate:
@@ -321,7 +353,6 @@ class HorseService:
                 description=create_data.description,
                 breed_id=create_data.breed_id,
                 coat_color_id=create_data.coat_color_id,
-                kind=create_data.kind,
                 height=create_data.height,
                 sex=create_data.sex,
                 bdate=create_data.bdate,
@@ -528,6 +559,11 @@ class HorseService:
             raise ClientError("Некоторые лошади не найдены")
 
         target = cast(Horse, horses_mapping.get(horse_id))
+        breed_kinds = await self._get_breed_kinds_for_horses(
+            horses=horses_mapping,
+            equestrian_context=equestrian_context,
+        )
+        target_kind = breed_kinds[target.id]
         current_sire_id, current_dam_id, current_foal_ids = (
             await self._get_current_pedigree_ids(
                 horse_id=horse_id,
@@ -551,7 +587,9 @@ class HorseService:
             self._validate_parent_candidate(
                 mode="sire",
                 target=target,
+                target_kind=target_kind,
                 parent=sire,
+                parent_kind=breed_kinds[sire.id],
                 other_parent_id=final_dam_id,
                 final_foal_ids=final_foal_ids_set,
             )
@@ -560,7 +598,9 @@ class HorseService:
             self._validate_parent_candidate(
                 mode="dam",
                 target=target,
+                target_kind=target_kind,
                 parent=dam,
+                parent_kind=breed_kinds[dam.id],
                 other_parent_id=final_sire_id,
                 final_foal_ids=final_foal_ids_set,
             )
@@ -574,7 +614,9 @@ class HorseService:
                 foal = horses_mapping[foal_id]
                 self._validate_child_candidate(
                     target=target,
+                    target_kind=target_kind,
                     child=foal,
+                    child_kind=breed_kinds[foal.id],
                     final_parent_ids=final_parent_ids,
                     current_foal_ids=current_foal_ids_set,
                     allow_existing_foal=foal_id in current_foal_ids_set,

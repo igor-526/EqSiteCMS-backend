@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 
 from core.entities.breeds import Breed
+from core.entities.horse import HorseKindEnum
+from core.entities.user import UserScope
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
 from core.schemas.breeds import BreedCreateDto, BreedUpdateDto
+from core.schemas.users import UserOutDto
 from core.services.breeds import BreedService
 
 pytestmark = pytest.mark.asyncio
@@ -116,6 +121,7 @@ class FakeBreedRepository:
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
+        kind: list[HorseKindEnum] | None = None,
         sort: list[str] | None = None,
         limit: int | None = None,
         offset: int | None = None,
@@ -125,6 +131,7 @@ class FakeBreedRepository:
             "slug": slug,
             "description": description,
             "page_data": page_data,
+            "kind": kind,
             "sort": sort,
             "limit": limit,
             "offset": offset,
@@ -149,6 +156,18 @@ def make_breed(**overrides: Any) -> Breed:
 def make_service() -> tuple[BreedService, FakeBreedRepository]:
     repo = FakeBreedRepository()
     return BreedService(breed_repository=cast(Any, repo)), repo
+
+
+def make_user(*, scope_names: list[str] | None = None) -> UserOutDto:
+    return UserOutDto(
+        id=uuid4(),
+        username="admin",
+        created_at=datetime.now(tz=timezone.utc),
+        scopes=[
+            UserScope(scope_name=scope_name, scope_description=f"{scope_name} scope")
+            for scope_name in (scope_names or ["ADMIN"])
+        ],
+    )
 
 
 def assert_raises_client_error(call: Callable[[], Any]) -> None:
@@ -215,6 +234,91 @@ async def test_create_uc01_minimal_input_generates_slug_and_default_page_data() 
     assert breed.name == "Арабская"
     assert breed.slug == "arabskaya"
     assert breed.page_data == "<div></div>"
+    assert breed.kind == HorseKindEnum.HORSE
+    assert [name for name, _ in repo.calls] == [
+        "find_by_name",
+        "find_by_slug",
+        "create",
+    ]
+
+
+async def test_horse_kind_to_breed_entity_accepts_horse_and_pony_kind() -> None:
+    horse_breed = make_breed(kind=HorseKindEnum.HORSE)
+    pony_breed = make_breed(name="Welsh", slug="welsh", kind=HorseKindEnum.PONY)
+
+    assert horse_breed.kind == HorseKindEnum.HORSE
+    assert pony_breed.kind == HorseKindEnum.PONY
+    assert pony_breed.model_dump()["kind"] == HorseKindEnum.PONY
+
+
+async def test_horse_kind_to_breed_create_dto_default_and_explicit_kind() -> None:
+    default_dto = BreedCreateDto(name="Default")
+    pony_dto = BreedCreateDto(name="Pony", kind=HorseKindEnum.PONY)
+
+    assert default_dto.kind == HorseKindEnum.HORSE
+    assert pony_dto.kind == HorseKindEnum.PONY
+
+
+async def test_horse_kind_to_breed_create_dto_rejects_invalid_kind() -> None:
+    with pytest.raises(ValueError):
+        BreedCreateDto.model_validate({"name": "Bad", "kind": "bad-kind"})
+
+
+async def test_horse_kind_to_breed_service_create_passes_kind_to_repository() -> None:
+    service, repo = make_service()
+
+    breed = await service.create(
+        BreedCreateDto(name="Pony Breed", kind=HorseKindEnum.PONY)
+    )
+
+    assert breed.kind == HorseKindEnum.PONY
+    create_call = next(payload for name, payload in repo.calls if name == "create")
+    assert create_call.kind == HorseKindEnum.PONY
+
+
+async def test_horse_kind_to_breed_service_update_changes_kind_only() -> None:
+    service, repo = make_service()
+    current = repo.add(make_breed(kind=HorseKindEnum.HORSE))
+
+    updated = await service.update(
+        str(current.id),
+        BreedUpdateDto(kind=HorseKindEnum.PONY),
+    )
+
+    assert updated.kind == HorseKindEnum.PONY
+    assert updated.name == current.name
+
+
+async def test_horse_kind_to_breed_service_update_kind_none_does_not_null_column() -> (
+    None
+):
+    service, repo = make_service()
+    current = repo.add(make_breed(kind=HorseKindEnum.HORSE))
+
+    with pytest.raises(ClientError, match="Нет данных"):
+        await service.update(str(current.id), BreedUpdateDto(kind=None))
+
+    assert repo.by_id[current.id].kind == HorseKindEnum.HORSE
+
+
+async def test_horse_kind_to_breed_breed_write_denies_user_without_admin_scope() -> (
+    None
+):
+    service, _ = make_service()
+
+    with pytest.raises(ForbiddenError):
+        await service.create(
+            BreedCreateDto(name="Denied"),
+            user=make_user(scope_names=["CONTENT_EDITOR"]),
+        )
+
+
+async def test_horse_kind_to_breed_breed_write_allows_admin_scope() -> None:
+    service, repo = make_service()
+
+    breed = await service.create(BreedCreateDto(name="Allowed"), user=make_user())
+
+    assert breed.name == "Allowed"
     assert [name for name, _ in repo.calls] == [
         "find_by_name",
         "find_by_slug",
@@ -461,6 +565,7 @@ async def test_get_filtered_uc01_uc25_uc26_uc27_passes_contract_through() -> Non
                 "slug": "arab",
                 "description": "fast",
                 "page_data": "page",
+                "kind": None,
                 "sort": ["name", "-slug"],
                 "limit": 5,
                 "offset": 10,
@@ -481,6 +586,7 @@ async def test_get_filtered_uc02_omitted_optional_defaults_are_passed_as_none() 
                 "slug": None,
                 "description": None,
                 "page_data": None,
+                "kind": None,
                 "sort": None,
                 "limit": None,
                 "offset": None,

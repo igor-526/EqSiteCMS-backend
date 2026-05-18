@@ -107,7 +107,13 @@ def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONRes
     """Преобразует ошибки валидации FastAPI в ClientError."""
     errors = exc.errors()
     status_code = (
-        422 if any(error.get("loc", [None])[0] == "path" for error in errors) else 400
+        422
+        if any(
+            error.get("loc", [None])[0] == "path"
+            or error.get("type") == "extra_forbidden"
+            for error in errors
+        )
+        else 400
     )
     if errors:
         # Берем первую ошибку для сообщения

@@ -6,9 +6,12 @@ from pydantic import ValidationError
 from core.entities.base import _generate_slug
 from core.entities.breeds import Breed
 from core.entities.equestrian import EquestrianContext
+from core.entities.horse import HorseKindEnum
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
 from core.protocols.repositories.breed_repository import BreedRepositoryProtocol
 from core.schemas.breeds import BreedCreateDto, BreedUpdateDto
+from core.schemas.users import UserOutDto
 from core.utils.html_security import validate_no_js_in_html
 
 BREED_NAME_MAX_LENGTH = 63
@@ -16,6 +19,7 @@ BREED_SHORT_NAME_MAX_LENGTH = 63
 BREED_SLUG_MAX_LENGTH = 63
 BREED_DESCRIPTION_MAX_LENGTH = 511
 DEFAULT_PAGE_DATA = "<div></div>"
+ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
 
 
 def _derive_short_name(name: str) -> str:
@@ -102,6 +106,12 @@ class BreedService:
             if data["page_data"] is not None:
                 validate_no_js_in_html("Данные страницы породы", data["page_data"])
 
+    def _check_admin_permission(self, *, user: UserOutDto | None) -> None:
+        if user is None:
+            return
+        if not any(scope.scope_name in ADMIN_SCOPE_NAMES for scope in user.scopes):
+            raise ForbiddenError("Недостаточно прав для выполнения операции")
+
     async def _ensure_unique_slug(
         self,
         slug: str,
@@ -126,10 +136,15 @@ class BreedService:
             counter += 1
 
     async def create(
-        self, data: BreedCreateDto, *, equestrian_context: EquestrianContext
+        self,
+        data: BreedCreateDto,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> Breed:
         """Создать новую породу."""
 
+        self._check_admin_permission(user=user)
         breed_data = data.model_dump(exclude_none=True)
         self._validate_breed_data(breed_data, partial=False)
 
@@ -166,9 +181,11 @@ class BreedService:
         data: BreedUpdateDto,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> Breed:
         """Обновить породу."""
 
+        self._check_admin_permission(user=user)
         parsed = self._parse_slug_or_id(slug_or_id)
         breed = await self.breed_repository.get_by_slug_or_id(
             parsed, equestrian_id=equestrian_context.id
@@ -228,10 +245,15 @@ class BreedService:
         return breed
 
     async def delete(
-        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+        self,
+        slug_or_id: str,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> None:
         """Удалить породу."""
 
+        self._check_admin_permission(user=user)
         parsed = self._parse_slug_or_id(slug_or_id)
         breed = await self.breed_repository.get_by_slug_or_id(
             parsed, equestrian_id=equestrian_context.id
@@ -250,9 +272,19 @@ class BreedService:
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
+        kind: list[HorseKindEnum] | None = None,
         sort: (
             list[
-                Literal["name", "description", "slug", "-name", "-description", "-slug"]
+                Literal[
+                    "name",
+                    "description",
+                    "slug",
+                    "kind",
+                    "-name",
+                    "-description",
+                    "-slug",
+                    "-kind",
+                ]
             ]
             | None
         ) = None,
@@ -266,6 +298,7 @@ class BreedService:
             slug=slug,
             description=description,
             page_data=page_data,
+            kind=kind,
             sort=sort,
             limit=limit,
             offset=offset,

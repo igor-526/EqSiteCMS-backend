@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.protocols.media import PhotoUrlBuilderProtocol
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
@@ -18,7 +19,7 @@ from core.protocols.repositories import (
     SiteSettingsRepositoryProtocol,
     UserRepositoryProtocol,
 )
-from depends.utils import get_session
+from depends.utils import get_photo_url_builder, get_session
 from repositories import (
     BreedRepository,
     CoatColorRepository,
@@ -98,8 +99,11 @@ async def get_price_repository(
 
 async def get_horse_repository(
     session: Annotated[AsyncSession, Depends(get_session)],
+    photo_url_builder: Annotated[
+        PhotoUrlBuilderProtocol, Depends(get_photo_url_builder)
+    ],
 ) -> HorseRepositoryProtocol:
-    return HorseRepository(session=session)
+    return HorseRepository(session=session, photo_url_builder=photo_url_builder)
 
 
 async def get_horse_children_repository(

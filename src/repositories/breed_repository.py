@@ -1,9 +1,11 @@
+import re
 from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import Table, func, or_, select
 
 from core.entities.breeds import Breed
+from core.entities.horse import HorseKindEnum
 from models.breeds import breeds
 
 from .abstract_repository import TenantScopedRepository
@@ -21,9 +23,19 @@ class BreedRepository(TenantScopedRepository[Breed]):
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
+        kind: list[HorseKindEnum] | None = None,
         sort: (
             list[
-                Literal["name", "description", "slug", "-name", "-description", "-slug"]
+                Literal[
+                    "name",
+                    "description",
+                    "slug",
+                    "kind",
+                    "-name",
+                    "-description",
+                    "-slug",
+                    "-kind",
+                ]
             ]
             | None
         ) = None,
@@ -38,18 +50,27 @@ class BreedRepository(TenantScopedRepository[Breed]):
             .where(self.table.c.equestrian_id == equestrian_id)
         )
 
-        conditions = []
+        text_conditions = []
         if name:
-            conditions.append(self.table.c.name.ilike(f"%{name}%"))
+            text_conditions.append(self.table.c.name.op("~*")(re.escape(name)))
         if slug:
-            conditions.append(self.table.c.slug.ilike(f"%{slug}%"))
+            text_conditions.append(self.table.c.slug.op("~*")(re.escape(slug)))
         if description:
-            conditions.append(self.table.c.description.ilike(f"%{description}%"))
+            text_conditions.append(
+                self.table.c.description.op("~*")(re.escape(description))
+            )
         if page_data:
-            conditions.append(self.table.c.page_data.ilike(f"%{page_data}%"))
+            text_conditions.append(
+                self.table.c.page_data.op("~*")(re.escape(page_data))
+            )
 
-        if conditions:
-            where_clause = or_(*conditions)
+        if text_conditions:
+            where_clause = or_(*text_conditions)
+            stmt = stmt.where(where_clause)
+            count_stmt = count_stmt.where(where_clause)
+
+        if kind:
+            where_clause = self.table.c.kind.in_([item.value for item in kind])
             stmt = stmt.where(where_clause)
             count_stmt = count_stmt.where(where_clause)
 

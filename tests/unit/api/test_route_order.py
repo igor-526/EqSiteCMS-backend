@@ -6,7 +6,12 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from core.entities.equestrian import EquestrianContext
-from depends.services import get_read_equestrian_context
+from depends.services import (
+    get_current_user,
+    get_horse_service,
+    get_protected_equestrian_context,
+    get_read_equestrian_context,
+)
 from main import app
 
 
@@ -108,3 +113,50 @@ def test_horse_pedigree_invalid_mode_returns_structural_422() -> None:
 
     assert response.status_code == 422
     assert "path -> mode" in response.json()["detail"]
+
+
+def test_horse_create_extra_kind_returns_structural_422() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = lambda: object()
+    app.dependency_overrides[get_protected_equestrian_context] = (
+        lambda: EquestrianContext(
+            id=UUID("11111111-1111-4111-8111-111111111111"),
+            source="unit-test",
+        )
+    )
+    app.dependency_overrides[get_horse_service] = lambda: object()
+
+    try:
+        response = client.post("/api/horses", json={"name": "Test", "kind": "horse"})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_protected_equestrian_context, None)
+        app.dependency_overrides.pop(get_horse_service, None)
+
+    assert response.status_code == 422
+    assert "body -> kind" in response.json()["detail"]
+
+
+def test_horse_update_extra_kind_returns_structural_422() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = lambda: object()
+    app.dependency_overrides[get_protected_equestrian_context] = (
+        lambda: EquestrianContext(
+            id=UUID("11111111-1111-4111-8111-111111111111"),
+            source="unit-test",
+        )
+    )
+    app.dependency_overrides[get_horse_service] = lambda: object()
+
+    try:
+        response = client.patch(
+            "/api/horses/11111111-1111-4111-8111-111111111111",
+            json={"kind": "horse"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_protected_equestrian_context, None)
+        app.dependency_overrides.pop(get_horse_service, None)
+
+    assert response.status_code == 422
+    assert "body -> kind" in response.json()["detail"]

@@ -24,6 +24,11 @@ class FakeSettings:
     s3_public_endpoint_url = "http://localhost:9999"
 
 
+class FakePhotoUrlBuilder:
+    def build(self, filename: str) -> str:
+        return f"http://localhost:9000/gallery/{filename}"
+
+
 # ---------------------------------------------------------------------------
 # UT-21: get_media_storage returns S3MediaStorage instance
 # ---------------------------------------------------------------------------
@@ -98,3 +103,17 @@ async def test_ut25_get_photo_url_builder_public_endpoint_from_settings() -> Non
 
     assert isinstance(result, S3PhotoUrlBuilder)
     assert result.public_endpoint_url == fake.s3_public_endpoint_url.rstrip("/")
+
+
+async def test_get_horse_repository_wires_photo_url_builder() -> None:
+    from depends.repositories import get_horse_repository
+    from repositories.horse_repository import HorseRepository
+
+    builder = FakePhotoUrlBuilder()
+    result = await get_horse_repository(
+        session=object(),  # type: ignore[arg-type]
+        photo_url_builder=builder,
+    )
+
+    assert isinstance(result, HorseRepository)
+    assert result.photo_url_builder is builder

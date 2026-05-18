@@ -2,6 +2,7 @@ from typing import Literal, Protocol
 from uuid import UUID
 
 from core.entities.breeds import Breed
+from core.entities.horse import HorseKindEnum
 
 from .base_repository import TenantBaseRepositoryProtocol
 
@@ -25,9 +26,19 @@ class BreedRepositoryProtocol(TenantBaseRepositoryProtocol[Breed], Protocol):
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
+        kind: list[HorseKindEnum] | None = None,
         sort: (
             list[
-                Literal["name", "description", "slug", "-name", "-description", "-slug"]
+                Literal[
+                    "name",
+                    "description",
+                    "slug",
+                    "kind",
+                    "-name",
+                    "-description",
+                    "-slug",
+                    "-kind",
+                ]
             ]
             | None
         ) = None,
