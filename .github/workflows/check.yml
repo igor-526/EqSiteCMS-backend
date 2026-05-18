@@ -19,5 +19,15 @@ jobs:
       - name: Install deps
         run: uv sync --locked
 
-      - name: Run lint
+      - name: mypy
         run: uv run mypy src
+
+      - name: flake8
+        run: uv run flake8
+
+      - name: ruff
+        run: uv run ruff check src
+
+      - name: test
+        run: uv run pytest
+
