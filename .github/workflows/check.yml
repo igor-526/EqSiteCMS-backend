@@ -1,0 +1,20 @@
+name: Check
+
+on:
+  push:
+    branches:
+      - main
+      - release
+      - feature/actions-ci
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install deps
+        run: uv sync --locked
+
+      - name: Run lint
+        run: uv run mypy src
