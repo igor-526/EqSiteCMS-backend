@@ -8,7 +8,7 @@ on:
       - feature/actions-build
 
 env:
-  IMAGE: ghcr.io/igor-526/EqSiteCMS-backend
+  IMAGE: ghcr.io/igor-526/eqsitecms-backend
 
 jobs:
   lint:
