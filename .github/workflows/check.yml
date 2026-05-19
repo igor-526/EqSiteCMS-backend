@@ -5,13 +5,12 @@ on:
     branches:
       - main
       - release
-      - feature/actions-build
 
 env:
   IMAGE: ghcr.io/igor-526/eqsitecms-backend
 
 jobs:
-  lint:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -37,6 +36,8 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/release'
     permissions:
       contents: read
       packages: write
