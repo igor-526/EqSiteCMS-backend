@@ -1,0 +1,24 @@
+# Deployment settings
+name: eqcms-backend
+componentsLabel: backend
+replicaCount: 1
+namespace: cms
+
+# App settings
+secretName: eqsitecms-backend-secret
+containerPort: 8000
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Ingress settings
+url: api.eqcms.ru
+
+# Image settings
+image: ghcr.io/igor-526/eqsitecms-backend
+imagePullSecertName: ghcr-secret
+imageTag: latest

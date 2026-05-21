@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}-deployment
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      components: {{ .Values.componentsLabel }}
+  template:
+    metadata:
+      name: {{ .Values.name }}
+      labels:
+        components: {{ .Values.componentsLabel }}
+    spec:
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecertName }}
+      containers:
+        - name: {{ .Values.name }}
+          image: "{{ .Values.image }}:{{ .Values.imageTag }}"
+          ports:
+            - containerPort: {{ .Values.containerPort }}
+          resources: {{ .Values.resources | toYaml | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.secretName }}
+          livenessProbe:
+            exec:
+              command:
+                - curl
+                - --fail
+                - http://localhost:8000/health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 1

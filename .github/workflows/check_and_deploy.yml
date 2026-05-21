@@ -1,4 +1,4 @@
-name: Check
+name: CheckAndDeploy
 
 on:
   push:
@@ -60,4 +60,19 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+    
+      - uses: azure/setup-helm@v4
+
+      - name: Deploy
+        run: |
+          helm upgrade --install eqcms-backend .helm/ \
+            --namespace cms \
+            --create-namespace \
+            --set imageTag=${{ github.sha }} \
+            --wait
 
