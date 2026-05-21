@@ -54,6 +54,10 @@ plugins = ["pydantic.mypy"]
 module = "aioboto3.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "botocore.*"
+ignore_missing_imports = true
+
 [tool.isort]
 profile = "black"
 

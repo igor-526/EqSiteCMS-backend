@@ -2,7 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from botocore.config import Config
 from core.exceptions.base import ClientError
+
+
+def _s3_client_config() -> Config:
+    """S3-compatible storage (Beget, MinIO) vs botocore >= 1.36 checksum defaults."""
+    return Config(
+        request_checksum_calculation="when_required",
+        response_checksum_validation="when_required",
+    )
 
 
 class S3MediaStorage:
@@ -27,6 +36,7 @@ class S3MediaStorage:
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
+            config=_s3_client_config(),
         ) as s3:
             await s3.put_object(
                 Bucket=self.bucket_name,
@@ -44,6 +54,7 @@ class S3MediaStorage:
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
+            config=_s3_client_config(),
         ) as s3:
             response = await s3.get_object(Bucket=self.bucket_name, Key=filename)
             return await response["Body"].read()
@@ -57,17 +68,27 @@ class S3MediaStorage:
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
+            config=_s3_client_config(),
         ) as s3:
             await s3.delete_object(Bucket=self.bucket_name, Key=filename)
 
 
 class S3PhotoUrlBuilder:
-    def __init__(self, public_endpoint_url: str, bucket_name: str) -> None:
+    def __init__(
+        self,
+        public_endpoint_url: str,
+        bucket_name: str,
+        *,
+        include_bucket_in_path: bool = True,
+    ) -> None:
         self.public_endpoint_url = public_endpoint_url.rstrip("/")
         self.bucket_name = bucket_name
+        self.include_bucket_in_path = include_bucket_in_path
 
     def build(self, filename: str) -> str:
-        return f"{self.public_endpoint_url}/{self.bucket_name}/{filename}"
+        if self.include_bucket_in_path:
+            return f"{self.public_endpoint_url}/{self.bucket_name}/{filename}"
+        return f"{self.public_endpoint_url}/{filename}"
 
 
 class AllowedMediaTypeValidator:

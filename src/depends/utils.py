@@ -47,6 +47,7 @@ async def get_photo_url_builder() -> PhotoUrlBuilderProtocol:
     return S3PhotoUrlBuilder(
         public_endpoint_url=settings.s3_public_endpoint_url,
         bucket_name=settings.s3_bucket_name,
+        include_bucket_in_path=settings.s3_public_include_bucket,
     )
 
 

@@ -22,6 +22,7 @@ class FakeSettings:
     s3_secret_key = "fakesecret"
     s3_bucket_name = "test-bucket"
     s3_public_endpoint_url = "http://localhost:9999"
+    s3_public_include_bucket = True
 
 
 class FakePhotoUrlBuilder:
@@ -103,6 +104,18 @@ async def test_ut25_get_photo_url_builder_public_endpoint_from_settings() -> Non
 
     assert isinstance(result, S3PhotoUrlBuilder)
     assert result.public_endpoint_url == fake.s3_public_endpoint_url.rstrip("/")
+    assert result.include_bucket_in_path is True
+
+
+async def test_get_photo_url_builder_include_bucket_from_settings() -> None:
+    fake = FakeSettings()
+    fake.s3_public_include_bucket = False
+    with patch("depends.utils.settings", fake):
+        from depends.utils import get_photo_url_builder
+
+        result = await get_photo_url_builder()
+
+    assert result.include_bucket_in_path is False
 
 
 async def test_get_horse_repository_wires_photo_url_builder() -> None:

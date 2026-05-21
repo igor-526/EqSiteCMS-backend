@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     s3_public_endpoint_url: str = Field(
         default="http://localhost:9000", alias="S3_PUBLIC_ENDPOINT_URL"
     )
+    s3_public_include_bucket: bool = Field(
+        default=True, alias="S3_PUBLIC_INCLUDE_BUCKET"
+    )
 
     model_config = SettingsConfigDict(populate_by_name=True)
 

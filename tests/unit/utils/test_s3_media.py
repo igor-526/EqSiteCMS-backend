@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from utils.media import S3MediaStorage, S3PhotoUrlBuilder
+from botocore.config import Config
+
+from utils.media import S3MediaStorage, S3PhotoUrlBuilder, _s3_client_config
 
 # Only async tests use @pytest.mark.asyncio; sync tests (UT-16..UT-20) do not.
 
@@ -305,6 +307,60 @@ async def test_ut14_constructor_credentials_passed_to_boto3() -> None:
     assert captured_kwargs["endpoint_url"] == "http://custom:9000"
     assert captured_kwargs["aws_access_key_id"] == "mykey"
     assert captured_kwargs["aws_secret_access_key"] == "mysecret"
+    config = captured_kwargs["config"]
+    assert isinstance(config, Config)
+    assert config.request_checksum_calculation == "when_required"
+    assert config.response_checksum_validation == "when_required"
+
+
+# ---------------------------------------------------------------------------
+# UT-S3FIX: checksum config for S3-compatible providers (Beget, MinIO)
+# ---------------------------------------------------------------------------
+
+
+def test_ut_s3fix_s3_client_config_when_required() -> None:
+    config = _s3_client_config()
+    assert config.request_checksum_calculation == "when_required"
+    assert config.response_checksum_validation == "when_required"
+    assert _s3_client_config() is not config
+
+
+async def test_ut_s3fix_load_passes_checksum_config() -> None:
+    captured_kwargs: dict[str, Any] = {}
+    session_mock = MagicMock()
+
+    @asynccontextmanager
+    async def capturing_client(*args: Any, **kwargs: Any):  # type: ignore[misc]
+        captured_kwargs.update(kwargs)
+        s3 = _make_s3_client_mock(body_content=b"x")
+        yield s3
+
+    session_mock.client = capturing_client
+    storage = make_storage()
+
+    with patch("aioboto3.Session", return_value=session_mock):
+        await storage.load("f.jpg")
+
+    assert captured_kwargs["config"].request_checksum_calculation == "when_required"
+
+
+async def test_ut_s3fix_delete_passes_checksum_config() -> None:
+    captured_kwargs: dict[str, Any] = {}
+    session_mock = MagicMock()
+
+    @asynccontextmanager
+    async def capturing_client(*args: Any, **kwargs: Any):  # type: ignore[misc]
+        captured_kwargs.update(kwargs)
+        s3 = _make_s3_client_mock()
+        yield s3
+
+    session_mock.client = capturing_client
+    storage = make_storage()
+
+    with patch("aioboto3.Session", return_value=session_mock):
+        await storage.delete("f.jpg")
+
+    assert captured_kwargs["config"].response_checksum_validation == "when_required"
 
 
 # ---------------------------------------------------------------------------
@@ -385,6 +441,16 @@ def test_ut19_url_builder_special_chars_not_encoded() -> None:
 # ---------------------------------------------------------------------------
 # UT-20: different bucket_name → different URLs
 # ---------------------------------------------------------------------------
+
+
+def test_ut_s3fix_url_builder_subdomain_without_bucket_in_path() -> None:
+    builder = S3PhotoUrlBuilder(
+        public_endpoint_url="https://cloud.eqcms.ru",
+        bucket_name="165bf68155be-eqcms",
+        include_bucket_in_path=False,
+    )
+    url = builder.build("abc123.jpg")
+    assert url == "https://cloud.eqcms.ru/abc123.jpg"
 
 
 def test_ut20_different_bucket_names_produce_different_urls() -> None:
