@@ -50,7 +50,7 @@ class AbstractRepository[E: Entity](ABC):
         if "updated_at" in self.table.c:
             now = datetime.now(timezone.utc)
             data["updated_at"] = now
-            entity.updated_at = now
+            setattr(entity, "updated_at", now)
         stmt = update(self.table).where(self.table.c.id == entity.id).values(**data)
         await self.session.execute(stmt)
         await self.session.flush()
@@ -143,7 +143,7 @@ class TenantScopedRepository[E: Entity]:
         if "updated_at" in self.table.c:
             now = datetime.now(timezone.utc)
             data["updated_at"] = now
-            entity.updated_at = now
+            setattr(entity, "updated_at", now)
         stmt = (
             update(self.table)
             .where(
