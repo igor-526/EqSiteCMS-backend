@@ -59,12 +59,15 @@ class SplitCORSMiddleware:
 
         if method == "OPTIONS" and "access-control-request-method" in headers:
             preflight_method = headers.get("access-control-request-method", "")
-            protected = _is_protected_request("OPTIONS", path, preflight_method)
+            protected = (
+                _is_protected_request("OPTIONS", path, preflight_method)
+                or origin in self.cms_origins
+            )
             response = self._preflight_response(origin, headers, protected=protected)
             await response(scope, receive, send)
             return
 
-        protected = _is_protected_request(method, path)
+        protected = _is_protected_request(method, path) or origin in self.cms_origins
         await self.app(
             scope,
             receive,

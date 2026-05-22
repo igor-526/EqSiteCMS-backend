@@ -32,10 +32,12 @@ def test_public_get_does_not_set_credentials(client: TestClient) -> None:
     assert "access-control-allow-credentials" not in response.headers
 
 
-def test_public_get_wildcard_for_cms_origin_too(client: TestClient) -> None:
+def test_public_get_cms_origin_gets_strict_cors(client: TestClient) -> None:
+    """CMS origin always receives protected (strict) CORS, even on public GETs."""
     response = client.get("/health", headers={"Origin": CMS_ORIGIN})
 
-    assert response.headers.get("access-control-allow-origin") == "*"
+    assert response.headers.get("access-control-allow-origin") == CMS_ORIGIN
+    assert response.headers.get("access-control-allow-credentials") == "true"
 
 
 # ---------------------------------------------------------------------------
@@ -167,3 +169,39 @@ def test_no_origin_header_no_cors_headers_added(client: TestClient) -> None:
 
     assert "access-control-allow-origin" not in response.headers
     assert "access-control-allow-credentials" not in response.headers
+
+
+# ---------------------------------------------------------------------------
+# CMS origin + public GET — должен получать строгий CORS, не wildcard
+# ---------------------------------------------------------------------------
+
+
+def test_cms_origin_public_get_horses_gets_strict_cors(client: TestClient) -> None:
+    """CMS origin + GET /api/horses → ACAO: origin, credentials: true (не wildcard)."""
+    response = client.get("/api/horses", headers={"Origin": CMS_ORIGIN})
+
+    assert response.headers.get("access-control-allow-origin") == CMS_ORIGIN
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+def test_consumer_origin_public_get_horses_gets_wildcard(client: TestClient) -> None:
+    """Consumer origin + GET /api/horses → ACAO: *, нет credentials."""
+    response = client.get("/api/horses", headers={"Origin": CONSUMER_ORIGIN})
+
+    assert response.headers.get("access-control-allow-origin") == "*"
+    assert "access-control-allow-credentials" not in response.headers
+
+
+def test_cms_origin_preflight_get_horses_gets_strict_cors(client: TestClient) -> None:
+    """CMS origin + preflight GET /api/horses → 200, строгий CORS (не wildcard)."""
+    response = client.options(
+        "/api/horses",
+        headers={
+            "Origin": CMS_ORIGIN,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == CMS_ORIGIN
+    assert response.headers.get("access-control-allow-credentials") == "true"
