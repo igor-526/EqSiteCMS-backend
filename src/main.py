@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from uvicorn import run
@@ -22,6 +21,7 @@ from api import (
 from core.exceptions.auth import ForbiddenError, InvalidCredentials
 from core.exceptions.base import ClientError, NotFoundError
 from core.exceptions.tenant import TenantNotFound
+from core.middleware.cors import SplitCORSMiddleware
 from settings import settings
 from utils.configure_logger import configure_logger
 from utils.seeding.init_registry import init_registry
@@ -61,19 +61,8 @@ async def health_check() -> dict[str, str]:
 
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        f"http://{settings.cms_panel_domain}",
-        f"http://{settings.cms_backend_domain}",
-        f"http://{settings.main_site_domain}",
-        f"https://{settings.cms_panel_domain}",
-        f"https://{settings.cms_backend_domain}",
-        f"https://{settings.main_site_domain}",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    SplitCORSMiddleware,
+    cms_origins=settings.cms_cors_origins,
 )
 
 

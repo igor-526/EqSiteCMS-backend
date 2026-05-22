@@ -7,7 +7,6 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from botocore.config import Config
 
 from utils.media import S3MediaStorage, S3PhotoUrlBuilder, _s3_client_config

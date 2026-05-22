@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     cms_backend_domain: str = Field(
         default="localhost:8000", alias="CMS_BACKEND_DOMAIN"
     )
-    main_site_domain: str = Field(default="localhost:3000", alias="MAIN_SITE_DOMAIN")
+    cms_cors_origins_raw: str = Field(default="", alias="CMS_CORS_ORIGINS")
 
     db_user: str = Field(default="eqsitecmsdev", alias="POSTGRES_USER")
     db_password: str = Field(default="eqsitecmsdev", alias="POSTGRES_PASSWORD")
@@ -41,6 +41,18 @@ class Settings(BaseSettings):
     s3_public_include_bucket: bool = Field(
         default=True, alias="S3_PUBLIC_INCLUDE_BUCKET"
     )
+
+    @property
+    def cms_cors_origins(self) -> list[str]:
+        if self.cms_cors_origins_raw.strip():
+            return [
+                o.strip() for o in self.cms_cors_origins_raw.split(",") if o.strip()
+            ]
+        return [
+            "http://localhost:3000",
+            f"http://{self.cms_panel_domain}",
+            f"https://{self.cms_panel_domain}",
+        ]
 
     model_config = SettingsConfigDict(populate_by_name=True)
 
