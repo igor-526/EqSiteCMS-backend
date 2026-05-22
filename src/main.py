@@ -17,6 +17,7 @@ from api import (
     photos_router,
     prices_router,
     site_settings_router,
+    users_router,
 )
 from core.exceptions.auth import ForbiddenError, InvalidCredentials
 from core.exceptions.base import ClientError, NotFoundError
@@ -52,6 +53,7 @@ router.include_router(news_router)
 router.include_router(photos_router)
 router.include_router(prices_router)
 router.include_router(site_settings_router)
+router.include_router(users_router, prefix="/users", tags=["Users"])
 app.include_router(router)
 
 

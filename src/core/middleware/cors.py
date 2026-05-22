@@ -10,6 +10,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 # При добавлении нового защищённого GET-эндпоинта — добавить путь сюда.
 _PROTECTED_GET_PATH_PREFIXES: tuple[str, ...] = (
     "/api/auth/me",
+    "/api/users",
     "/api/news-cms",
 )
 

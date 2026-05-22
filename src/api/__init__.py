@@ -8,3 +8,4 @@ from .news import router as news_router
 from .photos import router as photos_router
 from .prices import router as prices_router
 from .site_settings import router as site_settings_router
+from .users import router as users_router

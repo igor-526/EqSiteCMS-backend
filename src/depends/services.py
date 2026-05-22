@@ -71,8 +71,16 @@ async def get_auth_service(
 
 async def get_user_service(
     user_repository: Annotated[UserRepositoryProtocol, Depends(get_user_repository)],
+    equestrian_repository: Annotated[
+        EquestrianRepositoryProtocol, Depends(get_equestrian_repository)
+    ],
+    security: Annotated[SecurityProtocol, Depends(get_security)],
 ) -> UserService:
-    return UserService(repository=user_repository)
+    return UserService(
+        repository=user_repository,
+        equestrian_repository=equestrian_repository,
+        security=security,
+    )
 
 
 async def get_current_user(
