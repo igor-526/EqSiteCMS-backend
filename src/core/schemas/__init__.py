@@ -13,7 +13,10 @@ from .horse_service import (
     HorseServiceUpdateDto,
 )
 from .horses import (
+    FoalParentRefDto,
+    FoalParentsDto,
     HorseCreateInDto,
+    HorseFoalOutDto,
     HorseOutDto,
     HorsePedigree,
     HorsePhotosUpdateInDto,
@@ -66,6 +69,9 @@ __all__ = [
     "PriceCreateDto",
     "PriceUpdateDto",
     "PricePhotosUpdateDto",
+    "FoalParentRefDto",
+    "FoalParentsDto",
+    "HorseFoalOutDto",
     "HorseOutDto",
     "HorseWithPedigreeOutDto",
     "HorsePedigree",

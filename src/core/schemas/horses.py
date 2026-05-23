@@ -110,6 +110,29 @@ class HorseOutDto(BaseSchema):
         return int(days / 365.25)
 
 
+class FoalParentRefDto(BaseSchema):
+    """Минимальный DTO производителя жеребёнка: только id и name."""
+
+    id: UUID = Field(..., description="Идентификатор лошади")
+    name: str = Field(..., description="Кличка лошади")
+
+
+class FoalParentsDto(BaseSchema):
+    """Первое поколение производителей жеребёнка."""
+
+    sire: FoalParentRefDto | None = Field(default=None, description="Отец")
+    dam: FoalParentRefDto | None = Field(default=None, description="Мать")
+
+
+class HorseFoalOutDto(HorseOutDto):
+    """DTO жеребёнка с первым поколением производителей."""
+
+    parents: FoalParentsDto = Field(
+        default_factory=FoalParentsDto,
+        description="Первое поколение производителей жеребёнка",
+    )
+
+
 class HorsePedigree(BaseSchema):
     """DTO для вывода родословной лошади (sire/dam рекурсивно с родословной по поколениям)."""
 
@@ -121,7 +144,9 @@ class HorsePedigree(BaseSchema):
         default=None,
         description="Родитель-самочка",
     )
-    foals: list[HorseOutDto] = Field(default_factory=list, description="Потомки лошади")
+    foals: list[HorseFoalOutDto] = Field(
+        default_factory=list, description="Потомки лошади с их производителями"
+    )
 
 
 class HorseWithPedigreeOutDto(HorseOutDto, BaseSchema):

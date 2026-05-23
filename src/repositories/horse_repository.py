@@ -19,6 +19,9 @@ from core.protocols.media import PhotoUrlBuilderProtocol
 from core.schemas import (
     BreedOutDto,
     CoatColorOutDto,
+    FoalParentRefDto,
+    FoalParentsDto,
+    HorseFoalOutDto,
     HorseOutDto,
     HorseOwnerOutDto,
     HorsePedigree,
@@ -636,11 +639,46 @@ class HorseRepository(TenantScopedRepository[Horse]):
                     foals_by_horse[parent_id] = []
                 foals_by_horse[parent_id].append(child_id)
 
+            # Собираем всех жеребят для поиска их производителей
+            all_foal_ids: set[UUID] = {
+                foal_id
+                for foal_list in foals_by_horse.values()
+                for foal_id in foal_list
+            }
+
+            foal_sire_by_foal: dict[UUID, UUID] = {}
+            foal_dam_by_foal: dict[UUID, UUID] = {}
+
+            if all_foal_ids:
+                foal_parents_stmt = (
+                    select(
+                        horse_children.c.child_id,
+                        horse_children.c.horse_id,
+                        horse.c.sex,
+                    )
+                    .join(horse, horse_children.c.horse_id == horse.c.id)
+                    .where(
+                        horse_children.c.child_id.in_(all_foal_ids),
+                        horse.c.equestrian_id == equestrian_id,
+                    )
+                )
+                foal_parents_result = await self.session.execute(foal_parents_stmt)
+                for row in foal_parents_result.mappings().all():
+                    child_id = UUID(str(row["child_id"]))
+                    parent_id = UUID(str(row["horse_id"]))
+                    sex = row["sex"]
+                    if sex in (HorseSexEnum.MALE.value, HorseSexEnum.GELD.value):
+                        foal_sire_by_foal[child_id] = parent_id
+                    elif sex == HorseSexEnum.FEMALE.value:
+                        foal_dam_by_foal[child_id] = parent_id
+
             pedigree_ids: set[UUID] = (
                 set(horse_ids)
                 | set(sire_by_horse.values())
                 | set(dam_by_horse.values())
                 | {f for fs in foals_by_horse.values() for f in fs}
+                | set(foal_sire_by_foal.values())
+                | set(foal_dam_by_foal.values())
             )
             missing_ids = pedigree_ids - set(horses_dict.keys())
 
@@ -659,6 +697,14 @@ class HorseRepository(TenantScopedRepository[Horse]):
                     all_dtos.update(fetched)
 
             top_level_ids = set(horse_ids)
+
+            def make_foal_parent_ref(parent_id: UUID | None) -> FoalParentRefDto | None:
+                if parent_id is None:
+                    return None
+                dto = all_dtos.get(parent_id)
+                if dto is None:
+                    return None
+                return FoalParentRefDto(id=dto.id, name=dto.name)
 
             def build_pedigree_dto(
                 h_id: UUID,
@@ -680,7 +726,17 @@ class HorseRepository(TenantScopedRepository[Horse]):
                     build_pedigree_dto(dam_id, generations_left - 1) if dam_id else None
                 )
                 foals_dtos = (
-                    [all_dtos[f] for f in foals_by_horse.get(h_id, []) if f in all_dtos]
+                    [
+                        HorseFoalOutDto(
+                            **all_dtos[f].model_dump(),
+                            parents=FoalParentsDto(
+                                sire=make_foal_parent_ref(foal_sire_by_foal.get(f)),
+                                dam=make_foal_parent_ref(foal_dam_by_foal.get(f)),
+                            ),
+                        )
+                        for f in foals_by_horse.get(h_id, [])
+                        if f in all_dtos
+                    ]
                     if h_id in top_level_ids
                     else []
                 )
@@ -705,7 +761,17 @@ class HorseRepository(TenantScopedRepository[Horse]):
                             sire=None,
                             dam=None,
                             foals=[
-                                all_dtos[f]
+                                HorseFoalOutDto(
+                                    **all_dtos[f].model_dump(),
+                                    parents=FoalParentsDto(
+                                        sire=make_foal_parent_ref(
+                                            foal_sire_by_foal.get(f)
+                                        ),
+                                        dam=make_foal_parent_ref(
+                                            foal_dam_by_foal.get(f)
+                                        ),
+                                    ),
+                                )
                                 for f in foals_by_horse.get(h_id, [])
                                 if f in all_dtos
                             ],

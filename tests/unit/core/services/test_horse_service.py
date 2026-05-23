@@ -31,7 +31,7 @@ from core.schemas import (
     HorseWithPedigreeOutDto,
     UserOutDto,
 )
-from core.schemas.horses import HorsePhotosUpdateInDto
+from core.schemas.horses import FoalParentsDto, HorseFoalOutDto, HorsePhotosUpdateInDto
 from core.services.horse import HorseService
 
 pytestmark = pytest.mark.asyncio
@@ -119,11 +119,15 @@ class FakeHorseRepository:
             if self.current_dam_id is not None
             else None
         )
-        foals = [
+        raw_foals = [
             foal
             for foal_id in self.current_foal_ids
             if (foal := await self.get_horse_full_info_by_id(horse_id=foal_id))
             is not None
+        ]
+        foals = [
+            HorseFoalOutDto(**f.model_dump(), parents=FoalParentsDto())
+            for f in raw_foals
         ]
         return HorseWithPedigreeOutDto(
             **dto.model_dump(),
@@ -1152,7 +1156,12 @@ async def test_horse_kind_to_breed_pedigree_nested_dtos_do_not_expose_kind() -> 
         pedigree=HorsePedigree(
             sire=make_horse_out_dto(name="Sire"),
             dam=make_horse_out_dto(name="Dam"),
-            foals=[make_horse_out_dto(name="Foal")],
+            foals=[
+                HorseFoalOutDto(
+                    **make_horse_out_dto(name="Foal").model_dump(),
+                    parents=FoalParentsDto(sire=None, dam=None),
+                )
+            ],
         ),
     )
 
@@ -1161,6 +1170,7 @@ async def test_horse_kind_to_breed_pedigree_nested_dtos_do_not_expose_kind() -> 
     assert "kind" not in dumped["pedigree"]["sire"]
     assert "kind" not in dumped["pedigree"]["dam"]
     assert "kind" not in dumped["pedigree"]["foals"][0]
+    assert "parents" in dumped["pedigree"]["foals"][0]
 
 
 async def test_horse_kind_to_breed_horse_create_update_reject_extra_kind() -> None:
