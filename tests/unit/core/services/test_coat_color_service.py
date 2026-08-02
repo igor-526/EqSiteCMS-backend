@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 
 from core.entities.coat_color import CoatColor
+from core.entities.equestrian import EquestrianContext
+from core.entities.user import UserScope
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
 from core.schemas.coat_color import CoatColorCreateDto, CoatColorUpdateDto
+from core.schemas.users import UserOutDto
 from core.services.coat_color import CoatColorService
 
 pytestmark = pytest.mark.asyncio
@@ -153,6 +158,18 @@ def make_service() -> tuple[CoatColorService, FakeCoatColorRepository]:
     return CoatColorService(coat_color_repository=cast(Any, repo)), repo
 
 
+def make_user(*, scope_names: list[str]) -> UserOutDto:
+    return UserOutDto(
+        id=uuid4(),
+        username="coat-color-user",
+        created_at=datetime.now(tz=timezone.utc),
+        scopes=[
+            UserScope(scope_name=name, scope_description=f"{name} scope")
+            for name in scope_names
+        ],
+    )
+
+
 def assert_raises_client_error(call: Callable[[], Any]) -> None:
     with pytest.raises(ClientError):
         call()
@@ -247,16 +264,15 @@ async def test_create_uc03_full_input_preserves_normalized_fields() -> None:
     ]
 
 
-async def test_create_uc05_uc06_empty_or_whitespace_business_values_are_client_errors() -> (
+async def test_create_uc05_empty_name_is_client_error_and_empty_slug_is_generated() -> (
     None
 ):
     service, repo = make_service()
 
     with pytest.raises(ClientError):
         await service.create(CoatColorCreateDto(name=" "))
-    with pytest.raises(ClientError):
-        await service.create(CoatColorCreateDto(name="Bay", slug=""))
-    assert repo.calls == []
+    created = await service.create(CoatColorCreateDto(name="Bay", slug=""))
+    assert created.slug == "bay"
 
 
 async def test_create_uc10_uc11_length_boundaries_are_enforced() -> None:
@@ -403,12 +419,161 @@ async def test_update_uc21_repository_update_failure_does_not_delete_entity() ->
     assert current.id in repo.by_id
 
 
-async def test_update_uc29_business_validation_uses_client_error() -> None:
+async def test_update_uc29_empty_slug_preserves_current_slug() -> None:
     service, repo = make_service()
     repo.add(make_coat_color())
 
+    updated = await service.update("bay", CoatColorUpdateDto(slug=" "))
+    assert updated.slug == "bay"
+
+
+async def test_validation_026_create_slug_null_generates_slug() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(CoatColorCreateDto(name="Bay", slug=None))
+    ).slug == "bay"
+
+
+async def test_validation_026_create_whitespace_slug_generates_slug() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(CoatColorCreateDto(name="Bay", slug="  \t"))
+    ).slug == "bay"
+
+
+async def test_validation_026_generated_slug_collision_gets_suffix() -> None:
+    service, repo = make_service()
+    repo.add(make_coat_color(name="Existing", slug="gnedaya"))
+    assert (
+        await service.create(CoatColorCreateDto(name="Гнедая", slug=""))
+    ).slug == "gnedaya-1"
+
+
+async def test_validation_026_missing_description_is_none() -> None:
+    service, _ = make_service()
+    assert (await service.create(CoatColorCreateDto(name="Bay"))).description is None
+
+
+async def test_validation_026_null_description_is_none() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(CoatColorCreateDto(name="Bay", description=None))
+    ).description is None
+
+
+async def test_validation_026_empty_description_is_none() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(CoatColorCreateDto(name="Bay", description=""))
+    ).description is None
+
+
+async def test_validation_026_whitespace_description_is_none() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(CoatColorCreateDto(name="Bay", description=" \t"))
+    ).description is None
+
+
+async def test_validation_026_description_511_is_accepted() -> None:
+    service, _ = make_service()
+    assert (
+        len(
+            (
+                await service.create(
+                    CoatColorCreateDto(name="Bay", description="d" * 511)
+                )
+            ).description
+            or ""
+        )
+        == 511
+    )
+
+
+async def test_validation_026_description_512_is_rejected_without_write() -> None:
+    service, repo = make_service()
     with pytest.raises(ClientError):
-        await service.update("bay", CoatColorUpdateDto(slug=" "))
+        await service.create(CoatColorCreateDto(name="Bay", description="d" * 512))
+    assert not any(name == "create" for name, _ in repo.calls)
+
+
+async def test_validation_026_rename_with_empty_slug_generates_unique_slug() -> None:
+    service, repo = make_service()
+    current = repo.add(make_coat_color(name="Old", slug="old"))
+    repo.add(make_coat_color(name="Taken", slug="ryzhaya"))
+    updated = await service.update(
+        str(current.id), CoatColorUpdateDto(name="Рыжая", slug="")
+    )
+    assert updated.slug == "ryzhaya-1"
+
+
+async def test_validation_026_update_empty_description_sets_none() -> None:
+    service, repo = make_service()
+    current = repo.add(make_coat_color())
+    updated = await service.update(str(current.id), CoatColorUpdateDto(description=" "))
+    assert updated.description is None
+
+
+async def test_validation_026_foreign_tenant_cannot_update_record() -> None:
+    class TenantAwareRepository(FakeCoatColorRepository):
+        async def get_by_slug_or_id(
+            self, slug_or_id: str | UUID, *, equestrian_id: UUID
+        ) -> CoatColor | None:
+            coat_color = await super().get_by_slug_or_id(slug_or_id)
+            if coat_color is None or coat_color.equestrian_id != equestrian_id:
+                return None
+            return coat_color
+
+    repo = TenantAwareRepository()
+    foreign_id = uuid4()
+    repo.add(make_coat_color(equestrian_id=foreign_id))
+    service = CoatColorService(coat_color_repository=cast(Any, repo))
+
+    with pytest.raises(ClientError, match="не найдена"):
+        await service.update(
+            "bay",
+            CoatColorUpdateDto(description="denied"),
+            equestrian_context=EquestrianContext(id=uuid4(), source="authenticated"),
+        )
+    assert repo.by_slug["bay"].description == "Brown coat with black points"
+
+
+async def test_validation_026_create_denies_authenticated_user_without_admin_scope() -> (
+    None
+):
+    service, repo = make_service()
+    with pytest.raises(ForbiddenError):
+        await service.create(
+            CoatColorCreateDto(name="Denied"),
+            user=make_user(scope_names=["CONTENT_EDITOR"]),
+        )
+    assert repo.calls == []
+
+
+async def test_validation_026_update_denies_authenticated_user_without_admin_scope() -> (
+    None
+):
+    service, repo = make_service()
+    current = repo.add(make_coat_color())
+    with pytest.raises(ForbiddenError):
+        await service.update(
+            "bay",
+            CoatColorUpdateDto(description="Denied"),
+            user=make_user(scope_names=[]),
+        )
+    assert current.description == "Brown coat with black points"
+    assert repo.calls == []
+
+
+async def test_validation_026_delete_denies_authenticated_user_without_admin_scope() -> (
+    None
+):
+    service, repo = make_service()
+    current = repo.add(make_coat_color())
+    with pytest.raises(ForbiddenError):
+        await service.delete("bay", user=make_user(scope_names=["CONTENT_EDITOR"]))
+    assert current.id in repo.by_id
+    assert repo.calls == []
 
 
 async def test_get_by_slug_or_id_uc01_returns_coat_color_by_slug_and_uuid() -> None:

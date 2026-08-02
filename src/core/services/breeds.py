@@ -52,13 +52,20 @@ class BreedService:
         return normalized
 
     def _validate_optional_text(
-        self, *, field: str, value: str | None, max_length: int | None = None
+        self,
+        *,
+        field: str,
+        value: str | None,
+        max_length: int | None = None,
+        empty_as_none: bool = False,
     ) -> str | None:
         if value is None:
             return None
 
         normalized = value.strip()
         if not normalized:
+            if empty_as_none:
+                return None
             raise ClientError(f"{field} не может быть пустым")
         if max_length is not None and len(normalized) > max_length:
             raise ClientError(f"{field} не может быть длиннее {max_length} символов")
@@ -87,16 +94,21 @@ class BreedService:
                     max_length=BREED_SHORT_NAME_MAX_LENGTH,
                 )
         if "slug" in data:
-            data["slug"] = self._validate_required_text(
-                field="Slug",
-                value=data["slug"],
-                max_length=BREED_SLUG_MAX_LENGTH,
-            )
+            raw_slug = data["slug"]
+            if raw_slug is None or not raw_slug.strip():
+                del data["slug"]
+            else:
+                data["slug"] = self._validate_required_text(
+                    field="Slug",
+                    value=raw_slug,
+                    max_length=BREED_SLUG_MAX_LENGTH,
+                )
         if "description" in data:
             data["description"] = self._validate_optional_text(
                 field="Описание породы",
                 value=data["description"],
                 max_length=BREED_DESCRIPTION_MAX_LENGTH,
+                empty_as_none=True,
             )
         if "page_data" in data:
             data["page_data"] = self._validate_optional_text(
@@ -146,6 +158,8 @@ class BreedService:
 
         self._check_admin_permission(user=user)
         breed_data = data.model_dump(exclude_none=True)
+        if "description" in data.model_fields_set:
+            breed_data["description"] = data.description
         self._validate_breed_data(breed_data, partial=False)
 
         existing = await self.breed_repository.find_by_name(
@@ -194,6 +208,8 @@ class BreedService:
             raise ClientError("Порода не найдена")
 
         update_data = data.model_dump(exclude_none=True)
+        if "description" in data.model_fields_set:
+            update_data["description"] = data.description
         if not update_data:
             raise ClientError("Нет данных для обновления")
         had_short_name = "short_name" in update_data

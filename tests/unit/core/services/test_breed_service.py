@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from core.entities.breeds import Breed
+from core.entities.equestrian import EquestrianContext
 from core.entities.horse import HorseKindEnum
 from core.entities.user import UserScope
 from core.exceptions.auth import ForbiddenError
@@ -348,16 +349,15 @@ async def test_create_uc03_full_input_preserves_normalized_fields() -> None:
     assert breed.page_data == "<div>Page</div>"
 
 
-async def test_create_uc05_uc06_empty_or_whitespace_business_values_are_client_errors() -> (
+async def test_create_uc05_empty_name_is_client_error_and_empty_slug_is_generated() -> (
     None
 ):
     service, repo = make_service()
 
     with pytest.raises(ClientError):
         await service.create(BreedCreateDto(name=" "))
-    with pytest.raises(ClientError):
-        await service.create(BreedCreateDto(name="Arabian", slug=""))
-    assert repo.calls == []
+    created = await service.create(BreedCreateDto(name="Arabian", slug=""))
+    assert created.slug == "arabian"
 
 
 async def test_create_uc10_uc11_length_boundaries_are_enforced() -> None:
@@ -483,12 +483,126 @@ async def test_update_uc21_repository_update_failure_does_not_delete_entity() ->
     assert current.id in repo.by_id
 
 
-async def test_update_uc29_business_validation_uses_client_error() -> None:
+async def test_update_uc29_empty_slug_preserves_current_slug() -> None:
     service, repo = make_service()
     repo.add(make_breed())
 
+    updated = await service.update("akhal-teke", BreedUpdateDto(slug=" "))
+    assert updated.slug == "akhal-teke"
+
+
+async def test_validation_026_create_slug_null_generates_slug() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(BreedCreateDto(name="Arabian", slug=None))
+    ).slug == "arabian"
+
+
+async def test_validation_026_create_whitespace_slug_generates_slug() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(BreedCreateDto(name="Arabian", slug="  \t"))
+    ).slug == "arabian"
+
+
+async def test_validation_026_generated_slug_collision_gets_suffix() -> None:
+    service, repo = make_service()
+    repo.add(make_breed(name="Existing", slug="arabian"))
+    assert (
+        await service.create(BreedCreateDto(name="Arabian Two", slug=""))
+    ).slug == "arabian-two"
+    assert (
+        await service.create(BreedCreateDto(name="Arabian", slug=""))
+    ).slug == "arabian-1"
+
+
+async def test_validation_026_missing_description_is_none() -> None:
+    service, _ = make_service()
+    assert (await service.create(BreedCreateDto(name="Arabian"))).description is None
+
+
+async def test_validation_026_null_description_is_none() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(BreedCreateDto(name="Arabian", description=None))
+    ).description is None
+
+
+async def test_validation_026_empty_description_is_none() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(BreedCreateDto(name="Arabian", description=""))
+    ).description is None
+
+
+async def test_validation_026_whitespace_description_is_none() -> None:
+    service, _ = make_service()
+    assert (
+        await service.create(BreedCreateDto(name="Arabian", description=" \t"))
+    ).description is None
+
+
+async def test_validation_026_description_511_is_accepted() -> None:
+    service, _ = make_service()
+    assert (
+        len(
+            (
+                await service.create(
+                    BreedCreateDto(name="Arabian", description="d" * 511)
+                )
+            ).description
+            or ""
+        )
+        == 511
+    )
+
+
+async def test_validation_026_description_512_is_rejected_without_write() -> None:
+    service, repo = make_service()
     with pytest.raises(ClientError):
-        await service.update("akhal-teke", BreedUpdateDto(slug=" "))
+        await service.create(BreedCreateDto(name="Arabian", description="d" * 512))
+    assert not any(name == "create" for name, _ in repo.calls)
+
+
+async def test_validation_026_rename_with_empty_slug_generates_unique_slug() -> None:
+    service, repo = make_service()
+    current = repo.add(make_breed(name="Old", slug="old"))
+    repo.add(make_breed(name="Taken", slug="novaya"))
+    updated = await service.update(
+        str(current.id), BreedUpdateDto(name="Новая", slug="")
+    )
+    assert updated.slug == "novaya-1"
+
+
+async def test_validation_026_update_empty_description_sets_none() -> None:
+    service, repo = make_service()
+    current = repo.add(make_breed())
+    updated = await service.update(str(current.id), BreedUpdateDto(description=" "))
+    assert updated.description is None
+
+
+async def test_validation_026_foreign_tenant_cannot_update_record() -> None:
+    class TenantAwareRepository(FakeBreedRepository):
+        async def get_by_slug_or_id(
+            self, slug_or_id: str | UUID, *, equestrian_id: UUID
+        ) -> Breed | None:
+            breed = await super().get_by_slug_or_id(slug_or_id)
+            if breed is None or breed.equestrian_id != equestrian_id:
+                return None
+            return breed
+
+    repo = TenantAwareRepository()
+    foreign_id = uuid4()
+    repo.add(make_breed(equestrian_id=foreign_id))
+    service = BreedService(breed_repository=cast(Any, repo))
+
+    with pytest.raises(ClientError, match="не найдена"):
+        await service.update(
+            "akhal-teke",
+            BreedUpdateDto(description="denied"),
+            equestrian_context=EquestrianContext(id=uuid4(), source="authenticated"),
+        )
+    assert repo.by_slug["akhal-teke"].description == "Fast horse"
 
 
 async def test_get_by_slug_or_id_uc01_returns_breed_by_slug_and_uuid() -> None:

@@ -6,9 +6,11 @@ from pydantic import ValidationError
 from core.entities.base import _generate_slug
 from core.entities.coat_color import CoatColor
 from core.entities.equestrian import EquestrianContext
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
 from core.protocols.repositories import CoatColorRepositoryProtocol
 from core.schemas import CoatColorCreateDto, CoatColorUpdateDto
+from core.schemas.users import UserOutDto
 from core.utils.html_security import validate_no_js_in_html
 
 COAT_COLOR_NAME_MAX_LENGTH = 63
@@ -16,6 +18,7 @@ COAT_COLOR_SHORT_NAME_MAX_LENGTH = 63
 COAT_COLOR_SLUG_MAX_LENGTH = 63
 COAT_COLOR_DESCRIPTION_MAX_LENGTH = 511
 DEFAULT_PAGE_DATA = "<div></div>"
+ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
 
 
 def _derive_short_name(name: str) -> str:
@@ -35,6 +38,12 @@ class CoatColorService:
         except ValueError:
             return slug_or_id
 
+    def _check_admin_permission(self, *, user: UserOutDto | None) -> None:
+        if user is None:
+            return
+        if not any(scope.scope_name in ADMIN_SCOPE_NAMES for scope in user.scopes):
+            raise ForbiddenError("Недостаточно прав для выполнения операции")
+
     def _validate_required_text(
         self, *, field: str, value: str | None, max_length: int
     ) -> str:
@@ -49,13 +58,20 @@ class CoatColorService:
         return normalized
 
     def _validate_optional_text(
-        self, *, field: str, value: str | None, max_length: int | None = None
+        self,
+        *,
+        field: str,
+        value: str | None,
+        max_length: int | None = None,
+        empty_as_none: bool = False,
     ) -> str | None:
         if value is None:
             return None
 
         normalized = value.strip()
         if not normalized:
+            if empty_as_none:
+                return None
             raise ClientError(f"{field} не может быть пустым")
         if max_length is not None and len(normalized) > max_length:
             raise ClientError(f"{field} не может быть длиннее {max_length} символов")
@@ -84,16 +100,21 @@ class CoatColorService:
                     max_length=COAT_COLOR_SHORT_NAME_MAX_LENGTH,
                 )
         if "slug" in data:
-            data["slug"] = self._validate_required_text(
-                field="Slug",
-                value=data["slug"],
-                max_length=COAT_COLOR_SLUG_MAX_LENGTH,
-            )
+            raw_slug = data["slug"]
+            if raw_slug is None or not raw_slug.strip():
+                del data["slug"]
+            else:
+                data["slug"] = self._validate_required_text(
+                    field="Slug",
+                    value=raw_slug,
+                    max_length=COAT_COLOR_SLUG_MAX_LENGTH,
+                )
         if "description" in data:
             data["description"] = self._validate_optional_text(
                 field="Описание масти",
                 value=data["description"],
                 max_length=COAT_COLOR_DESCRIPTION_MAX_LENGTH,
+                empty_as_none=True,
             )
         if "page_data" in data:
             data["page_data"] = self._validate_optional_text(
@@ -134,11 +155,18 @@ class CoatColorService:
             counter += 1
 
     async def create(
-        self, data: CoatColorCreateDto, *, equestrian_context: EquestrianContext
+        self,
+        data: CoatColorCreateDto,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> CoatColor:
         """Создать новую масть."""
 
+        self._check_admin_permission(user=user)
         coat_color_data = data.model_dump(exclude_none=True)
+        if "description" in data.model_fields_set:
+            coat_color_data["description"] = data.description
         self._validate_coat_color_data(coat_color_data, partial=False)
 
         existing = await self.coat_color_repository.find_by_name(
@@ -183,8 +211,10 @@ class CoatColorService:
         data: CoatColorUpdateDto,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> CoatColor:
         """Обновить масть."""
+        self._check_admin_permission(user=user)
         parsed = self._parse_slug_or_id(slug_or_id)
         coat_color = await self.coat_color_repository.get_by_slug_or_id(
             parsed, equestrian_id=equestrian_context.id
@@ -193,6 +223,8 @@ class CoatColorService:
             raise ClientError("Масть не найдена")
 
         update_data = data.model_dump(exclude_none=True)
+        if "description" in data.model_fields_set:
+            update_data["description"] = data.description
         if not update_data:
             raise ClientError("Нет данных для обновления")
         had_short_name = "short_name" in update_data
@@ -248,10 +280,15 @@ class CoatColorService:
         return coat_color
 
     async def delete(
-        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+        self,
+        slug_or_id: str,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> None:
         """Удалить масть."""
 
+        self._check_admin_permission(user=user)
         parsed = self._parse_slug_or_id(slug_or_id)
         coat_color = await self.coat_color_repository.get_by_slug_or_id(
             parsed, equestrian_id=equestrian_context.id

@@ -6,6 +6,7 @@ from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
 from core.schemas import CoatColorOutDto, CoatColorOutWithPageDataDto
 from core.schemas.coat_color import CoatColorCreateDto, CoatColorUpdateDto
+from core.schemas.users import UserOutDto
 from core.services.coat_color import CoatColorService
 from depends.services import (
     get_coat_color_service,
@@ -101,13 +102,13 @@ async def get_coat_color(
 async def create_coat_color(
     data: CoatColorCreateDto,
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> CoatColorOutDto:
     coat_color = await coat_color_service.create(
-        data, equestrian_context=equestrian_context
+        data, equestrian_context=equestrian_context, user=current_user
     )
     return CoatColorOutDto.model_validate(coat_color)
 
@@ -122,13 +123,16 @@ async def update_coat_color(
     slug_or_id: str,
     data: CoatColorUpdateDto,
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> CoatColorOutDto:
     coat_color = await coat_color_service.update(
-        slug_or_id, data, equestrian_context=equestrian_context
+        slug_or_id,
+        data,
+        equestrian_context=equestrian_context,
+        user=current_user,
     )
     return CoatColorOutDto.model_validate(coat_color)
 
@@ -142,9 +146,11 @@ async def update_coat_color(
 async def delete_coat_color(
     slug_or_id: str,
     coat_color_service: Annotated[CoatColorService, Depends(get_coat_color_service)],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> None:
-    await coat_color_service.delete(slug_or_id, equestrian_context=equestrian_context)
+    await coat_color_service.delete(
+        slug_or_id, equestrian_context=equestrian_context, user=current_user
+    )
