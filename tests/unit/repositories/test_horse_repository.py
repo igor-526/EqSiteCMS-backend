@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.dialects import postgresql
 
+from core.entities import Horse
 from core.entities.horse import HorseKindEnum
 from repositories.horse_repository import HorseRepository
 
@@ -39,6 +40,9 @@ class FakeAsyncSession:
     async def execute(self, statement: object) -> FakeExecuteResult:
         self.statements.append(statement)
         return FakeExecuteResult()
+
+    async def flush(self) -> None:
+        return None
 
 
 def compile_sql(statement: object) -> str:
@@ -81,6 +85,66 @@ def test_horse_repository_builds_photo_urls_with_injected_builder() -> None:
     assert dto.photos[0].url == "http://localhost:9000/gallery/horse.jpg"
     assert "/media/" not in dto.photos[0].url
     assert "kind" not in dto.model_dump()
+
+
+def test_horse_repository_full_info_mapper_preserves_code() -> None:
+    repository = HorseRepository(
+        session=object(),  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    dto = repository._build_horse_dto(
+        horse_data={
+            "id": uuid4(),
+            "slug": "buran",
+            "name": "Буран",
+            "code": " КОД🐎 ",
+            "sex": "male",
+        },
+        breed_data=None,
+        coat_color_data=None,
+        horse_owner_data=None,
+        photos_data=[],
+        services_data=[],
+    )
+
+    assert dto.code == " КОД🐎 "
+
+
+@pytest.mark.asyncio
+async def test_horse_repository_insert_and_update_statements_include_code() -> None:
+    session = FakeAsyncSession()
+    repository = HorseRepository(
+        session=session,  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    tenant_id = uuid4()
+    item = Horse(equestrian_id=tenant_id, name="Буран", slug="buran", code="EXT-1")
+
+    await repository.create(item)
+    item.code = None
+    await repository.update(item)
+
+    insert_sql = compile_sql(session.statements[0])
+    update_sql = compile_sql(session.statements[1])
+    assert "code" in insert_sql and "'EXT-1'" in insert_sql
+    assert "code=NULL" in update_sql
+    assert str(tenant_id) in update_sql
+
+
+@pytest.mark.asyncio
+async def test_horse_list_query_keeps_limit_and_offset_with_code_column() -> None:
+    session = FakeAsyncSession()
+    repository = HorseRepository(
+        session=session,  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+
+    await repository.get_horse_list_full_info(equestrian_id=uuid4(), limit=7, offset=3)
+
+    sql = compile_sql(session.statements[0])
+    assert "horse.code" in sql
+    assert "LIMIT 7" in sql
+    assert "OFFSET 3" in sql
 
 
 @pytest.mark.asyncio

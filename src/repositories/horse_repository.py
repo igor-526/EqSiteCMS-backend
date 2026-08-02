@@ -122,6 +122,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
             id=horse_data["id"],
             slug=horse_data.get("slug") or "",
             name=horse_data["name"],
+            code=horse_data.get("code"),
             description=horse_data.get("description"),
             breed=breed_dto,
             coat_color=coat_color_dto,

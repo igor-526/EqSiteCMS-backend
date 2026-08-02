@@ -22,6 +22,7 @@ class HorseOutDto(BaseSchema):
         default=...,
         description="Имя лошади",
     )
+    code: str | None = Field(default=None, max_length=31, description="Код лошади")
 
     description: str | None = Field(
         default=None,
@@ -167,6 +168,7 @@ class HorseCreateInDto(BaseSchema):
         default=...,
         description="Имя лошади",
     )
+    code: str | None = Field(default=None, max_length=31, description="Код лошади")
 
     description: str | None = Field(
         default=None,
@@ -229,6 +231,7 @@ class HorseUpdateInDto(BaseSchema):
         default=None,
         description="Имя лошади",
     )
+    code: str | None = Field(default=None, max_length=31, description="Код лошади")
 
     description: str | None = Field(
         default=None,

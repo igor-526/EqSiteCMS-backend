@@ -98,6 +98,7 @@ class FakeHorseRepository:
             id=horse.id,
             slug=horse.slug or "",
             name=horse.name,
+            code=horse.code,
             description=horse.description,
             height=horse.height,
             sex=horse.sex,

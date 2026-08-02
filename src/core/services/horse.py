@@ -112,6 +112,7 @@ class HorseService:
             id=horse.id,
             slug=horse.slug or "",
             name=horse.name,
+            code=horse.code,
             description=horse.description,
             breed=breed_dto,
             coat_color=coat_color_dto,
@@ -350,6 +351,7 @@ class HorseService:
             horse = Horse(
                 equestrian_id=equestrian_context.id,
                 name=create_data.name,
+                code=create_data.code,
                 description=create_data.description,
                 breed_id=create_data.breed_id,
                 coat_color_id=create_data.coat_color_id,
