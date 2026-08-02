@@ -28,12 +28,22 @@ class CoatColorRepositoryProtocol(TenantBaseRepositoryProtocol[CoatColor], Proto
         *,
         equestrian_id: UUID,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
         sort: (
             list[
-                Literal["name", "description", "slug", "-name", "-description", "-slug"]
+                Literal[
+                    "name",
+                    "short_name",
+                    "description",
+                    "slug",
+                    "-name",
+                    "-short_name",
+                    "-description",
+                    "-slug",
+                ]
             ]
             | None
         ) = None,

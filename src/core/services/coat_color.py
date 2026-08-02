@@ -267,12 +267,22 @@ class CoatColorService:
         *,
         equestrian_context: EquestrianContext,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
         sort: (
             list[
-                Literal["name", "description", "slug", "-name", "-description", "-slug"]
+                Literal[
+                    "name",
+                    "short_name",
+                    "description",
+                    "slug",
+                    "-name",
+                    "-short_name",
+                    "-description",
+                    "-slug",
+                ]
             ]
             | None
         ) = None,
@@ -284,6 +294,7 @@ class CoatColorService:
         return await self.coat_color_repository.get_filtered(
             equestrian_id=equestrian_context.id,
             name=name,
+            short_name=short_name,
             slug=slug,
             description=description,
             page_data=page_data,

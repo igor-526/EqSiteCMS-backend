@@ -35,6 +35,9 @@ async def get_breeds(
         EquestrianContext, Depends(get_read_equestrian_context)
     ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
+    short_name: str | None = Query(
+        None, description="Фильтр по короткому названию (вхождение)"
+    ),
     slug: str | None = Query(None, description="Фильтр по slug (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
     page_data: str | None = Query(None, description="Фильтр по page_data (вхождение)"),
@@ -43,10 +46,12 @@ async def get_breeds(
         list[
             Literal[
                 "name",
+                "short_name",
                 "description",
                 "slug",
                 "kind",
                 "-name",
+                "-short_name",
                 "-description",
                 "-slug",
                 "-kind",
@@ -60,6 +65,7 @@ async def get_breeds(
     entities, total = await breed_service.get_filtered(
         equestrian_context=equestrian_context,
         name=name,
+        short_name=short_name,
         slug=slug,
         description=description,
         page_data=page_data,

@@ -29,11 +29,25 @@ async def get_coat_colors(
         EquestrianContext, Depends(get_read_equestrian_context)
     ],
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
+    short_name: str | None = Query(
+        None, description="Фильтр по короткому названию (вхождение)"
+    ),
     slug: str | None = Query(None, description="Фильтр по slug (вхождение)"),
     description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
     page_data: str | None = Query(None, description="Фильтр по page_data (вхождение)"),
     sort: (
-        list[Literal["name", "description", "slug", "-name", "-description", "-slug"]]
+        list[
+            Literal[
+                "name",
+                "short_name",
+                "description",
+                "slug",
+                "-name",
+                "-short_name",
+                "-description",
+                "-slug",
+            ]
+        ]
         | None
     ) = Query(None, description="Сортировка"),
     limit: int | None = Query(None, description="Лимит"),
@@ -42,6 +56,7 @@ async def get_coat_colors(
     entities, total = await coat_color_service.get_filtered(
         equestrian_context=equestrian_context,
         name=name,
+        short_name=short_name,
         slug=slug,
         description=description,
         page_data=page_data,

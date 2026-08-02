@@ -269,6 +269,7 @@ class BreedService:
         *,
         equestrian_context: EquestrianContext,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
@@ -277,10 +278,12 @@ class BreedService:
             list[
                 Literal[
                     "name",
+                    "short_name",
                     "description",
                     "slug",
                     "kind",
                     "-name",
+                    "-short_name",
                     "-description",
                     "-slug",
                     "-kind",
@@ -295,6 +298,7 @@ class BreedService:
         return await self.breed_repository.get_filtered(
             equestrian_id=equestrian_context.id,
             name=name,
+            short_name=short_name,
             slug=slug,
             description=description,
             page_data=page_data,

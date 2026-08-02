@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 from uuid import UUID
 
@@ -18,12 +19,22 @@ class CoatColorRepository(TenantScopedRepository[CoatColor]):
         *,
         equestrian_id: UUID,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
         sort: (
             list[
-                Literal["name", "description", "slug", "-name", "-description", "-slug"]
+                Literal[
+                    "name",
+                    "short_name",
+                    "description",
+                    "slug",
+                    "-name",
+                    "-short_name",
+                    "-description",
+                    "-slug",
+                ]
             ]
             | None
         ) = None,
@@ -40,13 +51,15 @@ class CoatColorRepository(TenantScopedRepository[CoatColor]):
 
         conditions = []
         if name:
-            conditions.append(self.table.c.name.ilike(f"%{name}%"))
+            conditions.append(self.table.c.name.op("~*")(re.escape(name)))
+        if short_name:
+            conditions.append(self.table.c.short_name.op("~*")(re.escape(short_name)))
         if slug:
-            conditions.append(self.table.c.slug.ilike(f"%{slug}%"))
+            conditions.append(self.table.c.slug.op("~*")(re.escape(slug)))
         if description:
-            conditions.append(self.table.c.description.ilike(f"%{description}%"))
+            conditions.append(self.table.c.description.op("~*")(re.escape(description)))
         if page_data:
-            conditions.append(self.table.c.page_data.ilike(f"%{page_data}%"))
+            conditions.append(self.table.c.page_data.op("~*")(re.escape(page_data)))
 
         if conditions:
             where_clause = or_(*conditions)

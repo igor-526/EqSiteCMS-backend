@@ -20,6 +20,7 @@ class BreedRepository(TenantScopedRepository[Breed]):
         *,
         equestrian_id: UUID,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
@@ -28,10 +29,12 @@ class BreedRepository(TenantScopedRepository[Breed]):
             list[
                 Literal[
                     "name",
+                    "short_name",
                     "description",
                     "slug",
                     "kind",
                     "-name",
+                    "-short_name",
                     "-description",
                     "-slug",
                     "-kind",
@@ -53,6 +56,10 @@ class BreedRepository(TenantScopedRepository[Breed]):
         text_conditions = []
         if name:
             text_conditions.append(self.table.c.name.op("~*")(re.escape(name)))
+        if short_name:
+            text_conditions.append(
+                self.table.c.short_name.op("~*")(re.escape(short_name))
+            )
         if slug:
             text_conditions.append(self.table.c.slug.op("~*")(re.escape(slug)))
         if description:

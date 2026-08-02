@@ -113,6 +113,7 @@ class FakeCoatColorRepository:
         self,
         *,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
@@ -122,6 +123,7 @@ class FakeCoatColorRepository:
     ) -> tuple[list[CoatColor], int]:
         filters = {
             "name": name,
+            "short_name": short_name,
             "slug": slug,
             "description": description,
             "page_data": page_data,
@@ -467,6 +469,7 @@ async def test_get_filtered_uc01_uc25_uc26_uc27_passes_contract_through() -> Non
 
     entities, total = await service.get_filtered(
         name="Bay",
+        short_name="B",
         slug="bay",
         description="brown",
         page_data="page",
@@ -482,6 +485,7 @@ async def test_get_filtered_uc01_uc25_uc26_uc27_passes_contract_through() -> Non
             "get_filtered",
             {
                 "name": "Bay",
+                "short_name": "B",
                 "slug": "bay",
                 "description": "brown",
                 "page_data": "page",
@@ -502,6 +506,7 @@ async def test_get_filtered_uc02_omitted_optional_defaults_are_passed_as_none() 
             "get_filtered",
             {
                 "name": None,
+                "short_name": None,
                 "slug": None,
                 "description": None,
                 "page_data": None,
@@ -522,6 +527,7 @@ async def test_get_filtered_uc08_boundary_zero_limit_and_offset_are_passed() -> 
             "get_filtered",
             {
                 "name": None,
+                "short_name": None,
                 "slug": None,
                 "description": None,
                 "page_data": None,

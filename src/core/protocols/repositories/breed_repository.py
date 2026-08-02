@@ -23,6 +23,7 @@ class BreedRepositoryProtocol(TenantBaseRepositoryProtocol[Breed], Protocol):
         *,
         equestrian_id: UUID,
         name: str | None = None,
+        short_name: str | None = None,
         slug: str | None = None,
         description: str | None = None,
         page_data: str | None = None,
@@ -31,10 +32,12 @@ class BreedRepositoryProtocol(TenantBaseRepositoryProtocol[Breed], Protocol):
             list[
                 Literal[
                     "name",
+                    "short_name",
                     "description",
                     "slug",
                     "kind",
                     "-name",
+                    "-short_name",
                     "-description",
                     "-slug",
                     "-kind",
