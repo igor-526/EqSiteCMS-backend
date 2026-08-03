@@ -26,6 +26,7 @@ from core.services.coat_color import CoatColorService
 from core.services.horse import HorseService
 from core.services.horse_owner import HorseOwnerService
 from core.services.horse_service import HorseServiceService
+from core.services.horse_service_relations import HorseServiceRelationsService
 from core.services.news import NewsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
@@ -58,6 +59,7 @@ _TENANT_SERVICE_CLASSES = (
     HorseOwnerService,
     HorseService,
     HorseServiceService,
+    HorseServiceRelationsService,
     NewsService,
     PhotoService,
     PriceGroupService,

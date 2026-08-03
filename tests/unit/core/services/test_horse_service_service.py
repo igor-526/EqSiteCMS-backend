@@ -250,17 +250,25 @@ async def test_create_uc21_repository_failure_propagates() -> None:
     "payload",
     [
         HorseServiceCreateDto(name=" ", price=100),
-        HorseServiceCreateDto(name="Good", slug=" ", price=100),
         HorseServiceCreateDto(name="Good", price=-1),
     ],
 )
-async def test_create_uc05_uc06_uc09_invalid_business_values_raise_client_error(
+async def test_create_uc05_uc09_invalid_business_values_raise_client_error(
     payload: HorseServiceCreateDto,
 ) -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError):
         await service.create(payload)
+
+
+async def test_create_empty_slug_auto_generates_from_name() -> None:
+    service, _ = make_service()
+
+    entity = await service.create(
+        HorseServiceCreateDto(name="Good", slug=" ", price=100)
+    )
+    assert entity.slug == "good"
 
 
 async def test_update_uc01_partial_name_regenerates_slug() -> None:
@@ -434,3 +442,46 @@ async def test_horse_service_uc30_architecture_boundary_has_no_fastapi_dependenc
     import core.services.horse_service as horse_service_module
 
     assert not hasattr(horse_service_module, "HTTPException")
+
+
+async def test_create_null_slug_auto_generates_from_name() -> None:
+    service, _ = make_service()
+
+    entity = await service.create(HorseServiceCreateDto(name="Разведение", price=500))
+    assert entity.slug == "razvedenie"
+
+
+async def test_create_empty_description_stores_none() -> None:
+    service, _ = make_service()
+
+    entity = await service.create(
+        HorseServiceCreateDto(name="Тест", price=100, description="")
+    )
+    assert entity.description is None
+
+
+async def test_create_null_description_stores_none() -> None:
+    service, _ = make_service()
+
+    entity = await service.create(
+        HorseServiceCreateDto(name="Тест2", price=100, description=None)
+    )
+    assert entity.description is None
+
+
+async def test_update_empty_slug_regenerates_from_name() -> None:
+    service, repo = make_service()
+    current = repo.add(make_horse_service(name="Старое", slug="old"))
+
+    updated = await service.update(
+        str(current.id), HorseServiceUpdateDto(slug=" ")
+    )
+    assert updated.slug == "staroe"
+
+
+async def test_update_empty_description_stores_none() -> None:
+    service, repo = make_service()
+    repo.add(make_horse_service(description="Old description"))
+
+    updated = await service.update("podkovka", HorseServiceUpdateDto(description=""))
+    assert updated.description is None

@@ -3,6 +3,7 @@ from .coat_color_repository import CoatColorRepository
 from .equestrian_repository import EquestrianRepository
 from .horse_owner_repository import HorseOwnerRepository
 from .horse_repository import HorseChildrenRepository, HorseRepository
+from .horse_service_relations_repository import HorseServiceRelationsRepository
 from .horse_service_repository import HorseServiceRepository
 from .news_repository import NewsRepository
 from .photo_repository import PhotoRepository

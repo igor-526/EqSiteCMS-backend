@@ -116,7 +116,27 @@ class HorseRepository(TenantScopedRepository[Horse]):
             for photo in photos_data
         ]
 
-        services_dto = [HorseServiceOutDto(**service) for service in services_data]
+        services_dto = [
+            HorseServiceOutDto(
+                id=service["id"],
+                name=service["name"],
+                slug=service["slug"],
+                description=service.get("description_override")
+                if service.get("description_override") is not None
+                else service.get("description"),
+                price=(
+                    service.get("price_override")
+                    if service.get("price_override") is not None
+                    else service["price"]
+                ),
+                price_formatter=service.get("price_formatter_override")
+                if service.get("price_formatter_override") is not None
+                else service["price_formatter"],
+                created_at=service["created_at"],
+                updated_at=service.get("updated_at"),
+            )
+            for service in services_data
+        ]
 
         return HorseOutDto(
             id=horse_data["id"],
@@ -215,7 +235,12 @@ class HorseRepository(TenantScopedRepository[Horse]):
         photos_data = [dict(row) for row in photos_result.mappings().all()]
 
         services_stmt = (
-            select(horse_service)
+            select(
+                horse_service,
+                horse_service_relations.c.description_override,
+                horse_service_relations.c.price_override,
+                horse_service_relations.c.price_formatter_override,
+            )
             .join(
                 horse_service_relations,
                 horse_service.c.id == horse_service_relations.c.service_id,
@@ -304,7 +329,12 @@ class HorseRepository(TenantScopedRepository[Horse]):
         photos_data = [dict(row) for row in photos_result.mappings().all()]
 
         services_stmt = (
-            select(horse_service)
+            select(
+                horse_service,
+                horse_service_relations.c.description_override,
+                horse_service_relations.c.price_override,
+                horse_service_relations.c.price_formatter_override,
+            )
             .join(
                 horse_service_relations,
                 horse_service.c.id == horse_service_relations.c.service_id,
@@ -554,7 +584,13 @@ class HorseRepository(TenantScopedRepository[Horse]):
             photos_by_horse[horse_id].append(dict(row))
 
         services_stmt = (
-            select(horse_service, horse_service_relations.c.horse_id)
+            select(
+                horse_service,
+                horse_service_relations.c.horse_id,
+                horse_service_relations.c.description_override,
+                horse_service_relations.c.price_override,
+                horse_service_relations.c.price_formatter_override,
+            )
             .join(
                 horse_service_relations,
                 horse_service.c.id == horse_service_relations.c.service_id,
@@ -565,11 +601,20 @@ class HorseRepository(TenantScopedRepository[Horse]):
         services_result = await self.session.execute(services_stmt)
         services_by_horse: dict[UUID, list[dict]] = {}
         horse_service_keys = {c.key for c in horse_service.c}
+        override_keys = {
+            "description_override",
+            "price_override",
+            "price_formatter_override",
+        }
         for row in services_result.mappings().all():
             horse_id = UUID(str(row["horse_id"]))
             if horse_id not in services_by_horse:
                 services_by_horse[horse_id] = []
-            service_data = {k: v for k, v in row.items() if k in horse_service_keys}
+            service_data = {
+                k: v
+                for k, v in row.items()
+                if k in horse_service_keys or k in override_keys
+            }
             services_by_horse[horse_id].append(service_data)
 
         horses_dict: dict[UUID, HorseOutDto] = {}

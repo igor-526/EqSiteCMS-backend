@@ -90,18 +90,26 @@ class HorseServiceService:
             )
 
         if "slug" in data:
-            data["slug"] = self._validate_required_text(
-                field="Slug",
-                value=slug_value if isinstance(slug_value, str) else None,
-                max_length=HORSE_SERVICE_SLUG_MAX_LENGTH,
-            )
+            slug_raw = slug_value if isinstance(slug_value, str) else None
+            if slug_raw is not None and not slug_raw.strip():
+                del data["slug"]
+            else:
+                data["slug"] = self._validate_required_text(
+                    field="Slug",
+                    value=slug_raw,
+                    max_length=HORSE_SERVICE_SLUG_MAX_LENGTH,
+                )
 
         if "description" in data:
-            data["description"] = self._validate_optional_text(
-                field="Описание услуги",
-                value=description_value if isinstance(description_value, str) else None,
-                max_length=HORSE_SERVICE_DESCRIPTION_MAX_LENGTH,
-            )
+            desc_raw = description_value if isinstance(description_value, str) else None
+            if desc_raw is not None and not desc_raw.strip():
+                data["description"] = None
+            else:
+                data["description"] = self._validate_optional_text(
+                    field="Описание услуги",
+                    value=desc_raw,
+                    max_length=HORSE_SERVICE_DESCRIPTION_MAX_LENGTH,
+                )
 
         if "page_data" in data:
             data["page_data"] = self._validate_optional_text(
@@ -257,6 +265,20 @@ class HorseServiceService:
         if "slug" in update_data:
             update_data["slug"] = await self._ensure_unique_slug(
                 update_data["slug"],
+                equestrian_context=equestrian_context,
+                exclude_id=horse_service.id,
+            )
+
+        # Если slug был очищен (передана пустая строка), регенерируем из name
+        if (
+            data.slug is not None
+            and not data.slug.strip()
+            and "slug" not in update_data
+        ):
+            name_for_slug = update_data.get("name", horse_service.name)
+            new_slug = _generate_slug(name_for_slug)
+            update_data["slug"] = await self._ensure_unique_slug(
+                new_slug,
                 equestrian_context=equestrian_context,
                 exclude_id=horse_service.id,
             )

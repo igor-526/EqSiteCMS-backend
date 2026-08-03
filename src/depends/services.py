@@ -17,6 +17,7 @@ from core.protocols.repositories import (
     EquestrianRepositoryProtocol,
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
+    HorseServiceRelationsRepositoryProtocol,
     HorseServiceRepositoryProtocol,
     NewsRepositoryProtocol,
     PhotoRepositoryProtocol,
@@ -34,6 +35,7 @@ from core.services.coat_color import CoatColorService
 from core.services.horse import HorseService
 from core.services.horse_owner import HorseOwnerService
 from core.services.horse_service import HorseServiceService
+from core.services.horse_service_relations import HorseServiceRelationsService
 from core.services.news import NewsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
@@ -46,6 +48,7 @@ from depends.repositories import (
     get_horse_children_repository,
     get_horse_owner_repository,
     get_horse_repository,
+    get_horse_service_relations_repository,
     get_horse_service_repository,
     get_news_repository,
     get_photo_repository,
@@ -175,6 +178,23 @@ async def get_horse_service_service(
     ],
 ) -> HorseServiceService:
     return HorseServiceService(horse_service_repository=horse_service_repository)
+
+
+async def get_horse_service_relations_service(
+    relations_repository: Annotated[
+        HorseServiceRelationsRepositoryProtocol,
+        Depends(get_horse_service_relations_repository),
+    ],
+    horse_repository: Annotated[HorseRepositoryProtocol, Depends(get_horse_repository)],
+    horse_service_repository: Annotated[
+        HorseServiceRepositoryProtocol, Depends(get_horse_service_repository)
+    ],
+) -> HorseServiceRelationsService:
+    return HorseServiceRelationsService(
+        relations_repository=relations_repository,
+        horse_repository=horse_repository,
+        horse_service_repository=horse_service_repository,
+    )
 
 
 async def get_photo_service(

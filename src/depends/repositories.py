@@ -11,6 +11,7 @@ from core.protocols.repositories import (
     HorseChildrenRepositoryProtocol,
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
+    HorseServiceRelationsRepositoryProtocol,
     HorseServiceRepositoryProtocol,
     NewsRepositoryProtocol,
     PhotoRepositoryProtocol,
@@ -27,6 +28,7 @@ from repositories import (
     HorseChildrenRepository,
     HorseOwnerRepository,
     HorseRepository,
+    HorseServiceRelationsRepository,
     HorseServiceRepository,
     NewsRepository,
     PhotoRepository,
@@ -104,6 +106,12 @@ async def get_horse_repository(
     ],
 ) -> HorseRepositoryProtocol:
     return HorseRepository(session=session, photo_url_builder=photo_url_builder)
+
+
+async def get_horse_service_relations_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> HorseServiceRelationsRepositoryProtocol:
+    return HorseServiceRelationsRepository(session=session)
 
 
 async def get_horse_children_repository(
