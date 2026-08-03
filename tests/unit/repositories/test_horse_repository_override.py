@@ -3,11 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
-from core.entities.price import PriceFormatter
 from repositories.horse_repository import HorseRepository
 
 
@@ -101,7 +100,9 @@ def test_build_horse_dto_applies_price_override(repo: HorseRepository) -> None:
     assert svc.price == 5000
 
 
-def test_build_horse_dto_applies_price_formatter_override(repo: HorseRepository) -> None:
+def test_build_horse_dto_applies_price_formatter_override(
+    repo: HorseRepository,
+) -> None:
     service_data = _make_service_data(price_formatter_override="gt")
     result = repo._build_horse_dto(
         _make_horse_data(), None, None, None, [], [service_data]
@@ -128,9 +129,7 @@ def test_build_horse_dto_applies_all_overrides(repo: HorseRepository) -> None:
 
 
 def test_build_horse_dto_no_services(repo: HorseRepository) -> None:
-    result = repo._build_horse_dto(
-        _make_horse_data(), None, None, None, [], []
-    )
+    result = repo._build_horse_dto(_make_horse_data(), None, None, None, [], [])
     assert result.services == []
 
 

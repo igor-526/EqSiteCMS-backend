@@ -53,6 +53,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         ddate_gte_or_none: date | None = None,
         ddate_lte_or_none: date | None = None,
         horse_owner_ids: list[UUID] | None = None,
+        services: list[UUID] | None = None,
         this_stable: bool | None = None,
         exclude_ids: list[UUID] | None = None,
         include_ids: list[UUID] | None = None,
@@ -66,6 +67,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
 
         Query ``kind`` остается контрактом списка лошадей, но реализация
         фильтрует и сортирует по ``breeds.kind``, а не по полю лошади.
+        ``services`` использует OR-семантику внутри tenant-scoped ``EXISTS``.
         """
         ...
 

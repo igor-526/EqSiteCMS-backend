@@ -34,7 +34,11 @@ router = APIRouter()
 @router.get(
     "",
     response_model=PaginatedEntities[HorseOutDto | HorseWithPedigreeOutDto],
-    description="Получить список лошадей с фильтрацией и сортировкой",
+    description=(
+        "Public Read: получить tenant-scoped список лошадей с фильтрацией и "
+        "сортировкой. Услуги передаются повторяемыми query-параметрами "
+        "`services=<uuid>&services=<uuid>` и объединяются по OR."
+    ),
 )
 async def get_horses(
     horse_service: Annotated[HorseService, Depends(get_horse_service)],
@@ -71,6 +75,13 @@ async def get_horses(
     horse_owner_ids: list[UUID] | None = Query(
         None, description="Фильтр по идентификаторам владельцев"
     ),
+    services: list[UUID] | None = Query(
+        None,
+        description=(
+            "Повторяемый фильтр по UUID оказываемых услуг; несколько значений "
+            "используют OR-семантику"
+        ),
+    ),
     this_stable: bool | None = Query(None, description="Фильтр по статусу на конюшке"),
     exclude_ids: list[UUID] | None = Query(
         None, description="Идентификаторы лошадей, исключаемые из выдачи"
@@ -98,6 +109,7 @@ async def get_horses(
         ddate_gte=ddate_gte,
         ddate_lte=ddate_lte,
         horse_owner_ids=horse_owner_ids,
+        services=services,
         pedigree=pedigree,
         this_stable=this_stable,
         exclude_ids=exclude_ids,

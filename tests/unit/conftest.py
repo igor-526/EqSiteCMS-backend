@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import sys
 from collections.abc import Callable
+from datetime import datetime, timezone
 from functools import wraps
 from typing import Any
 from uuid import UUID
@@ -19,7 +20,7 @@ from core.entities.news import News
 from core.entities.photos import Photo
 from core.entities.prices import Price, PriceGroup
 from core.entities.site_settings import SiteSetting
-from core.entities.user import User
+from core.entities.user import User, UserScope
 from core.schemas.users import UserOutDto
 from core.services.breeds import BreedService
 from core.services.coat_color import CoatColorService
@@ -36,6 +37,13 @@ TEST_EQUESTRIAN_ID = UUID("11111111-1111-4111-8111-111111111111")
 TEST_EQUESTRIAN_CONTEXT = EquestrianContext(
     id=TEST_EQUESTRIAN_ID,
     source="unit-test",
+)
+TEST_ADMIN_USER = UserOutDto(
+    id=UUID("99999999-9999-4999-8999-999999999999"),
+    equestrian_id=TEST_EQUESTRIAN_ID,
+    username="unit-admin",
+    created_at=datetime.now(timezone.utc),
+    scopes=[UserScope(scope_name="ADMIN", scope_description="Admin scope")],
 )
 
 _TENANT_ENTITY_CLASSES = (
@@ -119,6 +127,15 @@ def _patch_service_default_context(service_class: type[Any]) -> None:
                 args = (args[0], args[1])
                 kwargs["upload"] = upload
             kwargs.setdefault("equestrian_context", TEST_EQUESTRIAN_CONTEXT)
+            if __method.__qualname__.startswith(
+                "HorseServiceRelationsService."
+            ) and __method.__name__ in {
+                "create",
+                "update",
+                "delete",
+                "get_available_services",
+            }:
+                kwargs.setdefault("user", TEST_ADMIN_USER)
             return await __method(self, *args, **kwargs)
 
         wrapped._unit_context_patched = True  # type: ignore[attr-defined]

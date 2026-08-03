@@ -3,12 +3,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
+from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
 from core.schemas.horse_service_relations import (
+    HorseServiceAvailableOutDto,
     HorseServiceRelationCreateDto,
     HorseServiceRelationOutDto,
     HorseServiceRelationUpdateDto,
 )
+from core.schemas.users import UserOutDto
 from core.services.horse_service_relations import HorseServiceRelationsService
 from depends.services import (
     get_current_user,
@@ -33,12 +36,14 @@ async def create_horse_service_relation(
     service: Annotated[
         HorseServiceRelationsService, Depends(get_horse_service_relations_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> HorseServiceRelationOutDto:
-    return await service.create(horse_id, data, equestrian_context=equestrian_context)
+    return await service.create(
+        horse_id, data, equestrian_context=equestrian_context, user=user
+    )
 
 
 @router.patch(
@@ -54,13 +59,17 @@ async def update_horse_service_relation(
     service: Annotated[
         HorseServiceRelationsService, Depends(get_horse_service_relations_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> HorseServiceRelationOutDto:
     return await service.update(
-        horse_id, relation_id, data, equestrian_context=equestrian_context
+        horse_id,
+        relation_id,
+        data,
+        equestrian_context=equestrian_context,
+        user=user,
     )
 
 
@@ -76,17 +85,19 @@ async def delete_horse_service_relation(
     service: Annotated[
         HorseServiceRelationsService, Depends(get_horse_service_relations_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> None:
-    await service.delete(horse_id, relation_id, equestrian_context=equestrian_context)
+    await service.delete(
+        horse_id, relation_id, equestrian_context=equestrian_context, user=user
+    )
 
 
 @router.get(
     "/horses/{horse_id}/services",
-    response_model=list[HorseServiceRelationOutDto],
+    response_model=PaginatedEntities[HorseServiceRelationOutDto],
     tags=["Horse Service Relations"],
     description="Получить список связей лошадь-услуга",
 )
@@ -98,14 +109,20 @@ async def get_horse_service_relations(
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_read_equestrian_context)
     ],
-) -> list[HorseServiceRelationOutDto]:
+    limit: int | None = Query(None, ge=0, description="Лимит"),
+    offset: int | None = Query(None, ge=0, description="Смещение"),
+) -> PaginatedEntities[HorseServiceRelationOutDto]:
     return await service.get_list_by_horse(
-        horse_id, equestrian_context=equestrian_context
+        horse_id,
+        equestrian_context=equestrian_context,
+        limit=limit,
+        offset=offset,
     )
 
 
 @router.get(
     "/horses/{horse_id}/available-services",
+    response_model=list[HorseServiceAvailableOutDto],
     tags=["Horse Service Relations"],
     description="Получить доступные услуги для привязки к лошади",
 )
@@ -114,12 +131,15 @@ async def get_available_services(
     service: Annotated[
         HorseServiceRelationsService, Depends(get_horse_service_relations_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
     search: str | None = Query(None, description="Поиск по названию услуги"),
-) -> list[dict]:
+) -> list[HorseServiceAvailableOutDto]:
     return await service.get_available_services(
-        horse_id, equestrian_context=equestrian_context, search=search
+        horse_id,
+        equestrian_context=equestrian_context,
+        user=user,
+        search=search,
     )

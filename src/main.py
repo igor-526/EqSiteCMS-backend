@@ -110,6 +110,7 @@ def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONRes
             error.get("loc", [None])[0] == "path"
             or error.get("type") == "extra_forbidden"
             or error.get("loc", [None, None])[:2] == ("query", "sort")
+            or error.get("loc", [None, None])[:2] == ("query", "services")
             for error in errors
         )
         else 400

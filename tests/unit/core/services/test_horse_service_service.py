@@ -473,9 +473,7 @@ async def test_update_empty_slug_regenerates_from_name() -> None:
     service, repo = make_service()
     current = repo.add(make_horse_service(name="Старое", slug="old"))
 
-    updated = await service.update(
-        str(current.id), HorseServiceUpdateDto(slug=" ")
-    )
+    updated = await service.update(str(current.id), HorseServiceUpdateDto(slug=" "))
     assert updated.slug == "staroe"
 
 

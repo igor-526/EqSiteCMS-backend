@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import Table, select
+from sqlalchemy import Table, func, insert, select
 
 from core.entities.horse_service import HorseServiceEntity, HorseServiceRelations
 from models.horse_service import horse_service, horse_service_relations
@@ -14,11 +14,42 @@ class HorseServiceRelationsRepository(AbstractRepository[HorseServiceRelations])
     table: Table = horse_service_relations
     entity = HorseServiceRelations
 
-    async def get_list_by_horse(self, *, horse_id: UUID) -> list[HorseServiceRelations]:
+    async def create(self, entity: HorseServiceRelations) -> HorseServiceRelations:
+        """Создать связь с временем создания, назначенным PostgreSQL."""
+        values = entity.model_dump(exclude={"created_at"})
+        stmt = insert(self.table).values(**values).returning(self.table)
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return self.entity.model_validate(dict(result.mappings().one()))
+
+    async def get_list_by_horse(
+        self,
+        *,
+        horse_id: UUID,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> tuple[list[HorseServiceRelations], int]:
         """Получить все связи для конкретной лошади."""
-        stmt = select(self.table).where(self.table.c.horse_id == horse_id).order_by(self.table.c.id.asc())
+        stmt = (
+            select(self.table)
+            .where(self.table.c.horse_id == horse_id)
+            .order_by(self.table.c.created_at.desc(), self.table.c.id.desc())
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        if offset is not None:
+            stmt = stmt.offset(offset)
         rows = await self.session.execute(stmt)
-        return [self.entity.model_validate(dict(row)) for row in rows.mappings().all()]
+        count_stmt = (
+            select(func.count())
+            .select_from(self.table)
+            .where(self.table.c.horse_id == horse_id)
+        )
+        total = (await self.session.execute(count_stmt)).scalar_one()
+        return (
+            [self.entity.model_validate(dict(row)) for row in rows.mappings().all()],
+            total,
+        )
 
     async def get_by_id_and_horse(
         self, *, relation_id: UUID, horse_id: UUID

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from pydantic import Field
@@ -39,6 +40,11 @@ class HorseServiceEntity(Entity, TimeStampMixin, SlugMixin):
 
 class HorseServiceRelations(Entity):
     """Связь между лошадью и услугой с возможностью переопределения параметров."""
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Момент создания связи",
+    )
 
     horse_id: UUID = Field(
         default=...,

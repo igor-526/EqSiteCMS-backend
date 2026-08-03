@@ -3,7 +3,7 @@ from datetime import date
 from typing import Mapping, Union
 from uuid import UUID
 
-from sqlalchemy import Table, and_, delete, func, insert, or_, select
+from sqlalchemy import Table, and_, delete, exists, func, insert, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -121,17 +121,21 @@ class HorseRepository(TenantScopedRepository[Horse]):
                 id=service["id"],
                 name=service["name"],
                 slug=service["slug"],
-                description=service.get("description_override")
-                if service.get("description_override") is not None
-                else service.get("description"),
+                description=(
+                    service.get("description_override")
+                    if service.get("description_override") is not None
+                    else service.get("description")
+                ),
                 price=(
                     service.get("price_override")
                     if service.get("price_override") is not None
                     else service["price"]
                 ),
-                price_formatter=service.get("price_formatter_override")
-                if service.get("price_formatter_override") is not None
-                else service["price_formatter"],
+                price_formatter=(
+                    service.get("price_formatter_override")
+                    if service.get("price_formatter_override") is not None
+                    else service["price_formatter"]
+                ),
                 created_at=service["created_at"],
                 updated_at=service.get("updated_at"),
             )
@@ -380,6 +384,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         ddate_gte_or_none: date | None = None,
         ddate_lte_or_none: date | None = None,
         horse_owner_ids: list[UUID] | None = None,
+        services: list[UUID] | None = None,
         this_stable: bool | None = None,
         exclude_ids: list[UUID] | None = None,
         include_ids: list[UUID] | None = None,
@@ -498,6 +503,23 @@ class HorseRepository(TenantScopedRepository[Horse]):
             )
         if horse_owner_ids:
             conditions.append(horse.c.horse_owner_id.in_(horse_owner_ids))
+        if services:
+            service_ids = list(dict.fromkeys(services))
+            service_match = (
+                select(1)
+                .select_from(
+                    horse_service_relations.join(
+                        horse_service,
+                        horse_service.c.id == horse_service_relations.c.service_id,
+                    )
+                )
+                .where(
+                    horse_service_relations.c.horse_id == horse.c.id,
+                    horse_service.c.equestrian_id == equestrian_id,
+                    horse_service.c.id.in_(service_ids),
+                )
+            )
+            conditions.append(exists(service_match))
         if this_stable is not None:
             conditions.append(horse.c.this_stable == this_stable)
         if exclude_ids:

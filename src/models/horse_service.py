@@ -36,6 +36,7 @@ horse_service_relations = Table(
     "horse_service_relations",
     metadata,
     uuid_pk(),
+    timestamp_columns()[0],
     Column("horse_id", ForeignKey("horse.id", ondelete="CASCADE"), nullable=False),
     Column(
         "service_id", ForeignKey("horse_service.id", ondelete="CASCADE"), nullable=False

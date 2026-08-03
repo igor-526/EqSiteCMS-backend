@@ -10,8 +10,12 @@ class HorseServiceRelationsRepositoryProtocol(
     BaseRepositoryProtocol[HorseServiceRelations], Protocol
 ):
     async def get_list_by_horse(
-        self, *, horse_id: UUID
-    ) -> list[HorseServiceRelations]: ...
+        self,
+        *,
+        horse_id: UUID,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> tuple[list[HorseServiceRelations], int]: ...
 
     async def get_by_id_and_horse(
         self, *, relation_id: UUID, horse_id: UUID

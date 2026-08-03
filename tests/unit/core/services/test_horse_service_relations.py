@@ -21,6 +21,7 @@ pytestmark = pytest.mark.asyncio
 class FakeRelationsRepository:
     def __init__(self) -> None:
         self.relations: dict[UUID, HorseServiceRelations] = {}
+        self.available_services: list[HorseServiceEntity] = []
         self.calls: list[tuple[str, Any]] = []
 
     async def create(self, entity: HorseServiceRelations) -> HorseServiceRelations:
@@ -42,10 +43,18 @@ class FakeRelationsRepository:
         return self.relations.get(id)
 
     async def get_list_by_horse(
-        self, *, horse_id: UUID
-    ) -> list[HorseServiceRelations]:
-        self.calls.append(("get_list_by_horse", horse_id))
-        return [r for r in self.relations.values() if r.horse_id == horse_id]
+        self,
+        *,
+        horse_id: UUID,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> tuple[list[HorseServiceRelations], int]:
+        self.calls.append(("get_list_by_horse", (horse_id, limit, offset)))
+        relations = [r for r in self.relations.values() if r.horse_id == horse_id]
+        total = len(relations)
+        start = offset or 0
+        end = None if limit is None else start + limit
+        return relations[start:end], total
 
     async def get_by_id_and_horse(
         self, *, relation_id: UUID, horse_id: UUID
@@ -68,10 +77,8 @@ class FakeRelationsRepository:
     async def get_available_services(
         self, *, horse_id: UUID, equestrian_id: UUID, search: str | None = None
     ) -> list[HorseServiceEntity]:
-        self.calls.append(
-            ("get_available_services", (horse_id, equestrian_id, search))
-        )
-        return []
+        self.calls.append(("get_available_services", (horse_id, equestrian_id, search)))
+        return self.available_services
 
 
 class FakeHorseRepository:
@@ -100,7 +107,9 @@ class FakeHorseServiceRepository:
         self.services[service.id] = service
         return service
 
-    async def get_by_id(self, id: UUID, *, equestrian_id: UUID) -> HorseServiceEntity | None:
+    async def get_by_id(
+        self, id: UUID, *, equestrian_id: UUID
+    ) -> HorseServiceEntity | None:
         self.calls.append(("get_by_id", (id, equestrian_id)))
         s = self.services.get(id)
         if s is not None and s.equestrian_id == equestrian_id:
@@ -299,31 +308,61 @@ async def test_get_list_by_horse_returns_relations() -> None:
     svc, rel_repo, horse_repo, svc_repo = make_service()
     horse = horse_repo.add(make_horse())
     s1 = svc_repo.add(make_service_entity(name="Услуга 1", slug="usluga-1"))
-    s2 = svc_repo.add(
-        make_service_entity(name="Услуга 2", slug="usluga-2", price=2000)
-    )
+    s2 = svc_repo.add(make_service_entity(name="Услуга 2", slug="usluga-2", price=2000))
 
-    await svc.create(
-        horse.id, HorseServiceRelationCreateDto(service_id=s1.id)
-    )
+    await svc.create(horse.id, HorseServiceRelationCreateDto(service_id=s1.id))
     await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=s2.id, price_override=5000),
     )
 
     result = await svc.get_list_by_horse(horse.id)
-    assert len(result) == 2
-    prices = {r.price for r in result}
+    assert result.total == 2
+    assert len(result.items) == 2
+    prices = {r.price for r in result.items}
     assert 1000 in prices
     assert 5000 in prices
 
 
-async def test_get_available_services_returns_unlinked() -> None:
-    svc, _, horse_repo, _ = make_service()
+async def test_get_list_by_horse_forwards_pagination_and_total() -> None:
+    svc, rel_repo, horse_repo, svc_repo = make_service()
     horse = horse_repo.add(make_horse())
+    first = svc_repo.add(make_service_entity(name="Услуга 1", slug="usluga-1"))
+    second = svc_repo.add(make_service_entity(name="Услуга 2", slug="usluga-2"))
+    await svc.create(horse.id, HorseServiceRelationCreateDto(service_id=first.id))
+    await svc.create(horse.id, HorseServiceRelationCreateDto(service_id=second.id))
+
+    result = await svc.get_list_by_horse(horse.id, limit=1, offset=1)
+
+    assert result.total == 2
+    assert len(result.items) == 1
+    assert rel_repo.calls[-1] == ("get_list_by_horse", (horse.id, 1, 1))
+
+
+async def test_get_available_services_returns_unlinked() -> None:
+    svc, rel_repo, horse_repo, _ = make_service()
+    horse = horse_repo.add(make_horse())
+    rel_repo.available_services = [
+        make_service_entity(
+            description="Полное описание",
+            price=2500,
+            price_formatter=PriceFormatter.gt,
+        )
+    ]
 
     result = await svc.get_available_services(horse.id)
-    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0].description == "Полное описание"
+    assert result[0].price == 2500
+    assert result[0].price_formatter == PriceFormatter.gt
+    assert set(result[0].model_dump()) == {
+        "id",
+        "name",
+        "slug",
+        "description",
+        "price",
+        "price_formatter",
+    }
 
 
 async def test_get_available_services_with_search() -> None:

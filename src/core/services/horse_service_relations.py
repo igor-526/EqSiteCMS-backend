@@ -1,7 +1,9 @@
 from uuid import UUID
 
+from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
 from core.entities.horse_service import HorseServiceRelations
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.protocols.repositories.horse_repository import HorseRepositoryProtocol
 from core.protocols.repositories.horse_service_relations_repository import (
@@ -11,13 +13,17 @@ from core.protocols.repositories.horse_service_repository import (
     HorseServiceRepositoryProtocol,
 )
 from core.schemas.horse_service_relations import (
+    HorseServiceAvailableOutDto,
     HorseServiceRelationCreateDto,
     HorseServiceRelationOutDto,
     HorseServiceRelationUpdateDto,
 )
+from core.schemas.users import UserOutDto
 
 
 class HorseServiceRelationsService:
+    _ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
+
     def __init__(
         self,
         relations_repository: HorseServiceRelationsRepositoryProtocol,
@@ -27,6 +33,12 @@ class HorseServiceRelationsService:
         self.relations_repository = relations_repository
         self.horse_repository = horse_repository
         self.horse_service_repository = horse_service_repository
+
+    def _require_write_scope(self, *, user: UserOutDto) -> None:
+        if not any(
+            scope.scope_name in self._ADMIN_SCOPE_NAMES for scope in user.scopes
+        ):
+            raise ForbiddenError("Недостаточно прав для выполнения операции")
 
     async def _validate_horse_exists(
         self, horse_id: UUID, *, equestrian_id: UUID
@@ -57,6 +69,7 @@ class HorseServiceRelationsService:
     ) -> HorseServiceRelationOutDto:
         return HorseServiceRelationOutDto(
             id=relation.id,
+            created_at=relation.created_at,
             service_id=relation.service_id,
             name=service_name,
             slug=service_slug,
@@ -100,7 +113,9 @@ class HorseServiceRelationsService:
         data: HorseServiceRelationCreateDto,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto,
     ) -> HorseServiceRelationOutDto:
+        self._require_write_scope(user=user)
         await self._validate_horse_exists(horse_id, equestrian_id=equestrian_context.id)
         await self._validate_service_exists(
             data.service_id, equestrian_id=equestrian_context.id
@@ -131,7 +146,9 @@ class HorseServiceRelationsService:
         data: HorseServiceRelationUpdateDto,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto,
     ) -> HorseServiceRelationOutDto:
+        self._require_write_scope(user=user)
         await self._validate_horse_exists(horse_id, equestrian_id=equestrian_context.id)
 
         relation = await self.relations_repository.get_by_id_and_horse(
@@ -158,7 +175,9 @@ class HorseServiceRelationsService:
         relation_id: UUID,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto,
     ) -> None:
+        self._require_write_scope(user=user)
         await self._validate_horse_exists(horse_id, equestrian_id=equestrian_context.id)
 
         relation = await self.relations_repository.get_by_id_and_horse(
@@ -174,28 +193,36 @@ class HorseServiceRelationsService:
         horse_id: UUID,
         *,
         equestrian_context: EquestrianContext,
-    ) -> list[HorseServiceRelationOutDto]:
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> PaginatedEntities[HorseServiceRelationOutDto]:
         await self._validate_horse_exists(horse_id, equestrian_id=equestrian_context.id)
 
-        relations = await self.relations_repository.get_list_by_horse(horse_id=horse_id)
+        relations, total = await self.relations_repository.get_list_by_horse(
+            horse_id=horse_id, limit=limit, offset=offset
+        )
         result = []
         for relation in relations:
             dto = await self._get_service_and_build_dto(
                 relation, equestrian_id=equestrian_context.id
             )
             result.append(dto)
-        return result
+        return PaginatedEntities(items=result, total=total)
 
     async def get_available_services(
         self,
         horse_id: UUID,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto,
         search: str | None = None,
-    ) -> list[dict]:
+    ) -> list[HorseServiceAvailableOutDto]:
+        self._require_write_scope(user=user)
         await self._validate_horse_exists(horse_id, equestrian_id=equestrian_context.id)
 
         services = await self.relations_repository.get_available_services(
             horse_id=horse_id, equestrian_id=equestrian_context.id, search=search
         )
-        return [{"id": str(s.id), "name": s.name, "slug": s.slug} for s in services]
+        return [
+            HorseServiceAvailableOutDto.model_validate(service) for service in services
+        ]
