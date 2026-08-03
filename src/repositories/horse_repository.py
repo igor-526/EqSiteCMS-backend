@@ -385,6 +385,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         ddate_lte_or_none: date | None = None,
         horse_owner_ids: list[UUID] | None = None,
         services: list[UUID] | None = None,
+        service_names: list[str] | None = None,
         this_stable: bool | None = None,
         exclude_ids: list[UUID] | None = None,
         include_ids: list[UUID] | None = None,
@@ -520,6 +521,27 @@ class HorseRepository(TenantScopedRepository[Horse]):
                 )
             )
             conditions.append(exists(service_match))
+        if service_names:
+            # Фильтрация по наименованиям услуг (регистронезависимое полное совпадение)
+            service_names_lower = [
+                name.lower().strip() for name in service_names if name.strip()
+            ]
+            if service_names_lower:
+                service_name_match = (
+                    select(1)
+                    .select_from(
+                        horse_service_relations.join(
+                            horse_service,
+                            horse_service.c.id == horse_service_relations.c.service_id,
+                        )
+                    )
+                    .where(
+                        horse_service_relations.c.horse_id == horse.c.id,
+                        horse_service.c.equestrian_id == equestrian_id,
+                        func.lower(horse_service.c.name).in_(service_names_lower),
+                    )
+                )
+                conditions.append(exists(service_name_match))
         if this_stable is not None:
             conditions.append(horse.c.this_stable == this_stable)
         if exclude_ids:

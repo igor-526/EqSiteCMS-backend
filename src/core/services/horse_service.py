@@ -11,6 +11,7 @@ from core.protocols.repositories.horse_service_repository import (
     HorseServiceRepositoryProtocol,
 )
 from core.schemas.horse_service import HorseServiceCreateDto, HorseServiceUpdateDto
+from core.schemas.users import UserOutDto
 from core.utils.html_security import validate_no_js_in_html
 
 HORSE_SERVICE_NAME_MAX_LENGTH = 63
@@ -30,8 +31,36 @@ ALLOWED_SORT_FIELDS = {
 
 
 class HorseServiceService:
+    _ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "DEVELOPER"})
+
     def __init__(self, horse_service_repository: HorseServiceRepositoryProtocol):
         self.horse_service_repository = horse_service_repository
+
+    async def _check_admin_permission(self, *, user: UserOutDto, check_name_update: bool = False, is_create_or_delete: bool = False) -> None:
+        """Проверить, что пользователь имеет права SUPERUSER или DEVELOPER."""
+        if user is None:
+            raise ClientError("Недостаточно прав для выполнения операции")
+        has_admin_scope = any(
+            scope.scope_name in self._ADMIN_SCOPE_NAMES for scope in user.scopes
+        )
+        # Если пользователь имеет SUPERUSER или DEVELOPER scope, разрешаем все операции
+        if has_admin_scope:
+            return
+        # Если пользователь ADMIN
+        has_admin_only = any(
+            scope.scope_name == "ADMIN" for scope in user.scopes
+        )
+        if has_admin_only:
+            # Для создания и удаления запрещаем
+            if is_create_or_delete:
+                raise ClientError("Недостаточно прав для выполнения операции")
+            # Если пытается обновить наименование, запрещаем
+            if check_name_update:
+                raise ClientError("Недостаточно прав для изменения наименования")
+            # Для обновления других полей разрешаем
+            return
+        # Для всех остальных операций запрещаем
+        raise ClientError("Недостаточно прав для выполнения операции")
 
     def _parse_slug_or_id(self, slug_or_id: str) -> str | UUID:
         """Попытаться преобразовать строку в UUID, иначе вернуть как есть."""
@@ -195,9 +224,15 @@ class HorseServiceService:
             counter += 1
 
     async def create(
-        self, data: HorseServiceCreateDto, *, equestrian_context: EquestrianContext
+        self,
+        data: HorseServiceCreateDto,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> HorseServiceEntity:
         """Создать новую услугу."""
+        if user is not None:
+            await self._check_admin_permission(user=user, is_create_or_delete=True)
         horse_service_data = data.model_dump(exclude_none=True)
         self._validate_service_data(horse_service_data, partial=False)
 
@@ -237,6 +272,7 @@ class HorseServiceService:
         data: HorseServiceUpdateDto,
         *,
         equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> HorseServiceEntity:
         """Обновить услугу."""
         parsed = self._parse_slug_or_id(slug_or_id)
@@ -245,6 +281,12 @@ class HorseServiceService:
         )
         if horse_service is None:
             raise ClientError("Услуга не найдена")
+
+        if user is not None:
+            # Проверяем, пытается ли пользователь изменить наименование
+            update_data = data.model_dump(exclude_none=True)
+            is_name_update = "name" in update_data and update_data["name"] != horse_service.name
+            await self._check_admin_permission(user=user, check_name_update=is_name_update)
 
         update_data = data.model_dump(exclude_none=True)
         if not update_data:
@@ -310,9 +352,15 @@ class HorseServiceService:
         return horse_service
 
     async def delete(
-        self, slug_or_id: str, *, equestrian_context: EquestrianContext
+        self,
+        slug_or_id: str,
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
     ) -> None:
         """Удалить услугу."""
+        if user is not None:
+            await self._check_admin_permission(user=user, is_create_or_delete=True)
         parsed = self._parse_slug_or_id(slug_or_id)
         horse_service = await self.horse_service_repository.get_by_slug_or_id(
             parsed, equestrian_id=equestrian_context.id

@@ -82,6 +82,13 @@ async def get_horses(
             "используют OR-семантику"
         ),
     ),
+    service_names: list[str] | None = Query(
+        None,
+        description=(
+            "Фильтр по наименованиям услуг (регистронезависимое полное совпадение); "
+            "несколько значений используют OR-семантику"
+        ),
+    ),
     this_stable: bool | None = Query(None, description="Фильтр по статусу на конюшке"),
     exclude_ids: list[UUID] | None = Query(
         None, description="Идентификаторы лошадей, исключаемые из выдачи"
@@ -110,6 +117,7 @@ async def get_horses(
         ddate_lte=ddate_lte,
         horse_owner_ids=horse_owner_ids,
         services=services,
+        service_names=service_names,
         pedigree=pedigree,
         this_stable=this_stable,
         exclude_ids=exclude_ids,

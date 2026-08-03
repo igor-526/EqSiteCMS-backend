@@ -54,6 +54,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         ddate_lte_or_none: date | None = None,
         horse_owner_ids: list[UUID] | None = None,
         services: list[UUID] | None = None,
+        service_names: list[str] | None = None,
         this_stable: bool | None = None,
         exclude_ids: list[UUID] | None = None,
         include_ids: list[UUID] | None = None,

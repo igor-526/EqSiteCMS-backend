@@ -10,6 +10,7 @@ from core.schemas.horse_service import (
     HorseServiceOutWithPageDataDto,
     HorseServiceUpdateDto,
 )
+from core.schemas.users import UserOutDto
 from core.services.horse_service import HorseServiceService
 from depends.services import (
     get_current_user,
@@ -107,13 +108,13 @@ async def create_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> HorseServiceOutDto:
     horse_service = await horse_service_service.create(
-        data, equestrian_context=equestrian_context
+        data, equestrian_context=equestrian_context, user=current_user
     )
     return HorseServiceOutDto.model_validate(horse_service)
 
@@ -130,13 +131,13 @@ async def update_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> HorseServiceOutDto:
     horse_service = await horse_service_service.update(
-        slug_or_id, data, equestrian_context=equestrian_context
+        slug_or_id, data, equestrian_context=equestrian_context, user=current_user
     )
     return HorseServiceOutDto.model_validate(horse_service)
 
@@ -152,11 +153,11 @@ async def delete_horse_service(
     horse_service_service: Annotated[
         HorseServiceService, Depends(get_horse_service_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
 ) -> None:
     await horse_service_service.delete(
-        slug_or_id, equestrian_context=equestrian_context
+        slug_or_id, equestrian_context=equestrian_context, user=current_user
     )
