@@ -36,7 +36,13 @@ class HorseServiceService:
     def __init__(self, horse_service_repository: HorseServiceRepositoryProtocol):
         self.horse_service_repository = horse_service_repository
 
-    async def _check_admin_permission(self, *, user: UserOutDto, check_name_update: bool = False, is_create_or_delete: bool = False) -> None:
+    async def _check_admin_permission(
+        self,
+        *,
+        user: UserOutDto,
+        check_name_update: bool = False,
+        is_create_or_delete: bool = False,
+    ) -> None:
         """Проверить, что пользователь имеет права SUPERUSER или DEVELOPER."""
         if user is None:
             raise ClientError("Недостаточно прав для выполнения операции")
