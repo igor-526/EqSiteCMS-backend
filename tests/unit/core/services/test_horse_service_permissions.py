@@ -198,7 +198,9 @@ async def test_update_service_name_with_admin_scope_returns_403(
     repository.add(entity)
 
     data = HorseServiceUpdateDto(name="Обновленная услуга")
-    with pytest.raises(ClientError, match="Недостаточно прав для изменения наименования"):
+    with pytest.raises(
+        ClientError, match="Недостаточно прав для изменения наименования"
+    ):
         await service.update(
             str(entity.id), data, equestrian_context=equestrian_context, user=user
         )

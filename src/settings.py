@@ -71,4 +71,47 @@ class Settings(BaseSettings):
         )
 
 
+class NatsSettings(BaseSettings):
+    # BASE
+    nats_servers_raw: str = Field(default="nats://localhost:4222", alias="NATS_SERVERS")
+
+    @property
+    def nats_servers(self) -> list[str]:
+        if self.nats_servers_raw.strip():
+            return [o.strip() for o in self.nats_servers_raw.split(",") if o.strip()]
+        return [
+            "nats://eqcms-nats:4222",
+        ]
+
+    # STREAMS
+    nats_stream_site_events: str = Field(
+        default="SITE_EVENTS", alias="NATS_STREAM_SITE_EVENTS"
+    )
+
+    # SUBJECTS
+    # SITE EVENTS
+    nats_subjects_site_events_raw: str = Field(
+        default="events.site.>", alias="NATS_SUBJECTS_SITE_EVENTS"
+    )
+    nats_subject_callback_requested: str = Field(
+        default="events.site.callback.requested",
+        alias="NATS_SUBJECT_CALLBACK_REQUESTED",
+    )
+
+    @property
+    def nats_subjects_site_events(self) -> list[str]:
+        if self.nats_subjects_site_events_raw.strip():
+            return [
+                o.strip()
+                for o in self.nats_subjects_site_events_raw.split(",")
+                if o.strip()
+            ]
+        return [
+            "events.site.>",
+        ]
+
+    model_config = SettingsConfigDict(populate_by_name=True)
+
+
 settings = Settings()
+nats_settings = NatsSettings()

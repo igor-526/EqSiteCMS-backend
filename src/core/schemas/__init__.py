@@ -25,6 +25,7 @@ from .horses import (
     HorseWithPedigreeOutDto,
     SetPedigreeEntities,
 )
+from .messaging import CallbackRequestedData, MessagingBaseEventData, MessagingEvent
 from .photos import (
     PhotoBatchDeleteDto,
     PhotoCreateDto,
@@ -101,4 +102,7 @@ __all__ = [
     "CoatColorOutWithPageDataDto",
     "CoatColorCreateDto",
     "CoatColorUpdateDto",
+    "CallbackRequestedData",
+    "MessagingEvent",
+    "MessagingBaseEventData",
 ]

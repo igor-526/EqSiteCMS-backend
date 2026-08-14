@@ -53,9 +53,7 @@ class HorseServiceService:
         if has_admin_scope:
             return
         # Если пользователь ADMIN
-        has_admin_only = any(
-            scope.scope_name == "ADMIN" for scope in user.scopes
-        )
+        has_admin_only = any(scope.scope_name == "ADMIN" for scope in user.scopes)
         if has_admin_only:
             # Для создания и удаления запрещаем
             if is_create_or_delete:
@@ -291,8 +289,12 @@ class HorseServiceService:
         if user is not None:
             # Проверяем, пытается ли пользователь изменить наименование
             update_data = data.model_dump(exclude_none=True)
-            is_name_update = "name" in update_data and update_data["name"] != horse_service.name
-            await self._check_admin_permission(user=user, check_name_update=is_name_update)
+            is_name_update = (
+                "name" in update_data and update_data["name"] != horse_service.name
+            )
+            await self._check_admin_permission(
+                user=user, check_name_update=is_name_update
+            )
 
         update_data = data.model_dump(exclude_none=True)
         if not update_data:

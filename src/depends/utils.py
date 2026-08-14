@@ -2,6 +2,8 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from clients.nats.client import NatsJetstreamClient
+from containers import container
 from core.protocols.media import (
     MediaStorageProtocol,
     MediaTypeValidatorProtocol,
@@ -53,3 +55,7 @@ async def get_photo_url_builder() -> PhotoUrlBuilderProtocol:
 
 async def get_media_type_validator() -> MediaTypeValidatorProtocol:
     return AllowedMediaTypeValidator()
+
+
+async def get_nats_client() -> NatsJetstreamClient:
+    return container.nats_client()

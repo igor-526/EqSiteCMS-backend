@@ -9,6 +9,7 @@ from uvicorn import run
 from api import (
     auth_router,
     breeds_router,
+    callback_request_router,
     coat_color_router,
     horse_owner_router,
     horse_service_relations_router,
@@ -20,6 +21,7 @@ from api import (
     site_settings_router,
     users_router,
 )
+from containers import ApplicationContainer
 from core.exceptions.auth import ForbiddenError, InvalidCredentials
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.exceptions.tenant import TenantNotFound
@@ -30,11 +32,22 @@ from utils.seeding.init_registry import init_registry
 
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
 
+container = ApplicationContainer()
+
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_registry()
-    yield
+
+    nats_client = container.nats_client()
+
+    await nats_client.connect()
+    await nats_client.setup()
+
+    try:
+        yield
+    finally:
+        await nats_client.close()
 
 
 app = FastAPI(
@@ -56,6 +69,9 @@ router.include_router(photos_router)
 router.include_router(prices_router)
 router.include_router(site_settings_router)
 router.include_router(users_router, prefix="/users", tags=["Users"])
+router.include_router(
+    callback_request_router, prefix="/callback_requests", tags=["Callback Requests"]
+)
 app.include_router(router)
 
 
