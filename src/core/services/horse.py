@@ -761,9 +761,17 @@ class HorseService:
                 if photo_id not in existing:
                     raise ClientError(f"Фотография с ID '{photo_id}' не найдена")
 
+        main_photo_id = data.main
+        if main_photo_id is not None:
+            if main_photo_id not in unique_ids:
+                raise ClientError(
+                    "Главная фотография должна входить в список фотографий"
+                )
+
         await self.horse_repository.set_horse_photos(
             horse_id,
             unique_ids,
+            main_photo_id=main_photo_id,
             equestrian_id=equestrian_context.id,
         )
 

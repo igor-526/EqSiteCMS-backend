@@ -12,3 +12,8 @@ class InvalidCredentials(ClientError):
 
 class ForbiddenError(ClientError):
     pass
+
+
+class InvalidServiceKey(ClientError):
+    def __str__(self):
+        return "Невалидный сервисный ключ"

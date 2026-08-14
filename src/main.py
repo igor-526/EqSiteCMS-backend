@@ -18,11 +18,12 @@ from api import (
     news_router,
     photos_router,
     prices_router,
+    service_users_router,
     site_settings_router,
     users_router,
 )
 from containers import ApplicationContainer
-from core.exceptions.auth import ForbiddenError, InvalidCredentials
+from core.exceptions.auth import ForbiddenError, InvalidCredentials, InvalidServiceKey
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.exceptions.tenant import TenantNotFound
 from core.middleware.cors import SplitCORSMiddleware
@@ -74,6 +75,13 @@ router.include_router(
 )
 app.include_router(router)
 
+# Service router for microservice endpoints
+service_router = APIRouter(prefix="/api/service")
+service_router.include_router(
+    service_users_router, prefix="/users", tags=["Service Users"]
+)
+app.include_router(service_router)
+
 
 @app.get("/health", tags=["Healthcheck"])
 async def health_check() -> dict[str, str]:
@@ -113,6 +121,11 @@ def tenant_not_found_handler(_: Request, exc: TenantNotFound) -> JSONResponse:
 
 @app.exception_handler(InvalidCredentials)
 def invalid_token_error_handler(_: Request, exc: InvalidCredentials) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=401)
+
+
+@app.exception_handler(InvalidServiceKey)
+def invalid_service_key_handler(_: Request, exc: InvalidServiceKey) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=401)
 
 

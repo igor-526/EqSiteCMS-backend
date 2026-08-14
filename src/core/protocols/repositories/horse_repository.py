@@ -112,6 +112,7 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
         self,
         horse_id: UUID,
         photo_ids: list[UUID],
+        main_photo_id: UUID | None = None,
         *,
         equestrian_id: UUID,
     ) -> None:

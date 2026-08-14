@@ -1,3 +1,6 @@
+from uuid import UUID
+
+from core.entities.base import PaginatedEntities
 from core.exceptions.base import ClientError
 from core.protocols.repositories.equestrian_repository import (
     EquestrianRepositoryProtocol,
@@ -95,3 +98,27 @@ class UserService:
 
         user.password = self.security.hash_password(data.new_password)
         await self.repository.update(user)
+
+    async def get_users_paginated(
+        self,
+        *,
+        equestrian_ids: list[UUID] | None = None,
+        equestrian_service_keys: list[str] | None = None,
+        roles: list[str] | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> PaginatedEntities[UserOutDto]:
+        """Get paginated users with filtering for service endpoints."""
+        from core.entities.base import PaginatedEntities
+
+        users, total = await self.repository.get_users_paginated(
+            equestrian_ids=equestrian_ids,
+            equestrian_service_keys=equestrian_service_keys,
+            roles=roles,
+            limit=limit,
+            offset=offset,
+        )
+
+        user_dtos = [UserOutDto.model_validate(user.model_dump()) for user in users]
+
+        return PaginatedEntities[UserOutDto](items=user_dtos, total=total)

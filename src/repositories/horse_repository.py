@@ -899,6 +899,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
         self,
         horse_id: UUID,
         photo_ids: list[UUID],
+        main_photo_id: UUID | None = None,
         *,
         equestrian_id: UUID,
     ) -> None:
@@ -915,7 +916,11 @@ class HorseRepository(TenantScopedRepository[Horse]):
         # Вставляем новые связи
         if photo_ids:
             values = [
-                {"horse_id": horse_id, "photo_id": photo_id, "is_main": False}
+                {
+                    "horse_id": horse_id,
+                    "photo_id": photo_id,
+                    "is_main": photo_id == main_photo_id,
+                }
                 for photo_id in photo_ids
             ]
             insert_stmt = insert(horse_photos).values(values)

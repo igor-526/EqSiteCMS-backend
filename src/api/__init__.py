@@ -14,6 +14,7 @@ from .users import router as users_router
 
 __all__ = [
     "auth_router",
+    "service_users_router",
     "breeds_router",
     "coat_color_router",
     "horse_owner_router",
@@ -27,3 +28,4 @@ __all__ = [
     "users_router",
     "callback_request_router",
 ]
+from .service_users import router as service_users_router

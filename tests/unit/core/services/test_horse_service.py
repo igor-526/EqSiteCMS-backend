@@ -233,7 +233,12 @@ class FakeHorseRepository:
         return self.list_result
 
     async def set_horse_photos(
-        self, horse_id: UUID, photo_ids: list[UUID], *, equestrian_id: UUID
+        self,
+        horse_id: UUID,
+        photo_ids: list[UUID],
+        main_photo_id: UUID | None = None,
+        *,
+        equestrian_id: UUID,
     ) -> None:
         self.calls.append(
             ("set_horse_photos", {"horse_id": horse_id, "photo_ids": photo_ids})

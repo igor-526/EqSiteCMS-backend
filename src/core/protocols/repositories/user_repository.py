@@ -11,6 +11,16 @@ class UserRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
 
     async def get_user_scopes(self, user_id: UUID) -> list[UserScope]: ...
 
+    async def get_users_paginated(
+        self,
+        *,
+        equestrian_ids: list[UUID] | None = None,
+        equestrian_service_keys: list[str] | None = None,
+        roles: list[str] | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[User], int]: ...
+
 
 class UserScopeRepositoryProtocol(BaseRepositoryProtocol[UserScope], Protocol):
     pass

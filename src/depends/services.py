@@ -290,3 +290,33 @@ async def get_news_service(
         photo_repository=photo_repository,
         photo_url_builder=photo_url_builder,
     )
+
+
+async def get_service_context(
+    service_key: Annotated[str | None, Header(alias="X-Service-Key")] = None,
+) -> None:
+    """Validate X-Service-Key header for service endpoints."""
+    from settings import settings
+
+    if not settings.service_key:
+        raise ClientError("Сервисные эндпоинты недоступны: SERVICE_KEY не настроен")
+
+    if service_key is None or service_key.strip() != settings.service_key:
+        from core.exceptions.auth import InvalidServiceKey
+
+        raise InvalidServiceKey()
+
+
+async def get_service_pagination_params(
+    limit: int = 100,
+    offset: int = 0,
+) -> dict:
+    """Validate pagination parameters for service endpoints."""
+    if limit < 1:
+        raise ClientError("limit должен быть положительным числом")
+    if limit > 5000:
+        raise ClientError("limit не может превышать 5000")
+    if offset < 0:
+        raise ClientError("offset не может быть отрицательным")
+
+    return {"limit": limit, "offset": offset}

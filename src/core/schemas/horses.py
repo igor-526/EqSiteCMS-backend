@@ -283,6 +283,7 @@ class HorsePhotosUpdateInDto(BaseSchema):
     """DTO для обновления списка фотографий лошади."""
 
     photo_ids: list[UUID] = Field(..., description="Список идентификаторов фотографий")
+    main: UUID | None = Field(None, description="UUID главной фотографии")
 
 
 class HorseSetPedigreeInDto(BaseSchema):

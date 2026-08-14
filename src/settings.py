@@ -42,6 +42,9 @@ class Settings(BaseSettings):
         default=True, alias="S3_PUBLIC_INCLUDE_BUCKET"
     )
 
+    # Service key for microservices auth
+    service_key: str = Field(default="", alias="SERVICE_KEY")
+
     @property
     def cms_cors_origins(self) -> list[str]:
         if self.cms_cors_origins_raw.strip():
