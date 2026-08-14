@@ -11,6 +11,7 @@ from api import (
     breeds_router,
     callback_request_router,
     coat_color_router,
+    emails_router,
     horse_owner_router,
     horse_service_relations_router,
     horse_service_router,
@@ -61,6 +62,7 @@ router = APIRouter(prefix="/api")
 router.include_router(auth_router, prefix="/auth", tags=["Auth"])
 router.include_router(breeds_router)
 router.include_router(coat_color_router)
+router.include_router(emails_router)
 router.include_router(horse_owner_router)
 router.include_router(horse_service_router)
 router.include_router(horse_service_relations_router)

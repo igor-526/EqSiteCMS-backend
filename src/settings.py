@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # Service key for microservices auth
     service_key: str = Field(default="", alias="SERVICE_KEY")
 
+    # Email Service
+    email_service_url: str = Field(
+        default="http://email-service:8000", alias="EMAIL_SERVICE_URL"
+    )
+
     @property
     def cms_cors_origins(self) -> list[str]:
         if self.cms_cors_origins_raw.strip():
