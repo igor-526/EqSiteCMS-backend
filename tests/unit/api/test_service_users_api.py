@@ -279,3 +279,29 @@ class TestServiceUsersAPI:
         assert "last_name" in user_data
         assert "created_at" in user_data
         assert "scopes" in user_data
+
+    async def test_service_users_excludes_deleted_and_blocked(self, client, mock_user_service):
+        """Service users endpoint excludes deleted and blocked users."""
+        # Arrange
+        test_user = create_test_user_dto()
+        mock_user_service.get_users_paginated.return_value = PaginatedEntities(
+            items=[test_user], total=1
+        )
+
+        # Act
+        response = client.get(
+            "/api/service/users", headers={"X-Service-Key": "valid-key"}
+        )
+
+        # Assert
+        assert response.status_code == 200
+        # Verify the service was called with exclude_deleted and exclude_blocked
+        mock_user_service.get_users_paginated.assert_called_once_with(
+            equestrian_ids=None,
+            equestrian_service_keys=None,
+            roles=None,
+            limit=100,
+            offset=0,
+            exclude_deleted=True,
+            exclude_blocked=True,
+        )

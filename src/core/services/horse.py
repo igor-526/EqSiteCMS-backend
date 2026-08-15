@@ -478,11 +478,13 @@ class HorseService:
         )
         if target_horse is None:
             raise ClientError("Лошадь не найдена")
-        current_sire_id, current_dam_id, current_foal_ids = (
-            await self._get_current_pedigree_ids(
-                horse_id=horse_id,
-                equestrian_context=equestrian_context,
-            )
+        (
+            current_sire_id,
+            current_dam_id,
+            current_foal_ids,
+        ) = await self._get_current_pedigree_ids(
+            horse_id=horse_id,
+            equestrian_context=equestrian_context,
         )
         exclude_ids = list(
             dict.fromkeys(
@@ -566,11 +568,13 @@ class HorseService:
             equestrian_context=equestrian_context,
         )
         target_kind = breed_kinds[target.id]
-        current_sire_id, current_dam_id, current_foal_ids = (
-            await self._get_current_pedigree_ids(
-                horse_id=horse_id,
-                equestrian_context=equestrian_context,
-            )
+        (
+            current_sire_id,
+            current_dam_id,
+            current_foal_ids,
+        ) = await self._get_current_pedigree_ids(
+            horse_id=horse_id,
+            equestrian_context=equestrian_context,
         )
         current_foal_ids_set = set(current_foal_ids)
 

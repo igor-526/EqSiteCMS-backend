@@ -16,6 +16,9 @@ class UserOutDto(BaseSchema):
     middle_name: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    is_deleted: bool = False
+    deleted_at: datetime | None = None
+    is_blocked: bool = False
     scopes: list[UserScope] = Field(
         default_factory=list, description="Группы доступа пользователя"
     )
@@ -31,6 +34,7 @@ class UserProfileDto(BaseSchema):
     middle_name: str | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    is_blocked: bool = False
     scopes: list[UserScope] = Field(default_factory=list)
 
 

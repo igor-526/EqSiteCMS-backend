@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, String, Table
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Table, text
 
 from utils.basemodel import metadata, timestamp_columns, uuid_pk
 
@@ -31,6 +31,26 @@ users = Table(
         String(63),
         nullable=True,
         comment="Отчество пользователя (необязательно)",
+    ),
+    Column(
+        "is_deleted",
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        comment="Флаг мягкого удаления",
+    ),
+    Column(
+        "deleted_at",
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Время мягкого удаления",
+    ),
+    Column(
+        "is_blocked",
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+        comment="Флаг блокировки пользователя",
     ),
 )
 

@@ -41,6 +41,8 @@ class UserRepository(AbstractRepository[User]):
         roles: list[str] | None = None,
         limit: int = 100,
         offset: int = 0,
+        exclude_deleted: bool = False,
+        exclude_blocked: bool = False,
     ) -> tuple[list[User], int]:
         """Get paginated users with filtering."""
         from sqlalchemy import and_, func
@@ -53,6 +55,14 @@ class UserRepository(AbstractRepository[User]):
 
         # Apply filters
         conditions = []
+
+        # Exclude deleted users if requested
+        if exclude_deleted:
+            conditions.append(self.table.c.is_deleted.is_(False))
+
+        # Exclude blocked users if requested
+        if exclude_blocked:
+            conditions.append(self.table.c.is_blocked.is_(False))
 
         # Filter by equestrian_ids (OR within filter)
         if equestrian_ids:

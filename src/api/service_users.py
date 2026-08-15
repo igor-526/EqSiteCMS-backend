@@ -33,6 +33,8 @@ async def get_service_users(
     - equestrian_ids: Filter by equestrian IDs
     - equestrian_service_keys: Filter by equestrian service keys
     - role: Filter by user scope names
+
+    Note: Automatically excludes deleted (is_deleted=true) and blocked (is_blocked=true) users.
     """
     return await user_service.get_users_paginated(
         equestrian_ids=equestrian_ids,
@@ -40,4 +42,6 @@ async def get_service_users(
         roles=role,
         limit=pagination["limit"],
         offset=pagination["offset"],
+        exclude_deleted=True,
+        exclude_blocked=True,
     )

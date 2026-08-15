@@ -12,3 +12,4 @@ from .price_repository import PriceGroupRepositoryProtocol, PriceRepositoryProto
 from .site_settings_repository import SiteSettingsRepositoryProtocol
 from .token_repository import TokenRepositoryProtocol
 from .user_repository import UserRepositoryProtocol
+from .user_management_repository import UserManagementRepositoryProtocol

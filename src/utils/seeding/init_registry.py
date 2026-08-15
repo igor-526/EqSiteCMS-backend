@@ -87,8 +87,7 @@ async def run_seeders_with_retry(
 
             wait_time = backoff_seconds * attempt if backoff_seconds > 0 else 0
             logger.warning(
-                "Ошибка сидирования (попытка %s из %s): %s. "
-                "Повтор через %.1f секунд.",
+                "Ошибка сидирования (попытка %s из %s): %s. Повтор через %.1f секунд.",
                 attempt,
                 max_attempts,
                 exc,

@@ -107,6 +107,8 @@ class UserService:
         roles: list[str] | None = None,
         limit: int = 100,
         offset: int = 0,
+        exclude_deleted: bool = False,
+        exclude_blocked: bool = False,
     ) -> PaginatedEntities[UserOutDto]:
         """Get paginated users with filtering for service endpoints."""
         from core.entities.base import PaginatedEntities
@@ -117,6 +119,8 @@ class UserService:
             roles=roles,
             limit=limit,
             offset=offset,
+            exclude_deleted=exclude_deleted,
+            exclude_blocked=exclude_blocked,
         )
 
         user_dtos = [UserOutDto.model_validate(user.model_dump()) for user in users]

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from uvicorn import run
 
 from api import (
+    user_management_router,
     auth_router,
     breeds_router,
     callback_request_router,
@@ -83,6 +84,7 @@ service_router.include_router(
     service_users_router, prefix="/users", tags=["Service Users"]
 )
 app.include_router(service_router)
+app.include_router(user_management_router)
 
 
 @app.get("/health", tags=["Healthcheck"])

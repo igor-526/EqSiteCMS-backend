@@ -12,6 +12,7 @@ from core.protocols.media import (
     PhotoUrlBuilderProtocol,
 )
 from core.protocols.repositories import (
+    UserManagementRepositoryProtocol,
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
     EquestrianRepositoryProtocol,
@@ -41,7 +42,9 @@ from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
 from core.services.users import UserService
+from core.services.user_management import UserManagementService
 from depends.repositories import (
+    get_user_management_repository,
     get_breed_repository,
     get_coat_color_repository,
     get_equestrian_repository,
@@ -320,3 +323,17 @@ async def get_service_pagination_params(
         raise ClientError("offset не может быть отрицательным")
 
     return {"limit": limit, "offset": offset}
+
+
+async def get_user_management_service(
+    user_management_repository: Annotated[
+        UserManagementRepositoryProtocol, Depends(get_user_management_repository)
+    ],
+    security: Annotated[SecurityProtocol, Depends(get_security)],
+) -> UserManagementService:
+    from core.services.user_management import UserManagementService
+
+    return UserManagementService(
+        repository=user_management_repository,
+        security=security,
+    )

@@ -2,10 +2,10 @@ from uuid import UUID
 
 from pydantic import Field
 
-from .base import Entity, TimeStampMixin
+from .base import Entity, SoftDeleteMixin, TimeStampMixin
 
 
-class User(Entity, TimeStampMixin):
+class User(Entity, TimeStampMixin, SoftDeleteMixin):
     """Пользователь системы."""
 
     equestrian_id: UUID = Field(
@@ -35,6 +35,10 @@ class User(Entity, TimeStampMixin):
         default=None,
         description="Отчество пользователя",
         examples=["Иванович"],
+    )
+    is_blocked: bool = Field(
+        default=False,
+        description="Флаг блокировки пользователя",
     )
 
 

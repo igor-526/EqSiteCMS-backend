@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.protocols.media import PhotoUrlBuilderProtocol
 from core.protocols.repositories import (
+    UserManagementRepositoryProtocol,
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
     EquestrianRepositoryProtocol,
@@ -124,3 +125,11 @@ async def get_news_repository(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> NewsRepositoryProtocol:
     return NewsRepository(session=session)
+
+
+async def get_user_management_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> UserManagementRepositoryProtocol:
+    from repositories.user_management_repository import UserManagementRepository
+
+    return UserManagementRepository(session=session)

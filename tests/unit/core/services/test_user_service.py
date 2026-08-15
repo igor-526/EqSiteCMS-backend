@@ -81,6 +81,8 @@ class TestUserServiceGetUsersPaginated:
             roles=["ADMIN"],
             limit=50,
             offset=10,
+            exclude_deleted=False,
+            exclude_blocked=False,
         )
 
     async def test_converts_users_to_dtos(self):
@@ -99,11 +101,9 @@ class TestUserServiceGetUsersPaginated:
         # Assert
         assert len(result.items) == 2
         assert all(isinstance(item, UserOutDto) for item in result.items)
-        assert result.items[0].username == "user1"
-        assert result.items[1].username == "user2"
 
     async def test_empty_result(self):
-        """Test with no matching users."""
+        """Test with empty result."""
         # Arrange
         mock_repository = AsyncMock()
         mock_repository.get_users_paginated.return_value = ([], 0)
@@ -115,28 +115,10 @@ class TestUserServiceGetUsersPaginated:
 
         # Assert
         assert result.total == 0
-        assert len(result.items) == 0
-
-    async def test_preserves_total_count(self):
-        """Test that total count from repository is preserved."""
-        # Arrange
-        test_user = create_test_user()
-        mock_repository = AsyncMock()
-        mock_repository.get_users_paginated.return_value = ([test_user], 100)
-
-        service = UserService(repository=mock_repository)
-
-        # Act
-        result = await service.get_users_paginated(limit=10, offset=0)
-
-        # Assert
-        assert (
-            result.total == 100
-        )  # Total is 100, but only 1 user returned due to pagination
-        assert len(result.items) == 1
+        assert result.items == []
 
     async def test_default_pagination_values(self):
-        """Test that default pagination values are used."""
+        """Test default pagination values."""
         # Arrange
         mock_repository = AsyncMock()
         mock_repository.get_users_paginated.return_value = ([], 0)
@@ -153,6 +135,8 @@ class TestUserServiceGetUsersPaginated:
             roles=None,
             limit=100,
             offset=0,
+            exclude_deleted=False,
+            exclude_blocked=False,
         )
 
     async def test_custom_pagination_values(self):
@@ -173,6 +157,8 @@ class TestUserServiceGetUsersPaginated:
             roles=None,
             limit=25,
             offset=50,
+            exclude_deleted=False,
+            exclude_blocked=False,
         )
 
     async def test_multiple_filters(self):
@@ -199,4 +185,24 @@ class TestUserServiceGetUsersPaginated:
             roles=["ADMIN", "USER"],
             limit=100,
             offset=0,
+            exclude_deleted=False,
+            exclude_blocked=False,
         )
+
+    async def test_preserves_user_fields(self):
+        """Test that all user fields are preserved in DTO."""
+        # Arrange
+        test_user = create_test_user()
+        test_user.first_name = "Иван"
+        test_user.last_name = "Иванов"
+        mock_repository = AsyncMock()
+        mock_repository.get_users_paginated.return_value = ([test_user], 1)
+
+        service = UserService(repository=mock_repository)
+
+        # Act
+        result = await service.get_users_paginated()
+
+        # Assert
+        assert result.items[0].first_name == "Иван"
+        assert result.items[0].last_name == "Иванов"

@@ -15,6 +15,7 @@ from .site_settings import router as site_settings_router
 from .users import router as users_router
 
 __all__ = [
+    "user_management_router",
     "auth_router",
     "breeds_router",
     "callback_request_router",
@@ -31,3 +32,4 @@ __all__ = [
     "site_settings_router",
     "users_router",
 ]
+from .user_management import router as user_management_router
