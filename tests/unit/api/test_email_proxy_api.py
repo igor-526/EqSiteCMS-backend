@@ -19,9 +19,11 @@ def actor(*, user_id: UUID | None = None, scope: str | None = None) -> UserOutDt
         equestrian_id=uuid4(),
         username="email-owner",
         created_at=datetime.now(UTC),
-        scopes=[]
-        if scope is None
-        else [UserScope(scope_name=scope, scope_description="test scope")],
+        scopes=(
+            []
+            if scope is None
+            else [UserScope(scope_name=scope, scope_description="test scope")]
+        ),
     )
 
 

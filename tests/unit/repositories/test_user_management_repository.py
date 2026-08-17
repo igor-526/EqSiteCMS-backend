@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.entities.user import User, UserScope
 from repositories.user_management_repository import UserManagementRepository
 
-
 TEST_USER_ID = uuid4()
 TEST_EQUESTRIAN_ID = uuid4()
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -144,3 +145,47 @@ async def test_breed_short_name_sort_and_pagination_do_not_affect_total() -> Non
     assert "LIMIT 5 OFFSET 10" in list_sql
     assert "breeds.short_name ~* 'AR'" in count_sql
     assert "LIMIT" not in count_sql
+
+
+async def test_breed_group_filter_uses_in_and_count_query() -> None:
+    session = FakeAsyncSession()
+    repository = BreedRepository(session=session)  # type: ignore[arg-type]
+    first = UUID("33333333-3333-4333-8333-333333333333")
+    second = UUID("44444444-4444-4444-8444-444444444444")
+    await repository.get_filtered(
+        equestrian_id=UUID("11111111-1111-4111-8111-111111111111"),
+        breed_group_ids=[first, second],
+    )
+    assert "breeds.breed_group_id IN" in compile_sql(session.statements[0])
+    assert "breeds.breed_group_id IN" in compile_sql(session.statements[1])
+
+
+@pytest.mark.parametrize(
+    ("sort", "expected"),
+    [
+        (["group_name"], "breed_groups.name ASC NULLS LAST"),
+        (["-group_name"], "breed_groups.name DESC NULLS LAST"),
+    ],
+)
+async def test_group_sort_has_fixed_null_order_and_tie_breaker(
+    sort: list[str], expected: str
+) -> None:
+    session = FakeAsyncSession()
+    repository = BreedRepository(session=session)  # type: ignore[arg-type]
+    await repository.get_filtered(
+        equestrian_id=UUID("11111111-1111-4111-8111-111111111111"),
+        sort=cast(Any, sort),
+    )
+    sql = compile_sql(session.statements[0])
+    assert expected in sql and "breeds.id ASC" in sql
+
+
+async def test_breed_query_uses_outer_join_and_stable_default_order() -> None:
+    session = FakeAsyncSession()
+    repository = BreedRepository(session=session)  # type: ignore[arg-type]
+    await repository.get_filtered(
+        equestrian_id=UUID("11111111-1111-4111-8111-111111111111")
+    )
+    sql = compile_sql(session.statements[0])
+    assert "LEFT OUTER JOIN breed_groups" in sql
+    assert "ORDER BY breeds.created_at DESC, breeds.id DESC" in sql

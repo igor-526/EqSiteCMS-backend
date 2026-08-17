@@ -18,7 +18,6 @@ from core.schemas.user_management import (
 from core.schemas.users import UserOutDto
 from core.services.user_management import UserManagementService
 
-
 # Test constants
 TEST_USER_ID = uuid4()
 TEST_SUPERUSER_ID = uuid4()

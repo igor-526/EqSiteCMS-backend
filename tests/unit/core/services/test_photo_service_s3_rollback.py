@@ -8,12 +8,11 @@ both DB and storage state.
 
 from __future__ import annotations
 
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
-
 from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.photos import Photo
 from core.schemas.photos import PhotoCreateDto, PhotoUploadDto

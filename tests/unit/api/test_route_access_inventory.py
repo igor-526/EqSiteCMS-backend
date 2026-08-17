@@ -14,7 +14,7 @@ def test_every_registered_api_route_has_exactly_one_access_classification() -> N
     )
     rows = inventory(app)
 
-    assert registered == 88
+    assert registered == 93
     assert len(rows) == registered
     assert len({(method, path) for method, path, _ in rows}) == registered
     assert all(rule.access_class and rule.tests for _, _, rule in rows)

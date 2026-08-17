@@ -4,11 +4,15 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from core.entities.base import _generate_slug
+from core.entities.breed_groups import BreedGroupIdentity
 from core.entities.breeds import Breed
 from core.entities.equestrian import EquestrianContext
 from core.entities.horse import HorseKindEnum
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
+from core.protocols.repositories.breed_group_repository import (
+    BreedGroupRepositoryProtocol,
+)
 from core.protocols.repositories.breed_repository import BreedRepositoryProtocol
 from core.schemas.breeds import BreedCreateDto, BreedUpdateDto
 from core.schemas.users import UserOutDto
@@ -28,8 +32,27 @@ def _derive_short_name(name: str) -> str:
 
 
 class BreedService:
-    def __init__(self, breed_repository: BreedRepositoryProtocol):
+    def __init__(
+        self,
+        breed_repository: BreedRepositoryProtocol,
+        breed_group_repository: BreedGroupRepositoryProtocol | None = None,
+    ):
         self.breed_repository = breed_repository
+        self.breed_group_repository = breed_group_repository
+
+    async def _validate_group(
+        self, group_id: UUID | None, *, equestrian_context: EquestrianContext
+    ) -> BreedGroupIdentity | None:
+        if group_id is None:
+            return None
+        if self.breed_group_repository is None:
+            raise ClientError("Группа пород не найдена")
+        group = await self.breed_group_repository.get_by_id(
+            group_id, equestrian_id=equestrian_context.id
+        )
+        if group is None:
+            raise ClientError("Группа пород не найдена")
+        return BreedGroupIdentity(id=group.id, name=group.name, slug=group.slug or "")
 
     def _parse_slug_or_id(self, slug_or_id: str) -> str | UUID:
         """Попытаться преобразовать строку в UUID, иначе вернуть как есть."""
@@ -160,6 +183,11 @@ class BreedService:
         breed_data = data.model_dump(exclude_none=True)
         if "description" in data.model_fields_set:
             breed_data["description"] = data.description
+        if "breed_group_id" in data.model_fields_set:
+            breed_data["breed_group_id"] = data.breed_group_id
+        group_identity = await self._validate_group(
+            data.breed_group_id, equestrian_context=equestrian_context
+        )
         self._validate_breed_data(breed_data, partial=False)
 
         existing = await self.breed_repository.find_by_name(
@@ -187,6 +215,7 @@ class BreedService:
             breed = Breed(**breed_data, equestrian_id=equestrian_context.id)
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
+        breed.group = group_identity
         return await self.breed_repository.create(breed)
 
     async def update(
@@ -210,6 +239,11 @@ class BreedService:
         update_data = data.model_dump(exclude_none=True)
         if "description" in data.model_fields_set:
             update_data["description"] = data.description
+        if "breed_group_id" in data.model_fields_set:
+            update_data["breed_group_id"] = data.breed_group_id
+            breed.group = await self._validate_group(
+                data.breed_group_id, equestrian_context=equestrian_context
+            )
         if not update_data:
             raise ClientError("Нет данных для обновления")
         had_short_name = "short_name" in update_data
@@ -303,10 +337,15 @@ class BreedService:
                     "-description",
                     "-slug",
                     "-kind",
+                    "created_at",
+                    "-created_at",
+                    "group_name",
+                    "-group_name",
                 ]
             ]
             | None
         ) = None,
+        breed_group_ids: list[UUID] | None = None,
         limit: int | None = None,
         offset: int | None = None,
     ) -> tuple[list[Breed], int]:
@@ -320,6 +359,7 @@ class BreedService:
             page_data=page_data,
             kind=kind,
             sort=sort,
+            breed_group_ids=breed_group_ids,
             limit=limit,
             offset=offset,
         )

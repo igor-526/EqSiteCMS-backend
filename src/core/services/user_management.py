@@ -10,13 +10,12 @@ from core.protocols.security import SecurityProtocol
 from core.schemas.user_management import (
     ChangePasswordByAdminIn,
     CreateUserIn,
+    RoleOutDto,
     UpdateUserIn,
     UserManagementFilters,
     UserManagementOutDto,
-    RoleOutDto,
 )
 from core.schemas.users import UserOutDto
-
 
 USER_MANAGER_SCOPE = "USER_MANAGER"
 SUPERUSER_SCOPE = "SUPERUSER"

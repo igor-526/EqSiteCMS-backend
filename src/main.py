@@ -7,8 +7,8 @@ from pydantic import ValidationError
 from uvicorn import run
 
 from api import (
-    user_management_router,
     auth_router,
+    breed_groups_router,
     breeds_router,
     callback_request_router,
     coat_color_router,
@@ -22,6 +22,7 @@ from api import (
     prices_router,
     service_users_router,
     site_settings_router,
+    user_management_router,
     users_router,
 )
 from containers import ApplicationContainer
@@ -62,6 +63,7 @@ app = FastAPI(
 router = APIRouter(prefix="/api")
 router.include_router(auth_router, prefix="/auth", tags=["Auth"])
 router.include_router(breeds_router)
+router.include_router(breed_groups_router)
 router.include_router(coat_color_router)
 router.include_router(emails_router)
 router.include_router(horse_owner_router)
@@ -134,13 +136,19 @@ def invalid_service_key_handler(_: Request, exc: InvalidServiceKey) -> JSONRespo
 
 
 @app.exception_handler(RequestValidationError)
-def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+def validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     """Преобразует ошибки валидации FastAPI в ClientError."""
     errors = exc.errors()
     status_code = (
         422
         if any(
             error.get("loc", [None])[0] == "path"
+            or (
+                request.url.path.startswith("/api/horses/breed-groups")
+                and error.get("loc", [None])[0] == "body"
+            )
             or error.get("type") == "extra_forbidden"
             or error.get("loc", [None, None])[:2] == ("query", "sort")
             or error.get("loc", [None, None])[:2] == ("query", "services")

@@ -3,19 +3,18 @@ from typing import Annotated
 from fastapi import Cookie, Depends, Header
 
 from clients.email_service.client import EmailServiceClient
-
 from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
 from core.exceptions.tenant import TenantNotFound
+from core.protocols.email_service import EmailServiceClientProtocol
 from core.protocols.media import (
     MediaStorageProtocol,
     MediaTypeValidatorProtocol,
     PhotoUrlBuilderProtocol,
 )
-from core.protocols.email_service import EmailServiceClientProtocol
 from core.protocols.repositories import (
-    UserManagementRepositoryProtocol,
+    BreedGroupRepositoryProtocol,
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
     EquestrianRepositoryProtocol,
@@ -28,15 +27,17 @@ from core.protocols.repositories import (
     PriceGroupRepositoryProtocol,
     PriceRepositoryProtocol,
     SiteSettingsRepositoryProtocol,
+    UserManagementRepositoryProtocol,
     UserRepositoryProtocol,
 )
 from core.protocols.repositories.horse_repository import HorseChildrenRepositoryProtocol
 from core.protocols.security import SecurityProtocol
 from core.schemas.users import UserOutDto
 from core.services.auth import AuthService
-from core.services.email_proxy import EmailProxyService
+from core.services.breed_groups import BreedGroupService
 from core.services.breeds import BreedService
 from core.services.coat_color import CoatColorService
+from core.services.email_proxy import EmailProxyService
 from core.services.horse import HorseService
 from core.services.horse_owner import HorseOwnerService
 from core.services.horse_service import HorseServiceService
@@ -45,10 +46,10 @@ from core.services.news import NewsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
-from core.services.users import UserService
 from core.services.user_management import UserManagementService
+from core.services.users import UserService
 from depends.repositories import (
-    get_user_management_repository,
+    get_breed_group_repository,
     get_breed_repository,
     get_coat_color_repository,
     get_equestrian_repository,
@@ -62,6 +63,7 @@ from depends.repositories import (
     get_price_group_repository,
     get_price_repository,
     get_site_settings_repository,
+    get_user_management_repository,
     get_user_repository,
 )
 from depends.utils import (
@@ -170,8 +172,21 @@ async def get_read_equestrian_context(
 
 async def get_breed_service(
     breed_repository: Annotated[BreedRepositoryProtocol, Depends(get_breed_repository)],
+    breed_group_repository: Annotated[
+        BreedGroupRepositoryProtocol, Depends(get_breed_group_repository)
+    ],
 ) -> BreedService:
-    return BreedService(breed_repository=breed_repository)
+    return BreedService(
+        breed_repository=breed_repository, breed_group_repository=breed_group_repository
+    )
+
+
+async def get_breed_group_service(
+    repository: Annotated[
+        BreedGroupRepositoryProtocol, Depends(get_breed_group_repository)
+    ],
+) -> BreedGroupService:
+    return BreedGroupService(repository=repository)
 
 
 async def get_coat_color_service(

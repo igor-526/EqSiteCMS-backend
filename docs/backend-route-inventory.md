@@ -2,7 +2,7 @@
 
 Generated from the registered FastAPI router graph. Do not edit manually.
 
-Route entries: **88**
+Route entries: **93**
 
 | method | path | access class | roles | tenant selector | owner rule | without auth | with auth | foreign | validation | tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -19,6 +19,11 @@ Route entries: **88**
 | DELETE | `/api/emails/{user_id}` | protected owner write | owner only | actor cookie | target user_id == actor.id; no role override | 401 | 204 | 403 before lookup/downstream | 400 malformed/invalid; 404 missing; 409 different create | tests/unit/api/test_email_proxy_api.py |
 | GET | `/api/horses` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/horses` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/horses/breed-groups` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| POST | `/api/horses/breed-groups` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| DELETE | `/api/horses/breed-groups/{slug_or_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/horses/breed-groups/{slug_or_id}` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| PATCH | `/api/horses/breed-groups/{slug_or_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | GET | `/api/horses/breeds` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/horses/breeds` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | DELETE | `/api/horses/breeds/{slug_or_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |

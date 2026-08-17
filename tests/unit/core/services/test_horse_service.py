@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
-
 import re
 from datetime import date, datetime, timezone
 from typing import Any, Mapping, cast
@@ -11,6 +9,8 @@ import pytest
 from sqlalchemy import Column, MetaData, String
 from sqlalchemy import Table as SATable
 from sqlalchemy.dialects import postgresql
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from core.entities import (
     Breed,
     CoatColor,

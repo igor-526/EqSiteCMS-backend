@@ -7,12 +7,11 @@ Covers:
 
 from __future__ import annotations
 
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
-
 from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.breeds import Breed
 from core.entities.coat_color import CoatColor
@@ -447,9 +446,10 @@ def make_coat_color_service() -> tuple[CoatColorService, FakeCoatColorRepository
     return CoatColorService(coat_color_repository=cast(Any, repo)), repo
 
 
-def make_horse_service_service() -> tuple[
-    HorseServiceService, FakeHorseServiceRepository
-]:
+type HorseServiceBundle = tuple[HorseServiceService, FakeHorseServiceRepository]
+
+
+def make_horse_service_service() -> HorseServiceBundle:
     repo = FakeHorseServiceRepository()
     return HorseServiceService(horse_service_repository=cast(Any, repo)), repo
 

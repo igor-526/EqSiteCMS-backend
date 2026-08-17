@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 
@@ -55,10 +56,15 @@ async def get_breeds(
                 "-description",
                 "-slug",
                 "-kind",
+                "created_at",
+                "-created_at",
+                "group_name",
+                "-group_name",
             ]
         ]
         | None
     ) = Query(None, description="Сортировка"),
+    breed_group_ids: list[UUID] | None = Query(None),
     limit: int | None = Query(None, description="Лимит"),
     offset: int | None = Query(None, description="Смещение"),
 ) -> PaginatedEntities[BreedOutDto]:
@@ -71,6 +77,7 @@ async def get_breeds(
         page_data=page_data,
         kind=kind,
         sort=sort,
+        breed_group_ids=breed_group_ids,
         limit=limit,
         offset=offset,
     )

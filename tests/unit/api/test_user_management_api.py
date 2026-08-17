@@ -19,7 +19,6 @@ from core.services.user_management import UserManagementService
 from depends.services import get_user_management_service
 from main import app
 
-
 # Test constants
 TEST_USER_ID = uuid4()
 TEST_EQUESTRIAN_ID = uuid4()

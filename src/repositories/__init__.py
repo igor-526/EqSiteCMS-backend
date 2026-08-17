@@ -1,3 +1,4 @@
+from .breed_group_repository import BreedGroupRepository
 from .breed_repository import BreedRepository
 from .coat_color_repository import CoatColorRepository
 from .equestrian_repository import EquestrianRepository

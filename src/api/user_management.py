@@ -4,15 +4,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 
 from api.depends.user_management import require_user_management
-from core.schemas.users import UserOutDto
 from core.schemas.user_management import (
     ChangePasswordByAdminIn,
     CreateUserIn,
+    RoleOutDto,
     UpdateUserIn,
     UserManagementFilters,
     UserManagementOutDto,
-    RoleOutDto,
 )
+from core.schemas.users import UserOutDto
 from core.services.user_management import UserManagementService
 from depends.services import get_user_management_service
 

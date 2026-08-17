@@ -41,10 +41,15 @@ class BreedRepositoryProtocol(TenantBaseRepositoryProtocol[Breed], Protocol):
                     "-description",
                     "-slug",
                     "-kind",
+                    "created_at",
+                    "-created_at",
+                    "group_name",
+                    "-group_name",
                 ]
             ]
             | None
         ) = None,
+        breed_group_ids: list[UUID] | None = None,
         limit: int | None = None,
         offset: int | None = None,
     ) -> tuple[list[Breed], int]: ...

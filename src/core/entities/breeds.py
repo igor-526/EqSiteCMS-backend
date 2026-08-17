@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import Field
 
 from .base import Entity, SlugMixin, TimeStampMixin
+from .breed_groups import BreedGroupIdentity
 from .horse import HorseKindEnum
 
 
@@ -10,6 +11,8 @@ class Breed(Entity, TimeStampMixin, SlugMixin):
     """Порода лошади."""
 
     equestrian_id: UUID = Field(default=...)
+    breed_group_id: UUID | None = Field(default=None)
+    group: BreedGroupIdentity | None = Field(default=None)
     name: str = Field(
         default=...,
         description="Название породы",

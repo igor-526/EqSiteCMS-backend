@@ -12,8 +12,8 @@ from core.schemas.site_settings import (
     SiteSettingSimpleOutDto,
     SiteSettingUpdateDto,
 )
-from core.services.site_settings import SiteSettingsService
 from core.schemas.users import UserOutDto
+from core.services.site_settings import SiteSettingsService
 from depends.services import (
     get_current_user,
     get_protected_equestrian_context,

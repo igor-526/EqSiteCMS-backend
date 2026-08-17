@@ -15,6 +15,13 @@ class BreedOutDto(BaseSchema):
     slug: str = Field(..., description="Slug")
     description: str | None = Field(None, description="Описание породы")
     kind: HorseKindEnum = Field(HorseKindEnum.HORSE, description="Вид породы")
+    group: "BreedGroupIdentityDto | None" = None
+
+
+class BreedGroupIdentityDto(BaseSchema):
+    id: UUID
+    name: str
+    slug: str
 
 
 class BreedOutWithPageDataDto(BreedOutDto):
@@ -36,6 +43,7 @@ class BreedCreateDto(BaseSchema):
         None, description="Данные страницы в формате HTML/текста"
     )
     kind: HorseKindEnum = Field(HorseKindEnum.HORSE, description="Вид породы")
+    breed_group_id: UUID | None = None
 
 
 class BreedUpdateDto(BaseSchema):
@@ -49,3 +57,4 @@ class BreedUpdateDto(BaseSchema):
         None, description="Данные страницы в формате HTML/текста"
     )
     kind: HorseKindEnum | None = Field(None, description="Вид породы")
+    breed_group_id: UUID | None = None

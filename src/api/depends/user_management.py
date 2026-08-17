@@ -6,7 +6,6 @@ from core.exceptions.auth import ForbiddenError
 from core.schemas.users import UserOutDto
 from depends.services import get_current_user
 
-
 USER_MANAGER_SCOPE = "USER_MANAGER"
 SUPERUSER_SCOPE = "SUPERUSER"
 

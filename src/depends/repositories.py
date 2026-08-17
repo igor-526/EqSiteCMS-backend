@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.protocols.media import PhotoUrlBuilderProtocol
 from core.protocols.repositories import (
-    UserManagementRepositoryProtocol,
+    BreedGroupRepositoryProtocol,
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
     EquestrianRepositoryProtocol,
@@ -19,10 +19,12 @@ from core.protocols.repositories import (
     PriceGroupRepositoryProtocol,
     PriceRepositoryProtocol,
     SiteSettingsRepositoryProtocol,
+    UserManagementRepositoryProtocol,
     UserRepositoryProtocol,
 )
 from depends.utils import get_photo_url_builder, get_session
 from repositories import (
+    BreedGroupRepository,
     BreedRepository,
     CoatColorRepository,
     EquestrianRepository,
@@ -56,6 +58,12 @@ async def get_breed_repository(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> BreedRepositoryProtocol:
     return BreedRepository(session=session)
+
+
+async def get_breed_group_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> BreedGroupRepositoryProtocol:
+    return BreedGroupRepository(session=session)
 
 
 async def get_coat_color_repository(

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
-
 from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.coat_color import CoatColor
 from core.entities.equestrian import EquestrianContext

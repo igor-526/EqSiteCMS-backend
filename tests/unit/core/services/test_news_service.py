@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
-
 from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.news import News, NewsPhoto, NewsStatus
 from core.entities.photos import Photo
@@ -126,10 +125,12 @@ class FakePhotoUrlBuilder:
 # Helpers
 # ---------------------------------------------------------------------------
 
-
-def make_service() -> tuple[
+type NewsServiceBundle = tuple[
     NewsService, FakeNewsRepository, FakePhotoRepository, FakePhotoUrlBuilder
-]:
+]
+
+
+def make_service() -> NewsServiceBundle:
     news_repo = FakeNewsRepository()
     photo_repo = FakePhotoRepository()
     url_builder = FakePhotoUrlBuilder()

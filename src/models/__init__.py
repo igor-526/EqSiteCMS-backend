@@ -1,3 +1,4 @@
+from models.breed_groups import breed_groups
 from models.breeds import breeds
 from models.coat_color import coat_color
 from models.equestrian import equestrians

@@ -1,4 +1,5 @@
 from .base_repository import TenantBaseRepositoryProtocol
+from .breed_group_repository import BreedGroupRepositoryProtocol
 from .breed_repository import BreedRepositoryProtocol
 from .coat_color_repository import CoatColorRepositoryProtocol
 from .equestrian_repository import EquestrianRepositoryProtocol
@@ -11,5 +12,5 @@ from .photo_repository import PhotoRepositoryProtocol
 from .price_repository import PriceGroupRepositoryProtocol, PriceRepositoryProtocol
 from .site_settings_repository import SiteSettingsRepositoryProtocol
 from .token_repository import TokenRepositoryProtocol
-from .user_repository import UserRepositoryProtocol
 from .user_management_repository import UserManagementRepositoryProtocol
+from .user_repository import UserRepositoryProtocol

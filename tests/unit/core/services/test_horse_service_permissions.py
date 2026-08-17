@@ -11,8 +11,8 @@ import pytest
 from core.entities.horse_service import HorseServiceEntity
 from core.entities.price import PriceFormatter
 from core.entities.user import UserScope
-from core.protocols.repositories import HorseServiceRepositoryProtocol
 from core.exceptions.base import ClientError
+from core.protocols.repositories import HorseServiceRepositoryProtocol
 from core.schemas.horse_service import HorseServiceCreateDto, HorseServiceUpdateDto
 from core.schemas.users import UserOutDto
 from core.services.horse_service import HorseServiceService

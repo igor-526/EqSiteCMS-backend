@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
-
 from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.photos import Photo
 from core.entities.prices import Price, PriceGroup, PriceGroupsRelation, PricePhotos
