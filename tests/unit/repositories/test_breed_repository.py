@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql import ClauseElement
 
 from core.entities.horse import HorseKindEnum
 from repositories.breed_repository import BreedRepository
@@ -24,14 +25,14 @@ class FakeExecuteResult:
 
 class FakeAsyncSession:
     def __init__(self) -> None:
-        self.statements: list[object] = []
+        self.statements: list[ClauseElement] = []
 
-    async def execute(self, statement: object) -> FakeExecuteResult:
+    async def execute(self, statement: ClauseElement) -> FakeExecuteResult:
         self.statements.append(statement)
         return FakeExecuteResult()
 
 
-def compile_sql(statement: object) -> str:
+def compile_sql(statement: ClauseElement) -> str:
     return str(
         statement.compile(
             dialect=postgresql.dialect(),

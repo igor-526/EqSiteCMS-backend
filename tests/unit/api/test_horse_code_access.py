@@ -51,8 +51,8 @@ def test_authenticated_no_scope_horse_code_write_returns_403_without_mutation() 
         horse_owner_repository=AsyncMock(),
     )
     app.dependency_overrides[get_current_user] = lambda: current_user
-    app.dependency_overrides[get_protected_equestrian_context] = (
-        lambda: EquestrianContext(id=tenant_id, source="unit")
+    app.dependency_overrides[get_protected_equestrian_context] = lambda: (
+        EquestrianContext(id=tenant_id, source="unit")
     )
     app.dependency_overrides[get_horse_service] = lambda: service
     client = TestClient(app)

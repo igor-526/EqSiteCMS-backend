@@ -48,7 +48,10 @@ class EmailE2ETests:
         await self.client.aclose()
 
     def _service_headers(self):
-        return {"Authorization": f"Bearer {SERVICE_KEY}", "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {SERVICE_KEY}",
+            "Content-Type": "application/json",
+        }
 
     # =========================================
     # Тест 1: SMTP отправка
@@ -81,15 +84,23 @@ class EmailE2ETests:
                 )
                 print(f"  POST /api/emails/send-confirmation: {response.status_code}")
                 if response.status_code == 202:
-                    print("  ✅ Письмо подтверждения поставлено в очередь (SMTP работает)")
+                    print(
+                        "  ✅ Письмо подтверждения поставлено в очередь (SMTP работает)"
+                    )
                     return True
                 else:
-                    print(f"  ⚠️  Статус: {response.status_code} (Celery может быть недоступен)")
-                    print("  ℹ️  SMTP настройки сконфигурированы, письмо будет отправлено при наличии Celery")
+                    print(
+                        f"  ⚠️  Статус: {response.status_code} (Celery может быть недоступен)"
+                    )
+                    print(
+                        "  ℹ️  SMTP настройки сконфигурированы, письмо будет отправлено при наличии Celery"
+                    )
                     return True  # Email создан успешно, SMTP сконфигурирован
             except Exception as e:
                 print(f"  ⚠️  Ошибка отправки: {e}")
-                print("  ℹ️  Email создан, SMTP сконфигурирован — считаем тест пройденным")
+                print(
+                    "  ℹ️  Email создан, SMTP сконфигурирован — считаем тест пройденным"
+                )
                 return True
         else:
             print(f"  ❌ Ошибка создания email: {response.text[:200]}")
@@ -115,7 +126,6 @@ class EmailE2ETests:
         if response.status_code != 201:
             print(f"  ❌ CREATE failed: {response.status_code} {response.text[:100]}")
             return False
-        data = response.json()
         print(f"  ✅ CREATE: user_id={test_user_id}, email={test_email}")
 
         # READ (через email-service напрямую, т.к. нет GET proxy)
@@ -129,7 +139,9 @@ class EmailE2ETests:
             if len(emails) > 0:
                 print(f"  ✅ READ: найдено {len(emails)} email(s)")
             else:
-                print("  ⚠️  READ: email не найден (approved=false может быть не поддержан)")
+                print(
+                    "  ⚠️  READ: email не найден (approved=false может быть не поддержан)"
+                )
         else:
             print(f"  ⚠️  READ: {response.status_code}")
 
@@ -270,14 +282,14 @@ class EmailE2ETests:
             )
 
             if response.status_code == 201:
-                print(f"  ✅ User {i+1}: {email}")
+                print(f"  ✅ User {i + 1}: {email}")
                 self.created_users.append({"user_id": user_id, "email": email})
             elif response.status_code == 409:
-                print(f"  ⚠️  User {i+1}: {email} уже существует")
+                print(f"  ⚠️  User {i + 1}: {email} уже существует")
                 # Запоминаем для тестов
                 self.created_users.append({"user_id": user_id, "email": email})
             else:
-                print(f"  ❌ User {i+1}: {email} — ошибка: {response.status_code}")
+                print(f"  ❌ User {i + 1}: {email} — ошибка: {response.status_code}")
 
         print(f"\n  Итого обработано: {len(self.created_users)} пользователей")
         return len(self.created_users) > 0
@@ -318,7 +330,9 @@ class EmailE2ETests:
         )
         if response.status_code == 200:
             approved_emails = response.json()
-            print(f"  ✅ Только подтверждённые (approved=true): {len(approved_emails)} email(s)")
+            print(
+                f"  ✅ Только подтверждённые (approved=true): {len(approved_emails)} email(s)"
+            )
         else:
             print(f"  ⚠️  approved=true: {response.status_code}")
 
@@ -330,15 +344,21 @@ class EmailE2ETests:
         )
         if response.status_code == 200:
             unapproved_emails = response.json()
-            print(f"  ✅ Только неподтверждённые (approved=false): {len(unapproved_emails)} email(s)")
+            print(
+                f"  ✅ Только неподтверждённые (approved=false): {len(unapproved_emails)} email(s)"
+            )
         else:
             print(f"  ⚠️  approved=false: {response.status_code}")
 
         # Проверяем комбинации
         print("\n  📊 Комбинации:")
         print(f"     Всего email: {len(all_emails)}")
-        print(f"     Подтверждённых: {len(approved_emails) if 'approved_emails' in dir() else 'N/A'}")
-        print(f"     Неподтверждённых: {len(unapproved_emails) if 'unapproved_emails' in dir() else 'N/A'}")
+        print(
+            f"     Подтверждённых: {len(approved_emails) if 'approved_emails' in dir() else 'N/A'}"
+        )
+        print(
+            f"     Неподтверждённых: {len(unapproved_emails) if 'unapproved_emails' in dir() else 'N/A'}"
+        )
 
         return True
 
@@ -389,16 +409,26 @@ class EmailE2ETests:
                 emails = response.json()
                 print(f"\n  📧 Email адреса в системе: {len(emails)}")
                 for email_data in emails:
-                    status = "✅ подтверждён" if email_data.get("approved") else "⏳ не подтверждён"
+                    status = (
+                        "✅ подтверждён"
+                        if email_data.get("approved")
+                        else "⏳ не подтверждён"
+                    )
                     print(f"     • {email_data['email']} ({status})")
 
         print("\n  📋 Архитектура E2E сценария:")
         print("     1. Frontend → POST /api/callback-request (backend)")
         print("     2. Backend → NATS event (events.site.callback.requested)")
         print("     3. Notification-service получает event")
-        print("     4. Notification-service → MainBackendClient.get_users(role=['admin'])")
-        print("     5. Notification-service → EmailServiceClient.get_user_emails(approved=True)")
-        print("     6. Notification-service → NATS command (commands.notification.email.send)")
+        print(
+            "     4. Notification-service → MainBackendClient.get_users(role=['admin'])"
+        )
+        print(
+            "     5. Notification-service → EmailServiceClient.get_user_emails(approved=True)"
+        )
+        print(
+            "     6. Notification-service → NATS command (commands.notification.email.send)"
+        )
         print("     7. Email-service (Celery) → SMTP отправка писем")
 
         print("\n  ✅ Все компоненты E2E сценария настроены и работают")

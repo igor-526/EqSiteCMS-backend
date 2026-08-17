@@ -52,8 +52,8 @@ class TestServiceUsersAPI:
         """Create test client with mocked dependencies."""
         app.dependency_overrides[get_user_service] = lambda: mock_user_service
         app.dependency_overrides[get_service_context] = lambda: mock_service_context
-        app.dependency_overrides[get_service_pagination_params] = (
-            lambda: mock_pagination_params
+        app.dependency_overrides[get_service_pagination_params] = lambda: (
+            mock_pagination_params
         )
         yield TestClient(app)
         app.dependency_overrides.clear()
@@ -280,7 +280,9 @@ class TestServiceUsersAPI:
         assert "created_at" in user_data
         assert "scopes" in user_data
 
-    async def test_service_users_excludes_deleted_and_blocked(self, client, mock_user_service):
+    async def test_service_users_excludes_deleted_and_blocked(
+        self, client, mock_user_service
+    ):
         """Service users endpoint excludes deleted and blocked users."""
         # Arrange
         test_user = create_test_user_dto()

@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import pytest
 
 from core.entities.user import User, UserScope
@@ -64,6 +66,7 @@ class FakeSecurity:
 
 def make_user(username: str = "demo", password: str = "hashed-password") -> User:
     return User(
+        equestrian_id=UUID("11111111-1111-4111-8111-111111111111"),
         username=username,
         password=password,
         first_name="Demo",

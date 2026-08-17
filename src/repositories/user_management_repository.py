@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import Table, and_, func, or_, select
+from sqlalchemy.sql.elements import ColumnElement
 
 from core.entities.user import User, UserScope
 from models.users import user_scopes, user_scopes_relations, users
@@ -31,7 +32,7 @@ class UserManagementRepository(AbstractRepository[User]):
         """Получить пользователей с фильтрацией, пагинацией и сортировкой."""
 
         # Базовые условия: исключаем удалённых
-        conditions = [self.table.c.is_deleted.is_(False)]
+        conditions: list[ColumnElement[bool]] = [self.table.c.is_deleted.is_(False)]
 
         # Фильтр по username (регистронезависимый regex)
         if username:

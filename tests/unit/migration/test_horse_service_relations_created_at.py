@@ -36,8 +36,7 @@ def test_ut02_upgrade_backfills_only_null_created_at(monkeypatch) -> None:
     migration.upgrade()
 
     assert str(executed[0]) == (
-        "UPDATE horse_service_relations "
-        "SET created_at = now() WHERE created_at IS NULL"
+        "UPDATE horse_service_relations SET created_at = now() WHERE created_at IS NULL"
     )
 
 

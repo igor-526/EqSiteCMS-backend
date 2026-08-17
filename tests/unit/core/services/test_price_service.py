@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -261,11 +263,18 @@ async def test_get_by_slug_or_id_uc12_uc13_passes_uuid_object_and_not_found() ->
     service, price_repo, *_ = make_service()
     price = price_repo.add(make_price())
 
-    assert await service.get_by_slug_or_id(str(price.id)) == price
+    assert (
+        await service.get_by_slug_or_id(
+            str(price.id), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == price
+    )
     assert isinstance(price_repo.calls[-1][1], UUID)
 
     with pytest.raises(ClientError):
-        await service.get_by_slug_or_id("missing")
+        await service.get_by_slug_or_id(
+            "missing", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_ensure_unique_name_uc14_uc15_rejects_duplicate_allows_self() -> None:
@@ -273,10 +282,15 @@ async def test_ensure_unique_name_uc14_uc15_rejects_duplicate_allows_self() -> N
     price = price_repo.add(make_price(name="Existing"))
 
     assert (
-        await service._ensure_unique_name("Existing", exclude_id=price.id) == "Existing"
+        await service._ensure_unique_name(
+            "Existing", exclude_id=price.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "Existing"
     )
     with pytest.raises(ClientError):
-        await service._ensure_unique_name("Existing")
+        await service._ensure_unique_name(
+            "Existing", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_ensure_unique_slug_uc14_suffixes_duplicate_and_allows_self() -> None:
@@ -284,8 +298,18 @@ async def test_ensure_unique_slug_uc14_suffixes_duplicate_and_allows_self() -> N
     price = price_repo.add(make_price(slug="base"))
     price_repo.add(make_price(name="Other", slug="base-1"))
 
-    assert await service._ensure_unique_slug("base", exclude_id=price.id) == "base"
-    assert await service._ensure_unique_slug("base") == "base-2"
+    assert (
+        await service._ensure_unique_slug(
+            "base", exclude_id=price.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "base"
+    )
+    assert (
+        await service._ensure_unique_slug(
+            "base", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "base-2"
+    )
 
 
 async def test_ensure_unique_slug_uc10_uc11_suffix_stays_within_max_length() -> None:
@@ -293,7 +317,9 @@ async def test_ensure_unique_slug_uc10_uc11_suffix_stays_within_max_length() -> 
     long_slug = "x" * 63
     price_repo.add(make_price(slug=long_slug))
 
-    unique_slug = await service._ensure_unique_slug(long_slug)
+    unique_slug = await service._ensure_unique_slug(
+        long_slug, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert unique_slug == f"{'x' * 61}-1"
     assert len(unique_slug) == 63
@@ -304,7 +330,8 @@ async def test_create_uc01_uc02_uc22_validates_groups_before_create() -> None:
     group = group_repo.add(make_group())
 
     created = await service.create(
-        PriceCreateDto(name="  Абонемент  ", groups=[group.id, group.id])
+        PriceCreateDto(name="  Абонемент  ", groups=[group.id, group.id]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert created.name == "Абонемент"
@@ -327,7 +354,10 @@ async def test_create_uc16_uc23_missing_group_prevents_persistence_side_effects(
     missing_id = uuid4()
 
     with pytest.raises(ClientError):
-        await service.create(PriceCreateDto(name="Price", groups=[missing_id]))
+        await service.create(
+            PriceCreateDto(name="Price", groups=[missing_id]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert price_repo.calls == []
 
@@ -336,9 +366,13 @@ async def test_create_uc05_uc06_uc11_rejects_bad_business_values() -> None:
     service, price_repo, *_ = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(PriceCreateDto(name=" "))
+        await service.create(
+            PriceCreateDto(name=" "), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
     with pytest.raises(ClientError):
-        await service.create(PriceCreateDto(name="x" * 64))
+        await service.create(
+            PriceCreateDto(name="x" * 64), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert price_repo.calls == []
 
@@ -347,7 +381,10 @@ async def test_create_uc14_generates_unique_slug_from_explicit_slug() -> None:
     service, price_repo, *_ = make_service()
     price_repo.add(make_price(name="Existing", slug="custom"))
 
-    created = await service.create(PriceCreateDto(name="New", slug="custom"))
+    created = await service.create(
+        PriceCreateDto(name="New", slug="custom"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert created.slug == "custom-1"
 
@@ -359,7 +396,10 @@ async def test_create_uc10_uc14_duplicate_explicit_slug_at_max_length_is_trimmed
     long_slug = "x" * 63
     price_repo.add(make_price(name="Existing", slug=long_slug))
 
-    created = await service.create(PriceCreateDto(name="New", slug=long_slug))
+    created = await service.create(
+        PriceCreateDto(name="New", slug=long_slug),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert created.slug == f"{'x' * 61}-1"
     assert len(created.slug or "") == 63
@@ -372,7 +412,9 @@ async def test_create_uc10_uc14_duplicate_generated_slug_at_max_length_is_trimme
     long_slug = "x" * 63
     price_repo.add(make_price(name="Existing", slug=long_slug))
 
-    created = await service.create(PriceCreateDto(name=long_slug))
+    created = await service.create(
+        PriceCreateDto(name=long_slug), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert created.slug == f"{'x' * 61}-1"
     assert len(created.slug or "") == 63
@@ -384,7 +426,9 @@ async def test_create_uc11_generated_transliterated_slug_over_limit_is_client_er
     service, price_repo, *_ = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(PriceCreateDto(name="щ" * 22))
+        await service.create(
+            PriceCreateDto(name="щ" * 22), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert [name for name, _ in price_repo.calls] == ["find_by_name"]
 
@@ -394,7 +438,11 @@ async def test_update_uc20_empty_update_is_client_error_without_write() -> None:
     price = price_repo.add(make_price())
 
     with pytest.raises(ClientError):
-        await service.update(price.slug or "", PriceUpdateDto())
+        await service.update(
+            price.slug or "",
+            PriceUpdateDto(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in price_repo.calls] == ["get_by_slug_or_id"]
 
@@ -405,7 +453,9 @@ async def test_update_uc16_uc23_validates_groups_before_price_update() -> None:
 
     with pytest.raises(ClientError):
         await service.update(
-            price.slug or "", PriceUpdateDto(name="New", groups=[uuid4()])
+            price.slug or "",
+            PriceUpdateDto(name="New", groups=[uuid4()]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert [name for name, _ in price_repo.calls] == ["get_by_slug_or_id"]
@@ -419,6 +469,7 @@ async def test_update_uc19_uc22_updates_entity_then_group_relations() -> None:
     updated = await service.update(
         "old",
         PriceUpdateDto(name="New", description=" Desc ", groups=[group.id]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.name == "New"
@@ -445,6 +496,7 @@ async def test_update_uc10_uc14_duplicate_explicit_slug_at_max_length_is_trimmed
     updated = await service.update(
         current.slug or "",
         PriceUpdateDto(slug=long_slug),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.slug == f"{'x' * 61}-1"
@@ -462,6 +514,7 @@ async def test_update_uc10_uc14_duplicate_generated_slug_at_max_length_is_trimme
     updated = await service.update(
         current.slug or "",
         PriceUpdateDto(name=long_slug),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.slug == f"{'x' * 61}-1"
@@ -475,7 +528,11 @@ async def test_update_uc11_generated_transliterated_slug_over_limit_is_client_er
     price = price_repo.add(make_price())
 
     with pytest.raises(ClientError):
-        await service.update(price.slug or "", PriceUpdateDto(name="щ" * 22))
+        await service.update(
+            price.slug or "",
+            PriceUpdateDto(name="щ" * 22),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in price_repo.calls] == [
         "get_by_slug_or_id",
@@ -489,7 +546,11 @@ async def test_update_uc19_groups_only_can_clear_relations_without_entity_update
     service, price_repo, *_ = make_service()
     price = price_repo.add(make_price())
 
-    updated = await service.update(price.slug or "", PriceUpdateDto(groups=[]))
+    updated = await service.update(
+        price.slug or "",
+        PriceUpdateDto(groups=[]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated == price
     assert [name for name, _ in price_repo.calls] == [
@@ -504,11 +565,13 @@ async def test_delete_uc01_uc13_deletes_existing_and_rejects_missing() -> None:
     service, price_repo, *_ = make_service()
     price = price_repo.add(make_price())
 
-    await service.delete(price.slug or "")
+    await service.delete(price.slug or "", equestrian_context=TEST_EQUESTRIAN_CONTEXT)
     assert price.id not in price_repo.by_id
 
     with pytest.raises(ClientError):
-        await service.delete(price.slug or "")
+        await service.delete(
+            price.slug or "", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_get_filtered_uc26_uc27_passes_filters_through() -> None:
@@ -523,6 +586,7 @@ async def test_get_filtered_uc26_uc27_passes_filters_through() -> None:
         sort=["name", "-name"],
         limit=10,
         offset=20,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert entities == prices
@@ -540,6 +604,7 @@ async def test_update_price_photos_uc16_validates_photos_and_main_before_side_ef
     await service.update_price_photos(
         price.slug or "",
         PricePhotosUpdateDto(photo_ids=[photo.id, photo.id], main=photo.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert photo_repo.calls == [("get_by_ids", [photo.id])]
@@ -559,6 +624,7 @@ async def test_update_price_photos_uc16_main_must_belong_to_new_photo_list() -> 
         await service.update_price_photos(
             price.slug or "",
             PricePhotosUpdateDto(photo_ids=[photo.id], main=main.id),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert [name for name, _ in price_repo.calls] == ["get_by_slug_or_id"]
@@ -575,6 +641,7 @@ async def test_update_price_photos_uc16_main_only_must_exist_and_be_related() ->
     await service.update_price_photos(
         price.slug or "",
         PricePhotosUpdateDto(main=photo.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert [name for name, _ in photo_repo.calls] == ["get_by_id"]
@@ -593,6 +660,7 @@ async def test_update_price_photos_uc16_main_only_rejects_unrelated_photo() -> N
         await service.update_price_photos(
             price.slug or "",
             PricePhotosUpdateDto(main=photo.id),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert all(name != "set_price_photos" for name, _ in price_repo.calls)
@@ -603,7 +671,11 @@ async def test_update_price_photos_uc20_empty_update_is_client_error() -> None:
     price = price_repo.add(make_price())
 
     with pytest.raises(ClientError):
-        await service.update_price_photos(price.slug or "", PricePhotosUpdateDto())
+        await service.update_price_photos(
+            price.slug or "",
+            PricePhotosUpdateDto(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in price_repo.calls] == ["get_by_slug_or_id"]
 
@@ -628,7 +700,9 @@ async def test_build_out_dto_uc25_uc28_sorts_main_first_stably_and_builds_urls()
         PricePhotos(price_id=price.id, photo_id=photo_c.id, is_main=False),
     ]
 
-    dto = await service.build_out_dto(price, include_tables=True)
+    dto = await service.build_out_dto(
+        price, include_tables=True, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     assert isinstance(dto, PriceOutWithTablesDto)
 
     assert dto.page_data == "<div></div>"
@@ -643,7 +717,9 @@ async def test_get_filtered_out_uc28_enriches_items_at_service_boundary() -> Non
     price = price_repo.add(make_price())
     price_repo.filtered_result = ([price], 1)
 
-    items, total = await service.get_filtered_out(name="Price")
+    items, total = await service.get_filtered_out(
+        name="Price", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert total == 1
     assert items[0].id == price.id
@@ -659,7 +735,9 @@ async def test_create_uc21_repository_failure_bubbles_for_session_rollback() -> 
     price_repo.fail_on.add("create")
 
     with pytest.raises(RepositoryError):
-        await service.create(PriceCreateDto(name="Price"))
+        await service.create(
+            PriceCreateDto(name="Price"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_price_service_uc30_has_no_fastapi_or_settings_dependency() -> None:

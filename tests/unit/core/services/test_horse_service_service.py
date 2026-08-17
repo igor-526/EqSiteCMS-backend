@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from collections.abc import Sequence
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -176,7 +178,12 @@ async def test_ensure_unique_slug_uc14_suffix_loop_and_uc22_order() -> None:
     repo.add(make_horse_service(slug="podkovka"))
     repo.add(make_horse_service(name="Other", slug="podkovka-1"))
 
-    assert await service._ensure_unique_slug("podkovka") == "podkovka-2"
+    assert (
+        await service._ensure_unique_slug(
+            "podkovka", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "podkovka-2"
+    )
     assert repo.calls == [
         ("find_by_slug", "podkovka"),
         ("find_by_slug", "podkovka-1"),
@@ -189,7 +196,9 @@ async def test_ensure_unique_slug_uc15_self_exclusion_returns_same_slug() -> Non
     entity = repo.add(make_horse_service())
 
     assert (
-        await service._ensure_unique_slug("podkovka", exclude_id=entity.id)
+        await service._ensure_unique_slug(
+            "podkovka", exclude_id=entity.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
         == "podkovka"
     )
 
@@ -197,7 +206,10 @@ async def test_ensure_unique_slug_uc15_self_exclusion_returns_same_slug() -> Non
 async def test_create_uc01_generates_slug_and_default_page_data() -> None:
     service, repo = make_service()
 
-    entity = await service.create(HorseServiceCreateDto(name="Чистка копыт", price=500))
+    entity = await service.create(
+        HorseServiceCreateDto(name="Чистка копыт", price=500),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert entity.slug == "chistka-kopyt"
     assert entity.page_data == "<div></div>"
@@ -218,7 +230,8 @@ async def test_create_uc03_trims_fields_and_keeps_price_sortable() -> None:
             description=" base ",
             price=1500,
             page_data=" <div>Page</div> ",
-        )
+        ),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert entity.name == "Тренировка"
@@ -233,7 +246,10 @@ async def test_create_uc14_duplicate_name_rejected_before_create() -> None:
     repo.add(make_horse_service(name="Подковка"))
 
     with pytest.raises(ClientError):
-        await service.create(HorseServiceCreateDto(name="Подковка", price=1200))
+        await service.create(
+            HorseServiceCreateDto(name="Подковка", price=1200),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in repo.calls] == ["find_by_name"]
 
@@ -243,7 +259,10 @@ async def test_create_uc21_repository_failure_propagates() -> None:
     repo.fail_on.add("create")
 
     with pytest.raises(RepositoryError):
-        await service.create(HorseServiceCreateDto(name="Массаж", price=1200))
+        await service.create(
+            HorseServiceCreateDto(name="Массаж", price=1200),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 @pytest.mark.parametrize(
@@ -259,14 +278,15 @@ async def test_create_uc05_uc09_invalid_business_values_raise_client_error(
     service, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(payload)
+        await service.create(payload, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_create_empty_slug_auto_generates_from_name() -> None:
     service, _ = make_service()
 
     entity = await service.create(
-        HorseServiceCreateDto(name="Good", slug=" ", price=100)
+        HorseServiceCreateDto(name="Good", slug=" ", price=100),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
     assert entity.slug == "good"
 
@@ -275,7 +295,11 @@ async def test_update_uc01_partial_name_regenerates_slug() -> None:
     service, repo = make_service()
     current = repo.add(make_horse_service(name="Старое", slug="old"))
 
-    updated = await service.update(str(current.id), HorseServiceUpdateDto(name="Новое"))
+    updated = await service.update(
+        str(current.id),
+        HorseServiceUpdateDto(name="Новое"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "Новое"
     assert updated.slug == "novoe"
@@ -291,7 +315,11 @@ async def test_update_uc13_not_found_raises_client_error() -> None:
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.update("missing", HorseServiceUpdateDto(name="Новая"))
+        await service.update(
+            "missing",
+            HorseServiceUpdateDto(name="Новая"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
     assert [name for name, _ in repo.calls] == ["get_by_slug_or_id"]
 
 
@@ -301,7 +329,11 @@ async def test_update_uc14_duplicate_name_rejected_with_self_exclusion() -> None
     repo.add(make_horse_service(name="Taken", slug="taken"))
 
     with pytest.raises(ClientError):
-        await service.update(str(current.id), HorseServiceUpdateDto(name="Taken"))
+        await service.update(
+            str(current.id),
+            HorseServiceUpdateDto(name="Taken"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in repo.calls] == ["get_by_slug_or_id", "find_by_name"]
 
@@ -311,7 +343,11 @@ async def test_update_uc20_empty_payload_explicitly_rejected() -> None:
     current = repo.add(make_horse_service())
 
     with pytest.raises(ClientError):
-        await service.update(str(current.id), HorseServiceUpdateDto())
+        await service.update(
+            str(current.id),
+            HorseServiceUpdateDto(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in repo.calls] == ["get_by_slug_or_id"]
 
@@ -321,7 +357,9 @@ async def test_update_uc19_changes_only_explicit_fields() -> None:
     repo.add(make_horse_service(description="Old", page_data="<div>Old</div>"))
 
     updated = await service.update(
-        "podkovka", HorseServiceUpdateDto(description="New", price=2000)
+        "podkovka",
+        HorseServiceUpdateDto(description="New", price=2000),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.description == "New"
@@ -335,18 +373,34 @@ async def test_update_uc21_repository_failure_from_update_propagates() -> None:
     repo.fail_on.add("update")
 
     with pytest.raises(RepositoryError):
-        await service.update(str(current.id), HorseServiceUpdateDto(name="Новое"))
+        await service.update(
+            str(current.id),
+            HorseServiceUpdateDto(name="Новое"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_get_by_slug_or_id_uc01_and_uc13() -> None:
     service, repo = make_service()
     entity = repo.add(make_horse_service())
 
-    assert await service.get_by_slug_or_id("podkovka") == entity
-    assert await service.get_by_slug_or_id(str(entity.id)) == entity
+    assert (
+        await service.get_by_slug_or_id(
+            "podkovka", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == entity
+    )
+    assert (
+        await service.get_by_slug_or_id(
+            str(entity.id), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == entity
+    )
 
     with pytest.raises(ClientError):
-        await service.get_by_slug_or_id("missing")
+        await service.get_by_slug_or_id(
+            "missing", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_get_by_slug_or_id_uc21_repository_failure_propagates() -> None:
@@ -354,18 +408,20 @@ async def test_get_by_slug_or_id_uc21_repository_failure_propagates() -> None:
     repo.fail_on.add("get_by_slug_or_id")
 
     with pytest.raises(RepositoryError):
-        await service.get_by_slug_or_id("podkovka")
+        await service.get_by_slug_or_id(
+            "podkovka", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_delete_uc01_and_uc13() -> None:
     service, repo = make_service()
     entity = repo.add(make_horse_service())
 
-    await service.delete("podkovka")
+    await service.delete("podkovka", equestrian_context=TEST_EQUESTRIAN_CONTEXT)
     assert entity.id not in repo.by_id
 
     with pytest.raises(ClientError):
-        await service.delete("missing")
+        await service.delete("missing", equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_uc21_repository_failure_on_delete_propagates() -> None:
@@ -374,7 +430,7 @@ async def test_delete_uc21_repository_failure_on_delete_propagates() -> None:
     repo.fail_on.add("delete")
 
     with pytest.raises(RepositoryError):
-        await service.delete("podkovka")
+        await service.delete("podkovka", equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_get_filtered_uc01_uc25_uc26_uc27_passes_price_sort_and_filters() -> None:
@@ -390,6 +446,7 @@ async def test_get_filtered_uc01_uc25_uc26_uc27_passes_price_sort_and_filters() 
         sort=["price", "-name"],
         limit=5,
         offset=10,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert entities == result
@@ -414,7 +471,10 @@ async def test_get_filtered_uc29_invalid_sort_rejected_before_repository_call() 
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.get_filtered(sort=["invalid"])  # type: ignore[list-item]
+        await service.get_filtered(
+            sort=cast(Any, ["invalid"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
     assert repo.calls == []
 
 
@@ -422,9 +482,11 @@ async def test_get_filtered_uc09_negative_pagination_rejected() -> None:
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.get_filtered(limit=-1)
+        await service.get_filtered(limit=-1, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
     with pytest.raises(ClientError):
-        await service.get_filtered(offset=-1)
+        await service.get_filtered(
+            offset=-1, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
     assert repo.calls == []
 
 
@@ -433,7 +495,9 @@ async def test_get_filtered_uc21_repository_failure_propagates() -> None:
     repo.fail_on.add("get_filtered")
 
     with pytest.raises(RepositoryError):
-        await service.get_filtered(sort=["price"])
+        await service.get_filtered(
+            sort=["price"], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_horse_service_uc30_architecture_boundary_has_no_fastapi_dependency() -> (
@@ -447,7 +511,10 @@ async def test_horse_service_uc30_architecture_boundary_has_no_fastapi_dependenc
 async def test_create_null_slug_auto_generates_from_name() -> None:
     service, _ = make_service()
 
-    entity = await service.create(HorseServiceCreateDto(name="Разведение", price=500))
+    entity = await service.create(
+        HorseServiceCreateDto(name="Разведение", price=500),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
     assert entity.slug == "razvedenie"
 
 
@@ -455,7 +522,8 @@ async def test_create_empty_description_stores_none() -> None:
     service, _ = make_service()
 
     entity = await service.create(
-        HorseServiceCreateDto(name="Тест", price=100, description="")
+        HorseServiceCreateDto(name="Тест", price=100, description=""),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
     assert entity.description is None
 
@@ -464,7 +532,8 @@ async def test_create_null_description_stores_none() -> None:
     service, _ = make_service()
 
     entity = await service.create(
-        HorseServiceCreateDto(name="Тест2", price=100, description=None)
+        HorseServiceCreateDto(name="Тест2", price=100, description=None),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
     assert entity.description is None
 
@@ -473,7 +542,11 @@ async def test_update_empty_slug_regenerates_from_name() -> None:
     service, repo = make_service()
     current = repo.add(make_horse_service(name="Старое", slug="old"))
 
-    updated = await service.update(str(current.id), HorseServiceUpdateDto(slug=" "))
+    updated = await service.update(
+        str(current.id),
+        HorseServiceUpdateDto(slug=" "),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
     assert updated.slug == "staroe"
 
 
@@ -481,5 +554,9 @@ async def test_update_empty_description_stores_none() -> None:
     service, repo = make_service()
     repo.add(make_horse_service(description="Old description"))
 
-    updated = await service.update("podkovka", HorseServiceUpdateDto(description=""))
+    updated = await service.update(
+        "podkovka",
+        HorseServiceUpdateDto(description=""),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
     assert updated.description is None

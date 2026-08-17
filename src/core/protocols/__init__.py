@@ -49,3 +49,4 @@ __all__ = [
     "UserRepositoryProtocol",
     "SecurityProtocol",
 ]
+from .email_service import EmailServiceClientProtocol

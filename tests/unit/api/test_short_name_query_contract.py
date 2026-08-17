@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -86,7 +88,9 @@ async def test_coat_colors_api_passes_short_name_filter_and_sort(
         ("/api/horses/coat_colors", get_coat_color_service),
     ],
 )
-def test_list_api_rejects_unknown_sort(path: str, dependency: object) -> None:
+def test_list_api_rejects_unknown_sort(
+    path: str, dependency: Callable[..., Any]
+) -> None:
     app.dependency_overrides[get_read_equestrian_context] = lambda: CONTEXT
     app.dependency_overrides[dependency] = CapturingListService
 

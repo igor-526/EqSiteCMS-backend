@@ -114,7 +114,6 @@ def _patch_service_default_context(service_class: type[Any]) -> None:
         if getattr(method, "_unit_context_patched", False):
             continue
 
-        @wraps(method)
         async def wrapped(
             self: Any, *args: Any, __method: Callable[..., Any] = method, **kwargs: Any
         ) -> Any:

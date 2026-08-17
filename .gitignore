@@ -4,6 +4,7 @@ __pycache__/
 .idea/
 .env
 .env.*
+!.env.example
 # src/migration/versions/*
 *pgdata/
 redisdata/

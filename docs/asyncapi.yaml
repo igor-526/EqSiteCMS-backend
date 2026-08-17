@@ -1,0 +1,52 @@
+asyncapi: 2.6.0
+info:
+  title: EqSiteCMS Backend Messaging
+  version: 1.0.0
+  description: Canonical producer contract for the main backend.
+servers:
+  jetstream:
+    url: nats://eqcms-nats:4222
+    protocol: nats
+channels:
+  events.site.callback.requested:
+    description: Callback request created by the main backend.
+    x-jetstream-stream: SITE_EVENTS
+    publish:
+      operationId: publishCallbackRequested
+      message:
+        $ref: "#/components/messages/CallbackRequested"
+components:
+  messages:
+    CallbackRequested:
+      name: CallbackRequested
+      headers:
+        type: object
+        additionalProperties: false
+        required: [Nats-Msg-Id, X-Equestrian-Id]
+        properties:
+          Nats-Msg-Id:
+            type: string
+            format: uuid
+          X-Equestrian-Id:
+            type: string
+            format: uuid
+      payload:
+        $ref: "#/components/schemas/CallbackRequestedPayload"
+  schemas:
+    CallbackRequestedPayload:
+      type: object
+      additionalProperties: false
+      required: [occurred_at, callback_request_id, phone]
+      properties:
+        occurred_at:
+          type: string
+          format: date-time
+        callback_request_id:
+          type: string
+          format: uuid
+        name:
+          type: [string, "null"]
+        comment:
+          type: [string, "null"]
+        phone:
+          type: string

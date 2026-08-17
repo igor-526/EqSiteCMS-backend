@@ -1,8 +1,9 @@
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=True, alias="DEBUG")
     swagger_title: str = Field(
         default="Equestrian Site CMS Manager", alias="SWAGGER_TITLE"
@@ -49,6 +50,34 @@ class Settings(BaseSettings):
     email_service_url: str = Field(
         default="http://email-service:8000", alias="EMAIL_SERVICE_URL"
     )
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> "Settings":
+        if self.environment.lower() != "production":
+            return self
+        unsafe = {
+            "",
+            "app",
+            "changeme",
+            "eqsitecmsdev",
+            "eqsitecmsminio",
+            "your-secret-key",
+        }
+        required = {
+            "SECRET_KEY": self.secret_key,
+            "POSTGRES_PASSWORD": self.db_password,
+            "S3_ACCESS_KEY": self.s3_access_key,
+            "S3_SECRET_KEY": self.s3_secret_key,
+            "SERVICE_KEY": self.service_key,
+        }
+        invalid = [
+            name for name, value in required.items() if value.strip().lower() in unsafe
+        ]
+        if invalid:
+            raise ValueError(
+                f"Unsafe or missing production settings: {', '.join(invalid)}"
+            )
+        return self
 
     @property
     def cms_cors_origins(self) -> list[str]:

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -11,6 +11,7 @@ import pytest
 from core.entities.horse_service import HorseServiceEntity
 from core.entities.price import PriceFormatter
 from core.entities.user import UserScope
+from core.protocols.repositories import HorseServiceRepositoryProtocol
 from core.exceptions.base import ClientError
 from core.schemas.horse_service import HorseServiceCreateDto, HorseServiceUpdateDto
 from core.schemas.users import UserOutDto
@@ -107,7 +108,9 @@ def repository() -> FakeHorseServiceRepository:
 
 @pytest.fixture
 def service(repository: FakeHorseServiceRepository) -> HorseServiceService:
-    return HorseServiceService(horse_service_repository=repository)
+    return HorseServiceService(
+        horse_service_repository=cast(HorseServiceRepositoryProtocol, repository)
+    )
 
 
 @pytest.fixture

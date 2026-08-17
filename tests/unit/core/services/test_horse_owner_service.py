@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
@@ -153,7 +155,8 @@ async def test_create_uc01_happy_path() -> None:
     service, repo = make_service()
 
     owner = await service.create(
-        HorseOwnerCreateInDto(name="Иванов", phone_numbers=["+71234567890"])
+        HorseOwnerCreateInDto(name="Иванов", phone_numbers=["+71234567890"]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert owner.name == "Иванов"
@@ -165,7 +168,9 @@ async def test_create_uc02_minimal_input() -> None:
     """UC02: only required field (name) — phones defaults to empty list."""
     service, repo = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Петров"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Петров"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert owner.name == "Петров"
     assert owner.phone_numbers == []
@@ -183,7 +188,8 @@ async def test_create_uc03_full_input() -> None:
             type=HorseOwnerType.company,
             address="г. Москва",
             phone_numbers=["+71234567890", "+71234567891"],
-        )
+        ),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert owner.name == "ООО Ромашка"
@@ -197,7 +203,10 @@ async def test_create_uc04_omitted_optional_fields() -> None:
     """UC04: optional fields (description, address) default to None."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Сидоров"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Сидоров"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner.description is None
     assert owner.address is None
@@ -208,7 +217,8 @@ async def test_create_uc05_empty_phone_list_accepted() -> None:
     service, _ = make_service()
 
     owner = await service.create(
-        HorseOwnerCreateInDto(name="Алексеев", phone_numbers=[])
+        HorseOwnerCreateInDto(name="Алексеев", phone_numbers=[]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert owner.phone_numbers == []
@@ -220,7 +230,10 @@ async def test_create_uc06_whitespace_name_stored_as_provided() -> None:
 
     # The service itself does not enforce non-whitespace names;
     # that would be a separate business rule. We just verify it doesn't crash.
-    owner = await service.create(HorseOwnerCreateInDto(name="  Пробелы  "))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="  Пробелы  "),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner.name == "  Пробелы  "
 
@@ -229,7 +242,10 @@ async def test_create_uc07_unicode_name() -> None:
     """UC07: unicode characters are accepted in name."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Müller GmbH"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Müller GmbH"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner.name == "Müller GmbH"
 
@@ -239,7 +255,8 @@ async def test_create_uc08_phone_boundary_min_7_digits() -> None:
     service, _ = make_service()
 
     owner = await service.create(
-        HorseOwnerCreateInDto(phone_numbers=["+1234567"], name="X")
+        HorseOwnerCreateInDto(phone_numbers=["+1234567"], name="X"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert "+1234567" in owner.phone_numbers
@@ -250,7 +267,10 @@ async def test_create_uc09_phone_below_min_raises_client_error() -> None:
     service, repo = make_service()
 
     with pytest.raises(ClientError, match="Неверный формат"):
-        await service.create(HorseOwnerCreateInDto(phone_numbers=["+123456"], name="X"))
+        await service.create(
+            HorseOwnerCreateInDto(phone_numbers=["+123456"], name="X"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert repo.calls == []  # create never called
 
@@ -260,7 +280,8 @@ async def test_create_uc10_phone_boundary_max_15_digits() -> None:
     service, _ = make_service()
 
     owner = await service.create(
-        HorseOwnerCreateInDto(phone_numbers=["+123456789012345"], name="X")
+        HorseOwnerCreateInDto(phone_numbers=["+123456789012345"], name="X"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert "+123456789012345" in owner.phone_numbers
@@ -272,7 +293,8 @@ async def test_create_uc11_phone_above_max_raises_client_error() -> None:
 
     with pytest.raises(ClientError, match="Неверный формат"):
         await service.create(
-            HorseOwnerCreateInDto(phone_numbers=["+1234567890123456"], name="X")
+            HorseOwnerCreateInDto(phone_numbers=["+1234567890123456"], name="X"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert repo.calls == []
@@ -284,7 +306,8 @@ async def test_create_uc12_malformed_phone_format_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.create(
-            HorseOwnerCreateInDto(phone_numbers=["71234567890"], name="X")
+            HorseOwnerCreateInDto(phone_numbers=["71234567890"], name="X"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert repo.calls == []
@@ -295,8 +318,12 @@ async def test_create_uc13_not_found_na_for_create() -> None:
     service, repo = make_service()
 
     # Create twice — both succeed at the service level (repo handles duplicates)
-    first = await service.create(HorseOwnerCreateInDto(name="Дубль"))
-    second = await service.create(HorseOwnerCreateInDto(name="Дубль"))
+    first = await service.create(
+        HorseOwnerCreateInDto(name="Дубль"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
+    second = await service.create(
+        HorseOwnerCreateInDto(name="Дубль"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert first.name == second.name
     assert [name for name, _ in repo.calls] == ["create", "create"]
@@ -308,14 +335,19 @@ async def test_create_uc14_repository_create_failure_propagates() -> None:
     repo.fail_on.add("create")
 
     with pytest.raises(RepositoryError):
-        await service.create(HorseOwnerCreateInDto(name="Fail"))
+        await service.create(
+            HorseOwnerCreateInDto(name="Fail"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_create_uc15_update_not_called_on_create() -> None:
     """UC15: create does not call update (no self-conflict check on create)."""
     service, repo = make_service()
 
-    await service.create(HorseOwnerCreateInDto(name="Иванов"))
+    await service.create(
+        HorseOwnerCreateInDto(name="Иванов"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert "update" not in [name for name, _ in repo.calls]
 
@@ -324,7 +356,10 @@ async def test_create_uc16_no_extra_repo_methods_called() -> None:
     """UC16: create calls only 'create' on the repository — no extra lookups."""
     service, repo = make_service()
 
-    await service.create(HorseOwnerCreateInDto(name="Минимум"))
+    await service.create(
+        HorseOwnerCreateInDto(name="Минимум"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert [name for name, _ in repo.calls] == ["create"]
 
@@ -333,7 +368,10 @@ async def test_create_uc17_valid_call_is_not_blocked() -> None:
     """UC17: service has no auth/permission layer — valid call succeeds."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Разрешённый"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Разрешённый"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner is not None
 
@@ -350,7 +388,10 @@ async def test_create_uc19_partial_create_uses_defaults() -> None:
     """UC19: N/A for create — all non-provided optional fields use their schema defaults."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Частичный"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Частичный"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner.type == HorseOwnerType.person  # default
     assert owner.phone_numbers == []  # default_factory
@@ -370,7 +411,10 @@ async def test_create_uc21_repository_failure_no_side_effects() -> None:
     repo.fail_on.add("create")
 
     with pytest.raises(RepositoryError):
-        await service.create(HorseOwnerCreateInDto(name="Сбой"))
+        await service.create(
+            HorseOwnerCreateInDto(name="Сбой"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert len(repo.by_id) == 0
 
@@ -380,7 +424,10 @@ async def test_create_uc22_create_called_after_validation() -> None:
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(HorseOwnerCreateInDto(name="X", phone_numbers=["bad"]))
+        await service.create(
+            HorseOwnerCreateInDto(name="X", phone_numbers=["bad"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert "create" not in [name for name, _ in repo.calls]
 
@@ -390,7 +437,10 @@ async def test_create_uc23_rollback_intent_no_repo_call_on_validation_error() ->
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(HorseOwnerCreateInDto(name="X", phone_numbers=["+12345"]))
+        await service.create(
+            HorseOwnerCreateInDto(name="X", phone_numbers=["+12345"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert repo.calls == []
 
@@ -400,8 +450,8 @@ async def test_create_uc24_idempotency_same_data_stored_twice() -> None:
     service, repo = make_service()
 
     dto = HorseOwnerCreateInDto(name="Повтор")
-    first = await service.create(dto)
-    second = await service.create(dto)
+    first = await service.create(dto, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
+    second = await service.create(dto, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert first.id != second.id  # each HorseOwner gets a new UUID by default
     assert len(repo.by_id) == 2
@@ -411,7 +461,10 @@ async def test_create_uc25_sorting_na_does_not_apply_to_create() -> None:
     """UC25: N/A for create — sort parameter is irrelevant; create returns entity directly."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Сортировка"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Сортировка"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner.name == "Сортировка"
 
@@ -420,7 +473,9 @@ async def test_create_uc26_filtering_na_does_not_apply_to_create() -> None:
     """UC26: N/A for create — filter parameters are irrelevant."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Фильтр"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Фильтр"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert owner is not None
 
@@ -429,7 +484,10 @@ async def test_create_uc27_pagination_na_does_not_apply_to_create() -> None:
     """UC27: N/A for create — pagination is irrelevant."""
     service, _ = make_service()
 
-    owner = await service.create(HorseOwnerCreateInDto(name="Страница"))
+    owner = await service.create(
+        HorseOwnerCreateInDto(name="Страница"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert owner is not None
 
@@ -445,7 +503,8 @@ async def test_create_uc28_serialization_all_fields_returned() -> None:
             type=HorseOwnerType.company,
             address="Адрес",
             phone_numbers=["+71234567890"],
-        )
+        ),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert owner.name == "Полный"
@@ -461,7 +520,8 @@ async def test_create_uc29_invalid_phone_raises_client_error_not_422() -> None:
 
     with pytest.raises(ClientError):
         await service.create(
-            HorseOwnerCreateInDto(name="X", phone_numbers=["bad_phone"])
+            HorseOwnerCreateInDto(name="X", phone_numbers=["bad_phone"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -485,7 +545,11 @@ async def test_update_uc01_happy_path() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner(name="Старый", description="Старое"))
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(name="Новый"))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Новый"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "Новый"
     assert updated.description == "Старое"  # unchanged
@@ -496,7 +560,11 @@ async def test_update_uc02_minimal_input_one_field() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner(address=None))
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(address="Москва"))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(address="Москва"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.address == "Москва"
 
@@ -515,6 +583,7 @@ async def test_update_uc03_full_input_all_fields() -> None:
             address="Санкт-Петербург",
             phone_numbers=["+79991234567"],
         ),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.name == "Новый"
@@ -529,7 +598,11 @@ async def test_update_uc04_omitted_optional_fields_not_changed() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner(description="Исходное"))
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(name="Новый"))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Новый"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.description == "Исходное"
 
@@ -539,7 +612,11 @@ async def test_update_uc05_empty_phone_list_accepted() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner(phone_numbers=["+71234567890"]))
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(phone_numbers=[]))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(phone_numbers=[]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.phone_numbers == []
 
@@ -549,7 +626,11 @@ async def test_update_uc06_whitespace_name_stored_as_provided() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(name="  Пробел  "))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="  Пробел  "),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "  Пробел  "
 
@@ -559,7 +640,11 @@ async def test_update_uc07_unicode_name() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(name="José García"))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="José García"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "José García"
 
@@ -570,7 +655,9 @@ async def test_update_uc08_phone_boundary_min_7_digits() -> None:
     owner = repo.add(make_owner())
 
     updated = await service.update(
-        owner.id, HorseOwnerUpdateDto(phone_numbers=["+1234567"])
+        owner.id,
+        HorseOwnerUpdateDto(phone_numbers=["+1234567"]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert "+1234567" in updated.phone_numbers
@@ -582,7 +669,11 @@ async def test_update_uc09_phone_below_min_raises_client_error() -> None:
     owner = repo.add(make_owner())
 
     with pytest.raises(ClientError, match="Неверный формат"):
-        await service.update(owner.id, HorseOwnerUpdateDto(phone_numbers=["+12345"]))
+        await service.update(
+            owner.id,
+            HorseOwnerUpdateDto(phone_numbers=["+12345"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     # update() in repo must NOT have been called
     assert "update" not in [name for name, _ in repo.calls]
@@ -594,7 +685,9 @@ async def test_update_uc10_phone_boundary_max_15_digits() -> None:
     owner = repo.add(make_owner())
 
     updated = await service.update(
-        owner.id, HorseOwnerUpdateDto(phone_numbers=["+123456789012345"])
+        owner.id,
+        HorseOwnerUpdateDto(phone_numbers=["+123456789012345"]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert "+123456789012345" in updated.phone_numbers
@@ -607,7 +700,9 @@ async def test_update_uc11_phone_above_max_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.update(
-            owner.id, HorseOwnerUpdateDto(phone_numbers=["+1234567890123456"])
+            owner.id,
+            HorseOwnerUpdateDto(phone_numbers=["+1234567890123456"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -616,7 +711,11 @@ async def test_update_uc12_nonexistent_id_raises_client_error() -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError, match="Владелец не найден"):
-        await service.update(uuid4(), HorseOwnerUpdateDto(name="X"))
+        await service.update(
+            uuid4(),
+            HorseOwnerUpdateDto(name="X"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_uc13_not_found_raises_client_error() -> None:
@@ -624,7 +723,11 @@ async def test_update_uc13_not_found_raises_client_error() -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.update(uuid4(), HorseOwnerUpdateDto(name="Новый"))
+        await service.update(
+            uuid4(),
+            HorseOwnerUpdateDto(name="Новый"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_uc14_repository_update_failure_propagates() -> None:
@@ -634,7 +737,11 @@ async def test_update_uc14_repository_update_failure_propagates() -> None:
     repo.fail_on.add("update")
 
     with pytest.raises(RepositoryError):
-        await service.update(owner.id, HorseOwnerUpdateDto(name="Сбой"))
+        await service.update(
+            owner.id,
+            HorseOwnerUpdateDto(name="Сбой"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_uc15_update_existing_owner_no_conflict() -> None:
@@ -642,7 +749,11 @@ async def test_update_uc15_update_existing_owner_no_conflict() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner(name="Тот же"))
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(name="Тот же"))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Тот же"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "Тот же"
 
@@ -652,7 +763,11 @@ async def test_update_uc16_no_extra_repo_lookups() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    await service.update(owner.id, HorseOwnerUpdateDto(name="Проверка"))
+    await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Проверка"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     method_names = [name for name, _ in repo.calls]
     assert method_names == ["get_by_id", "update"]
@@ -663,7 +778,11 @@ async def test_update_uc17_valid_call_not_blocked() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    result = await service.update(owner.id, HorseOwnerUpdateDto(name="Разрешено"))
+    result = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Разрешено"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert result is not None
 
@@ -689,7 +808,11 @@ async def test_update_uc19_partial_update_only_specified_fields() -> None:
         )
     )
 
-    updated = await service.update(owner.id, HorseOwnerUpdateDto(name="Новый"))
+    updated = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Новый"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "Новый"
     assert updated.description == "Описание"
@@ -703,7 +826,9 @@ async def test_update_uc20_empty_payload_raises_client_error() -> None:
     owner = repo.add(make_owner())
 
     with pytest.raises(ClientError, match="Нет данных"):
-        await service.update(owner.id, HorseOwnerUpdateDto())
+        await service.update(
+            owner.id, HorseOwnerUpdateDto(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     # repository.update must NOT have been called
     assert "update" not in [name for name, _ in repo.calls]
@@ -716,7 +841,11 @@ async def test_update_uc21_repository_failure_entity_not_deleted() -> None:
     repo.fail_on.add("update")
 
     with pytest.raises(RepositoryError):
-        await service.update(owner.id, HorseOwnerUpdateDto(name="Сбой"))
+        await service.update(
+            owner.id,
+            HorseOwnerUpdateDto(name="Сбой"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert owner.id in repo.by_id
 
@@ -726,7 +855,11 @@ async def test_update_uc22_get_by_id_called_before_update() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    await service.update(owner.id, HorseOwnerUpdateDto(name="Порядок"))
+    await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Порядок"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     method_names = [name for name, _ in repo.calls]
     assert method_names.index("get_by_id") < method_names.index("update")
@@ -737,7 +870,11 @@ async def test_update_uc23_rollback_intent_update_not_called_on_not_found() -> N
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.update(uuid4(), HorseOwnerUpdateDto(name="X"))
+        await service.update(
+            uuid4(),
+            HorseOwnerUpdateDto(name="X"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert "update" not in [name for name, _ in repo.calls]
 
@@ -747,8 +884,16 @@ async def test_update_uc24_idempotency_multiple_updates() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    first = await service.update(owner.id, HorseOwnerUpdateDto(name="Одинаково"))
-    second = await service.update(owner.id, HorseOwnerUpdateDto(name="Одинаково"))
+    first = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Одинаково"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    second = await service.update(
+        owner.id,
+        HorseOwnerUpdateDto(name="Одинаково"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert first.name == second.name
 
@@ -783,6 +928,7 @@ async def test_update_uc28_serialization_updated_fields_returned() -> None:
             description="Новое",
             phone_numbers=["+79991234567"],
         ),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.name == "Обновлённый"
@@ -798,7 +944,9 @@ async def test_update_uc29_invalid_phone_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.update(
-            owner.id, HorseOwnerUpdateDto(phone_numbers=["not-a-phone"])
+            owner.id,
+            HorseOwnerUpdateDto(phone_numbers=["not-a-phone"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -820,7 +968,9 @@ async def test_get_by_id_uc01_returns_existing_owner() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    result = await service.get_by_id(owner.id)
+    result = await service.get_by_id(
+        owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert result == owner
 
@@ -829,7 +979,9 @@ async def test_get_by_id_uc02_returns_none_for_missing() -> None:
     """UC02: get_by_id returns None when owner does not exist."""
     service, _ = make_service()
 
-    result = await service.get_by_id(uuid4())
+    result = await service.get_by_id(
+        uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert result is None
 
@@ -838,7 +990,10 @@ async def test_get_by_id_uc12_random_uuid_returns_none() -> None:
     """UC12: a random UUID yields None (not found)."""
     service, _ = make_service()
 
-    assert await service.get_by_id(uuid4()) is None
+    assert (
+        await service.get_by_id(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
+        is None
+    )
 
 
 async def test_get_by_id_uc21_repository_failure_propagates() -> None:
@@ -847,7 +1002,7 @@ async def test_get_by_id_uc21_repository_failure_propagates() -> None:
     repo.fail_on.add("get_by_id")
 
     with pytest.raises(RepositoryError):
-        await service.get_by_id(uuid4())
+        await service.get_by_id(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_get_by_id_or_raise_uc01_returns_existing_owner() -> None:
@@ -855,7 +1010,9 @@ async def test_get_by_id_or_raise_uc01_returns_existing_owner() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    result = await service.get_by_id_or_raise(owner.id)
+    result = await service.get_by_id_or_raise(
+        owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert result == owner
 
@@ -865,7 +1022,9 @@ async def test_get_by_id_or_raise_uc13_not_found_raises_client_error() -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError, match="Владелец не найден"):
-        await service.get_by_id_or_raise(uuid4())
+        await service.get_by_id_or_raise(
+            uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_get_by_id_or_raise_uc30_no_http_exception() -> None:
@@ -874,7 +1033,9 @@ async def test_get_by_id_or_raise_uc30_no_http_exception() -> None:
 
     exc = None
     try:
-        await service.get_by_id_or_raise(uuid4())
+        await service.get_by_id_or_raise(
+            uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
     except ClientError as e:
         exc = e
 
@@ -892,7 +1053,7 @@ async def test_delete_uc01_happy_path() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    await service.delete(owner.id)
+    await service.delete(owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert owner.id not in repo.by_id
     assert [name for name, _ in repo.calls] == ["get_by_id", "delete"]
@@ -903,7 +1064,7 @@ async def test_delete_uc02_only_required_id() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    await service.delete(owner.id)
+    await service.delete(owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert owner.id not in repo.by_id
 
@@ -913,7 +1074,7 @@ async def test_delete_uc12_random_uuid_raises_client_error() -> None:
     service, repo = make_service()
 
     with pytest.raises(ClientError, match="Владелец не найден"):
-        await service.delete(uuid4())
+        await service.delete(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert "delete" not in [name for name, _ in repo.calls]
 
@@ -923,7 +1084,7 @@ async def test_delete_uc13_not_found_raises_client_error() -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.delete(uuid4())
+        await service.delete(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_uc14_repository_delete_failure_propagates() -> None:
@@ -933,7 +1094,7 @@ async def test_delete_uc14_repository_delete_failure_propagates() -> None:
     repo.fail_on.add("delete")
 
     with pytest.raises(RepositoryError):
-        await service.delete(owner.id)
+        await service.delete(owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_uc21_repository_failure_entity_still_in_repo() -> None:
@@ -943,7 +1104,7 @@ async def test_delete_uc21_repository_failure_entity_still_in_repo() -> None:
     repo.fail_on.add("delete")
 
     with pytest.raises(RepositoryError):
-        await service.delete(owner.id)
+        await service.delete(owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert owner.id in repo.by_id
 
@@ -953,7 +1114,7 @@ async def test_delete_uc22_get_by_id_called_before_delete() -> None:
     service, repo = make_service()
     owner = repo.add(make_owner())
 
-    await service.delete(owner.id)
+    await service.delete(owner.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     method_names = [name for name, _ in repo.calls]
     assert method_names.index("get_by_id") < method_names.index("delete")
@@ -964,7 +1125,7 @@ async def test_delete_uc23_rollback_intent_delete_not_called_on_not_found() -> N
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.delete(uuid4())
+        await service.delete(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert "delete" not in [name for name, _ in repo.calls]
 
@@ -980,7 +1141,9 @@ async def test_get_filtered_uc01_happy_path() -> None:
     owner = make_owner()
     repo.filtered_result = ([owner], 1)
 
-    entities, total = await service.get_filtered(name="Иванов")
+    entities, total = await service.get_filtered(
+        name="Иванов", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert entities == [owner]
     assert total == 1
@@ -990,7 +1153,9 @@ async def test_get_filtered_uc02_minimal_no_params() -> None:
     """UC02: get_filtered with no params passes all-None to repository."""
     service, repo = make_service()
 
-    entities, total = await service.get_filtered()
+    entities, total = await service.get_filtered(
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert entities == []
     assert total == 0
@@ -1011,6 +1176,7 @@ async def test_get_filtered_uc03_full_input_all_params_passed_through() -> None:
         sort=["name"],
         limit=10,
         offset=5,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     _, filters = repo.calls[0]
@@ -1028,7 +1194,9 @@ async def test_get_filtered_uc04_omitted_optional_defaults_to_none() -> None:
     """UC04: omitted optional params are passed as None."""
     service, repo = make_service()
 
-    await service.get_filtered(name="Иванов")
+    await service.get_filtered(
+        name="Иванов", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     _, filters = repo.calls[0]
     assert filters["description"] is None
@@ -1039,7 +1207,9 @@ async def test_get_filtered_uc25_sort_parameter_passed_through() -> None:
     """UC25: sort parameter is passed directly to the repository without transformation."""
     service, repo = make_service()
 
-    await service.get_filtered(sort=["-name", "type"])
+    await service.get_filtered(
+        sort=["-name", "type"], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     _, filters = repo.calls[0]
     assert filters["sort"] == ["-name", "type"]
@@ -1049,7 +1219,12 @@ async def test_get_filtered_uc26_multiple_filters_all_passed() -> None:
     """UC26: multiple filter params are all forwarded correctly."""
     service, repo = make_service()
 
-    await service.get_filtered(name="X", type=["company"], address="СПб")
+    await service.get_filtered(
+        name="X",
+        type=["company"],
+        address="СПб",
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     _, filters = repo.calls[0]
     assert filters["name"] == "X"
@@ -1061,7 +1236,9 @@ async def test_get_filtered_uc27_pagination_limit_offset_passed_through() -> Non
     """UC27: limit and offset are forwarded without modification."""
     service, repo = make_service()
 
-    await service.get_filtered(limit=20, offset=40)
+    await service.get_filtered(
+        limit=20, offset=40, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     _, filters = repo.calls[0]
     assert filters["limit"] == 20
@@ -1074,7 +1251,7 @@ async def test_get_filtered_uc21_repository_failure_propagates() -> None:
     repo.fail_on.add("get_filtered")
 
     with pytest.raises(RepositoryError):
-        await service.get_filtered(limit=1)
+        await service.get_filtered(limit=1, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_get_filtered_uc28_result_entities_returned_unchanged() -> None:
@@ -1083,7 +1260,9 @@ async def test_get_filtered_uc28_result_entities_returned_unchanged() -> None:
     owner = make_owner(name="Фильтрованный")
     repo.filtered_result = ([owner], 5)
 
-    entities, total = await service.get_filtered()
+    entities, total = await service.get_filtered(
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert entities[0] is owner
     assert total == 5

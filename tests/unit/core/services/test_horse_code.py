@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import String
 
 from core.entities import Horse
 from core.schemas import HorseCreateInDto, HorseOutDto, HorseUpdateInDto
@@ -102,6 +103,7 @@ def test_out_dto_serializes_code_exactly(code: str | None) -> None:
 def test_database_column_contract_is_nullable_varchar_31_without_uniqueness() -> None:
     column = horse_table.c.code
     assert column.nullable is True
+    assert isinstance(column.type, String)
     assert column.type.length == 31
     assert column.default is None
     assert column.server_default is None

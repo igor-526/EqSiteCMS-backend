@@ -1,6 +1,7 @@
 """Unit tests for UserManagementRepository."""
+
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -186,13 +187,15 @@ class TestUserManagementRepository:
             scope_name="ADMIN",
             scope_description="Admin scope",
         )
-        mock_result = create_mock_execute_result(rows=[
-            {
-                "id": scope.id,
-                "scope_name": scope.scope_name,
-                "scope_description": scope.scope_description,
-            }
-        ])
+        mock_result = create_mock_execute_result(
+            rows=[
+                {
+                    "id": scope.id,
+                    "scope_name": scope.scope_name,
+                    "scope_description": scope.scope_description,
+                }
+            ]
+        )
         mock_session.execute.return_value = mock_result
 
         # Act
@@ -205,18 +208,20 @@ class TestUserManagementRepository:
     async def test_get_all_roles(self, repository, mock_session):
         """Repository retrieves all roles."""
         # Arrange
-        mock_result = create_mock_execute_result(rows=[
-            {
-                "id": uuid4(),
-                "scope_name": "ADMIN",
-                "scope_description": "Admin scope",
-            },
-            {
-                "id": uuid4(),
-                "scope_name": "USER_MANAGER",
-                "scope_description": "User Manager scope",
-            },
-        ])
+        mock_result = create_mock_execute_result(
+            rows=[
+                {
+                    "id": uuid4(),
+                    "scope_name": "ADMIN",
+                    "scope_description": "Admin scope",
+                },
+                {
+                    "id": uuid4(),
+                    "scope_name": "USER_MANAGER",
+                    "scope_description": "User Manager scope",
+                },
+            ]
+        )
         mock_session.execute.return_value = mock_result
 
         # Act
@@ -228,13 +233,15 @@ class TestUserManagementRepository:
     async def test_get_all_roles_with_filter(self, repository, mock_session):
         """Repository filters roles by scope_name regex."""
         # Arrange
-        mock_result = create_mock_execute_result(rows=[
-            {
-                "id": uuid4(),
-                "scope_name": "USER_MANAGER",
-                "scope_description": "User Manager scope",
-            }
-        ])
+        mock_result = create_mock_execute_result(
+            rows=[
+                {
+                    "id": uuid4(),
+                    "scope_name": "USER_MANAGER",
+                    "scope_description": "User Manager scope",
+                }
+            ]
+        )
         mock_session.execute.return_value = mock_result
 
         # Act

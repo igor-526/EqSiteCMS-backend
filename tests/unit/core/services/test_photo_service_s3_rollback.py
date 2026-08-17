@@ -8,6 +8,8 @@ both DB and storage state.
 
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID
 
@@ -176,6 +178,7 @@ async def test_ut26_create_s3_save_error_before_db_insert_propagates() -> None:
         await service.create(
             PhotoCreateDto(name="Test"),
             make_upload(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     # No DB create attempt was made
@@ -195,6 +198,7 @@ async def test_ut27_create_db_error_after_s3_save_calls_s3_delete() -> None:
         await service.create(
             PhotoCreateDto(name="Test"),
             make_upload(filename="photo.jpg"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     # S3 save happened
@@ -244,6 +248,7 @@ async def test_ut28_create_rollback_delete_failure_does_not_suppress_original_er
         await service.create(
             PhotoCreateDto(name="Test"),
             make_upload(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -288,7 +293,7 @@ async def test_ut29_delete_db_first_then_s3_delete() -> None:
     photo = repo.add(make_photo(path="del.jpg"))
     storage.saved["del.jpg"] = b"data"
 
-    await service.delete(photo.id)
+    await service.delete(photo.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     # load → storage.delete → repo.delete is the actual order in PhotoService.delete
     assert operation_log == ["storage.load", "storage.delete", "repo.delete"]
@@ -321,7 +326,9 @@ async def test_ut30_batch_delete_partial_s3_failure_propagates_and_restores() ->
     storage.fail_delete_for.add("second.jpg")
 
     with pytest.raises(S3Error):
-        await service.batch_delete([first.id, second.id])
+        await service.batch_delete(
+            [first.id, second.id], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     # batch_delete was NOT called on repo
     assert not any(name == "batch_delete" for name, _ in repo.calls)

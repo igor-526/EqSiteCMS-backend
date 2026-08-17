@@ -72,3 +72,7 @@ class UserManagementRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
     ) -> list[UserScope]:
         """Получить все роли с фильтрацией по scope_name (regex)."""
         ...
+
+    async def get_by_username(self, username: str) -> User | None:
+        """Получить пользователя по точному username."""
+        ...

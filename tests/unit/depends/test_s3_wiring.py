@@ -115,6 +115,7 @@ async def test_get_photo_url_builder_include_bucket_from_settings() -> None:
 
         result = await get_photo_url_builder()
 
+    assert isinstance(result, S3PhotoUrlBuilder)
     assert result.include_bucket_in_path is False
 
 

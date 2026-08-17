@@ -7,6 +7,8 @@ Covers:
 
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID
 
@@ -445,9 +447,9 @@ def make_coat_color_service() -> tuple[CoatColorService, FakeCoatColorRepository
     return CoatColorService(coat_color_repository=cast(Any, repo)), repo
 
 
-def make_horse_service_service() -> (
-    tuple[HorseServiceService, FakeHorseServiceRepository]
-):
+def make_horse_service_service() -> tuple[
+    HorseServiceService, FakeHorseServiceRepository
+]:
     repo = FakeHorseServiceRepository()
     return HorseServiceService(horse_service_repository=cast(Any, repo)), repo
 
@@ -486,7 +488,11 @@ async def test_breed_update_with_clean_page_data_succeeds() -> None:
     service, repo = make_breed_service()
     repo.add(make_breed())
 
-    updated = await service.update("arabian", BreedUpdateDto(page_data="<h1>Info</h1>"))
+    updated = await service.update(
+        "arabian",
+        BreedUpdateDto(page_data="<h1>Info</h1>"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.page_data == "<h1>Info</h1>"
     assert any(name == "update" for name, _ in repo.calls)
@@ -498,7 +504,11 @@ async def test_breed_update_with_script_tag_raises_client_error() -> None:
     repo.add(make_breed())
 
     with pytest.raises(ClientError):
-        await service.update("arabian", BreedUpdateDto(page_data="<script>x</script>"))
+        await service.update(
+            "arabian",
+            BreedUpdateDto(page_data="<script>x</script>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert not any(name == "update" for name, _ in repo.calls)
 
@@ -509,7 +519,11 @@ async def test_breed_update_with_onerror_raises_client_error() -> None:
     repo.add(make_breed())
 
     with pytest.raises(ClientError):
-        await service.update("arabian", BreedUpdateDto(page_data="<img onerror='x'>"))
+        await service.update(
+            "arabian",
+            BreedUpdateDto(page_data="<img onerror='x'>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert not any(name == "update" for name, _ in repo.calls)
 
@@ -521,7 +535,9 @@ async def test_breed_update_with_javascript_uri_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.update(
-            "arabian", BreedUpdateDto(page_data='<a href="javascript:x">')
+            "arabian",
+            BreedUpdateDto(page_data='<a href="javascript:x">'),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert not any(name == "update" for name, _ in repo.calls)
@@ -532,7 +548,11 @@ async def test_breed_update_without_page_data_no_js_validation() -> None:
     service, repo = make_breed_service()
     repo.add(make_breed(description="old"))
 
-    updated = await service.update("arabian", BreedUpdateDto(description="new"))
+    updated = await service.update(
+        "arabian",
+        BreedUpdateDto(description="new"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.description == "new"
     assert any(name == "update" for name, _ in repo.calls)
@@ -544,7 +564,8 @@ async def test_breed_create_with_script_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.create(
-            BreedCreateDto(name="Test", page_data="<script>x</script>")
+            BreedCreateDto(name="Test", page_data="<script>x</script>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert not any(name == "create" for name, _ in repo.calls)
@@ -554,7 +575,9 @@ async def test_breed_create_without_page_data_uses_default() -> None:
     """create without page_data must store DEFAULT_PAGE_DATA without raising."""
     service, repo = make_breed_service()
 
-    breed = await service.create(BreedCreateDto(name="Mustang"))
+    breed = await service.create(
+        BreedCreateDto(name="Mustang"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert breed.page_data == "<div></div>"
     assert any(name == "create" for name, _ in repo.calls)
@@ -571,7 +594,11 @@ async def test_coat_color_update_with_onclick_raises_client_error() -> None:
     repo.add(make_coat_color())
 
     with pytest.raises(ClientError):
-        await service.update("bay", CoatColorUpdateDto(page_data="<div onclick='x'>"))
+        await service.update(
+            "bay",
+            CoatColorUpdateDto(page_data="<div onclick='x'>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert not any(name == "update" for name, _ in repo.calls)
 
@@ -582,7 +609,9 @@ async def test_coat_color_update_with_clean_html_succeeds() -> None:
     repo.add(make_coat_color())
 
     updated = await service.update(
-        "bay", CoatColorUpdateDto(page_data="<ul><li>ok</li></ul>")
+        "bay",
+        CoatColorUpdateDto(page_data="<ul><li>ok</li></ul>"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.page_data == "<ul><li>ok</li></ul>"
@@ -594,7 +623,10 @@ async def test_coat_color_create_with_script_raises_client_error() -> None:
     service, repo = make_coat_color_service()
 
     with pytest.raises(ClientError):
-        await service.create(CoatColorCreateDto(name="Roan", page_data="<SCRIPT>"))
+        await service.create(
+            CoatColorCreateDto(name="Roan", page_data="<SCRIPT>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert not any(name == "create" for name, _ in repo.calls)
 
@@ -611,7 +643,9 @@ async def test_horse_service_update_with_onfocus_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.update(
-            "trimming", HorseServiceUpdateDto(page_data="<div onfocus='x'>")
+            "trimming",
+            HorseServiceUpdateDto(page_data="<div onfocus='x'>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert not any(name == "update" for name, _ in repo.calls)
@@ -625,6 +659,7 @@ async def test_horse_service_update_with_clean_html_succeeds() -> None:
     updated = await service.update(
         "trimming",
         HorseServiceUpdateDto(page_data="<table><tr><td>ok</td></tr></table>"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.page_data == "<table><tr><td>ok</td></tr></table>"
@@ -643,7 +678,9 @@ async def test_price_update_with_onload_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.update(
-            "subscription", PriceUpdateDto(page_data="<div onload='x'>")
+            "subscription",
+            PriceUpdateDto(page_data="<div onload='x'>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert not any(name == "update" for name, _ in repo.calls)
@@ -657,6 +694,7 @@ async def test_price_update_with_clean_html_succeeds() -> None:
     updated = await service.update(
         "subscription",
         PriceUpdateDto(page_data="<h2>Услуга</h2><p>Описание</p>"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.page_data == "<h2>Услуга</h2><p>Описание</p>"
@@ -669,7 +707,8 @@ async def test_price_create_with_script_src_raises_client_error() -> None:
 
     with pytest.raises(ClientError):
         await service.create(
-            PriceCreateDto(name="BadPrice", page_data="<script src='x'>")
+            PriceCreateDto(name="BadPrice", page_data="<script src='x'>"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert not any(name == "create" for name, _ in repo.calls)

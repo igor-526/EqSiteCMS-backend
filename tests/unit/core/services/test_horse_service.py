@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 import re
 from datetime import date, datetime, timezone
 from typing import Any, Mapping, cast
@@ -316,6 +318,7 @@ def make_user(
     ]
     return UserOutDto(
         id=user_id or uuid4(),
+        equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
         username="admin",
         created_at=datetime.now(tz=timezone.utc),
         scopes=scopes,
@@ -359,6 +362,7 @@ async def test_update_horse_uc19_partial_update_changes_only_explicit_fields() -
         horse_id=horse.id,
         data=HorseUpdateInDto(description="new"),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.description == "new"
@@ -376,7 +380,10 @@ async def test_update_horse_uc20_empty_payload_rejected() -> None:
 
     with pytest.raises(ClientError):
         await service.update_horse(
-            horse_id=horse.id, data=HorseUpdateInDto(), user=make_user()
+            horse_id=horse.id,
+            data=HorseUpdateInDto(),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -389,14 +396,31 @@ async def test_update_horse_uc18_denies_non_admin_scope_user() -> None:
             horse_id=horse.id,
             data=HorseUpdateInDto(description="updated"),
             user=make_user(scope_names=["CONTENT_EDITOR"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
 async def test_create_horse_uc16_reference_validation_runs_before_create() -> None:
     service, horse_repo, _, breed_repo, coat_repo, owner_repo = make_service()
-    breed = breed_repo.add(Breed(name="Arabian", slug="arabian", short_name="Arabian"))
-    coat = coat_repo.add(CoatColor(name="Bay", slug="bay", short_name="Bay"))
-    owner = owner_repo.add(HorseOwner(name="Owner"))
+    breed = breed_repo.add(
+        Breed(
+            equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
+            name="Arabian",
+            slug="arabian",
+            short_name="Arabian",
+        )
+    )
+    coat = coat_repo.add(
+        CoatColor(
+            equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
+            name="Bay",
+            slug="bay",
+            short_name="Bay",
+        )
+    )
+    owner = owner_repo.add(
+        HorseOwner(equestrian_id=TEST_EQUESTRIAN_CONTEXT.id, name="Owner")
+    )
 
     created = await service.create_horse(
         create_data=HorseCreateInDto(
@@ -406,6 +430,7 @@ async def test_create_horse_uc16_reference_validation_runs_before_create() -> No
             horse_owner_id=owner.id,
         ),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert created.name == "Новая"
@@ -424,6 +449,7 @@ async def test_create_horse_uc16_missing_reference_returns_client_error() -> Non
         await service.create_horse(
             create_data=HorseCreateInDto(name="Новая", breed_id=uuid4()),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert horse_repo.calls == []
@@ -433,9 +459,13 @@ async def test_get_horse_by_slug_or_id_uc12_uuid_vs_slug_deterministic() -> None
     service, horse_repo, _, _, _, _ = make_service()
     horse = horse_repo.add(make_horse(slug="special-slug"))
 
-    by_uuid = await service.get_horse_by_slug_or_id(slug_or_id=str(horse.id), user=None)
+    by_uuid = await service.get_horse_by_slug_or_id(
+        slug_or_id=str(horse.id), user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     by_slug = await service.get_horse_by_slug_or_id(
-        slug_or_id="special-slug", user=None
+        slug_or_id="special-slug",
+        user=None,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert by_uuid.id == horse.id
@@ -457,6 +487,7 @@ async def test_get_available_pedigree_uc27_normalizes_pagination_bounds() -> Non
         mode="sire",
         limit=999,
         offset=-5,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert (
@@ -474,6 +505,7 @@ async def test_get_available_pedigree_sire_limit_below_one_clamped() -> None:
         horse_id=horse.id,
         mode="sire",
         limit=0,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert (
@@ -491,6 +523,7 @@ async def test_get_available_pedigree_dam_negative_offset_clamped() -> None:
         horse_id=horse.id,
         mode="dam",
         offset=-10,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert (
@@ -508,6 +541,7 @@ async def test_get_available_pedigree_invalid_mode_returns_client_error() -> Non
             user=None,
             horse_id=horse.id,
             mode=cast(Any, "parent"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -519,6 +553,7 @@ async def test_get_available_pedigree_missing_target_returns_client_error() -> N
             user=None,
             horse_id=uuid4(),
             mode="children",
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -541,6 +576,7 @@ async def test_get_available_pedigree_excludes_current_relations() -> None:
         user=None,
         horse_id=horse.id,
         mode="sire",
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert (
@@ -564,6 +600,7 @@ async def test_set_horse_pedigree_uc14_duplicate_foals_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(foals=[foal.id, foal.id]),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -576,6 +613,7 @@ async def test_set_horse_pedigree_without_user_denied_before_write() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=uuid4()),
             user=None,
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert children_repo.calls == []
@@ -590,6 +628,7 @@ async def test_set_horse_pedigree_without_admin_scope_denied_before_write() -> N
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=uuid4()),
             user=make_user(scope_names=["CONTENT_EDITOR"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert children_repo.calls == []
@@ -605,6 +644,7 @@ async def test_set_horse_pedigree_missing_target_returns_not_found_group_error()
             horse_id=uuid4(),
             pedigree_data=HorseSetPedigreeInDto(sire_id=uuid4()),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert children_repo.calls == []
@@ -627,6 +667,7 @@ async def test_set_horse_pedigree_explicit_null_clears_sire() -> None:
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(sire_id=None),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert children_repo.calls[0] == (
@@ -661,6 +702,7 @@ async def test_set_horse_pedigree_explicit_null_clears_dam() -> None:
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(dam_id=None),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert children_repo.calls[0] == (
@@ -679,6 +721,7 @@ async def test_set_horse_pedigree_empty_foals_clears_foals_only() -> None:
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(foals=[]),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert children_repo.calls[0] == (
@@ -704,6 +747,7 @@ async def test_set_horse_pedigree_omitted_fields_do_not_clear_other_relations() 
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert children_repo.calls[0][1] == {
@@ -723,6 +767,7 @@ async def test_set_horse_pedigree_sire_self_reference_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=target.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -743,6 +788,7 @@ async def test_set_horse_pedigree_sire_wrong_sex_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -763,6 +809,7 @@ async def test_set_horse_pedigree_sire_equal_bdate_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -775,6 +822,7 @@ async def test_set_horse_pedigree_dam_self_reference_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(dam_id=target.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -795,6 +843,7 @@ async def test_set_horse_pedigree_dam_wrong_sex_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(dam_id=dam.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -815,6 +864,7 @@ async def test_set_horse_pedigree_dam_equal_bdate_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(dam_id=dam.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -827,6 +877,7 @@ async def test_set_horse_pedigree_foal_self_reference_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(foals=[target.id]),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -840,6 +891,7 @@ async def test_set_horse_pedigree_child_equal_bdate_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(foals=[foal.id]),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -863,6 +915,7 @@ async def test_set_horse_pedigree_sire_and_dam_same_rejected() -> None:
                 dam_id=parent.id,
             ),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -883,6 +936,7 @@ async def test_set_horse_pedigree_sire_in_foals_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id, foals=[sire.id]),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -903,6 +957,7 @@ async def test_set_horse_pedigree_dam_in_foals_rejected() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(dam_id=dam.id, foals=[dam.id]),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -924,6 +979,7 @@ async def test_set_horse_pedigree_parent_cannot_be_current_foal() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=foal.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -945,6 +1001,7 @@ async def test_set_horse_pedigree_child_cannot_be_current_parent() -> None:
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(foals=[sire.id]),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -958,6 +1015,7 @@ async def test_set_horse_pedigree_replacement_allows_existing_foal_to_remain() -
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(foals=[foal.id]),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert children_repo.calls[0] == (
@@ -978,10 +1036,16 @@ async def test_set_horse_pedigree_replacement_allows_existing_foal_to_remain() -
 async def test_horse_kind_to_breed_set_pedigree_rejects_mismatched_breed_kind() -> None:
     service, horse_repo, _, breed_repo, _, _ = make_service()
     horse_breed = breed_repo.add(
-        Breed(name="Horse Breed", slug="horse-breed", short_name="HB")
+        Breed(
+            equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
+            name="Horse Breed",
+            slug="horse-breed",
+            short_name="HB",
+        )
     )
     pony_breed = breed_repo.add(
         Breed(
+            equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
             name="Pony Breed",
             slug="pony-breed",
             short_name="PB",
@@ -1006,6 +1070,7 @@ async def test_horse_kind_to_breed_set_pedigree_rejects_mismatched_breed_kind() 
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -1013,6 +1078,7 @@ async def test_horse_kind_to_breed_set_pedigree_allows_matching_breed_kind() -> 
     service, horse_repo, children_repo, breed_repo, _, _ = make_service()
     pony_breed = breed_repo.add(
         Breed(
+            equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
             name="Pony Breed",
             slug="pony-breed",
             short_name="PB",
@@ -1034,6 +1100,7 @@ async def test_horse_kind_to_breed_set_pedigree_allows_matching_breed_kind() -> 
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert children_repo.calls[-1][0] == "set_pedigree"
@@ -1055,6 +1122,7 @@ async def test_set_horse_pedigree_uc22_clear_then_set_order() -> None:
         horse_id=target.id,
         pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
         user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert [name for name, _ in children_repo.calls] == [
@@ -1081,6 +1149,7 @@ async def test_set_horse_pedigree_uc23_clear_called_before_repository_failure() 
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
             user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert children_repo.calls[0][0] == "clear_pedigree"
@@ -1202,7 +1271,9 @@ def get_list_call_kwargs(horse_repo: FakeHorseRepository) -> dict[str, Any]:
 async def test_u01_sort_none_passes_none_to_repo() -> None:
     """sort=None → repo receives sort=None (default ordering applied in repo)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=None, user=None)
+    await service.get_filtered_horses(
+        sort=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] is None
 
@@ -1210,7 +1281,9 @@ async def test_u01_sort_none_passes_none_to_repo() -> None:
 async def test_u02_sort_name_passes_name_asc_to_repo() -> None:
     """sort=['name'] → repo receives sort=['name'], no default."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=["name"], user=None)
+    await service.get_filtered_horses(
+        sort=["name"], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] == ["name"]
 
@@ -1218,7 +1291,9 @@ async def test_u02_sort_name_passes_name_asc_to_repo() -> None:
 async def test_u03_sort_minus_name_passes_name_desc_to_repo() -> None:
     """sort=['-name'] → repo receives sort=['-name']."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=["-name"], user=None)
+    await service.get_filtered_horses(
+        sort=["-name"], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] == ["-name"]
 
@@ -1226,7 +1301,9 @@ async def test_u03_sort_minus_name_passes_name_desc_to_repo() -> None:
 async def test_u04_sort_created_at_passes_created_at_asc_to_repo() -> None:
     """sort=['created_at'] → repo receives sort=['created_at']."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=["created_at"], user=None)
+    await service.get_filtered_horses(
+        sort=["created_at"], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] == ["created_at"]
 
@@ -1234,7 +1311,9 @@ async def test_u04_sort_created_at_passes_created_at_asc_to_repo() -> None:
 async def test_u05_sort_minus_created_at_passes_desc_to_repo() -> None:
     """sort=['-created_at'] → repo receives sort=['-created_at']."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=["-created_at"], user=None)
+    await service.get_filtered_horses(
+        sort=["-created_at"], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] == ["-created_at"]
 
@@ -1242,7 +1321,9 @@ async def test_u05_sort_minus_created_at_passes_desc_to_repo() -> None:
 async def test_u06_sort_empty_list_passes_empty_list_to_repo() -> None:
     """sort=[] (falsy) → repo receives sort=[], repo applies default ordering."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=[], user=None)
+    await service.get_filtered_horses(
+        sort=[], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     # Service passes the empty list through; repository treats falsy sort as default
     assert kwargs["sort"] == []
@@ -1258,7 +1339,9 @@ async def test_u07_sort_none_repo_returns_items_in_provided_order() -> None:
     # Repo returns h1 first (simulating latest updated_at DESC)
     horse_repo.list_result = ({h1_id: h1, h2_id: h2}, 2)
 
-    result = await service.get_filtered_horses(sort=None, user=None)
+    result = await service.get_filtered_horses(
+        sort=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert len(result.items) == 2
     assert result.items[0].id == h1_id
@@ -1274,7 +1357,9 @@ async def test_u08_sort_none_repo_secondary_order_preserved() -> None:
     hb = make_horse_out_dto(id=b_id, name="B")
     horse_repo.list_result = ({a_id: ha, b_id: hb}, 2)
 
-    result = await service.get_filtered_horses(sort=None, user=None)
+    result = await service.get_filtered_horses(
+        sort=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert result.items[0].id == a_id
 
@@ -1282,7 +1367,9 @@ async def test_u08_sort_none_repo_secondary_order_preserved() -> None:
 async def test_u09_sort_none_null_updated_at_passes_sort_none() -> None:
     """sort=None with records that have updated_at=None → sort=None passed to repo (NULLS LAST handled there)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=None, user=None)
+    await service.get_filtered_horses(
+        sort=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] is None
 
@@ -1290,7 +1377,9 @@ async def test_u09_sort_none_null_updated_at_passes_sort_none() -> None:
 async def test_u10_sort_none_null_created_at_passes_sort_none() -> None:
     """sort=None with records that have created_at=None → sort=None passed to repo."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=None, user=None)
+    await service.get_filtered_horses(
+        sort=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] is None
 
@@ -1303,7 +1392,9 @@ async def test_u10_sort_none_null_created_at_passes_sort_none() -> None:
 async def test_u11_name_filter_passes_name_to_repo() -> None:
     """name='TEST' → repo receives name='TEST' (repo will apply ~* operator)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(name="TEST", user=None)
+    await service.get_filtered_horses(
+        name="TEST", user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["name"] == "TEST"
 
@@ -1334,7 +1425,9 @@ async def test_u11_repo_name_filter_uses_regex_not_ilike() -> None:
 async def test_u12_description_filter_passes_value_to_repo() -> None:
     """description='test' → repo receives description='test' (repo will apply ~*)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(description="test", user=None)
+    await service.get_filtered_horses(
+        description="test", user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["description"] == "test"
 
@@ -1380,7 +1473,9 @@ async def test_u14_name_with_parens_re_escape_applied() -> None:
 async def test_u15_name_none_not_passed_as_condition() -> None:
     """name=None → repo receives name=None, no filter condition is added."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(name=None, user=None)
+    await service.get_filtered_horses(
+        name=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs.get("name") is None
 
@@ -1388,7 +1483,9 @@ async def test_u15_name_none_not_passed_as_condition() -> None:
 async def test_u16_name_empty_string_passes_empty_to_repo() -> None:
     """name='' → repo receives name='', repo skips condition for empty string."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(name="", user=None)
+    await service.get_filtered_horses(
+        name="", user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     # Service passes empty string through; repository skips condition when falsy
     assert kwargs.get("name") == ""
@@ -1402,7 +1499,9 @@ async def test_u16_name_empty_string_passes_empty_to_repo() -> None:
 async def test_u17_this_stable_true_passes_true_to_repo() -> None:
     """this_stable=True → repo receives this_stable=True."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(this_stable=True, user=None)
+    await service.get_filtered_horses(
+        this_stable=True, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["this_stable"] is True
 
@@ -1410,7 +1509,9 @@ async def test_u17_this_stable_true_passes_true_to_repo() -> None:
 async def test_u18_this_stable_false_passes_false_to_repo() -> None:
     """this_stable=False → repo receives this_stable=False."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(this_stable=False, user=None)
+    await service.get_filtered_horses(
+        this_stable=False, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["this_stable"] is False
 
@@ -1418,7 +1519,9 @@ async def test_u18_this_stable_false_passes_false_to_repo() -> None:
 async def test_u19_this_stable_none_passes_none_to_repo() -> None:
     """this_stable=None → repo receives this_stable=None (no filter)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(this_stable=None, user=None)
+    await service.get_filtered_horses(
+        this_stable=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["this_stable"] is None
 
@@ -1432,7 +1535,9 @@ async def test_u20_breed_ids_passed_to_repo() -> None:
     """breed_ids=[uuid1, uuid2] → WHERE breed_id IN (...)."""
     service, horse_repo, _, _, _, _ = make_service()
     id1, id2 = uuid4(), uuid4()
-    await service.get_filtered_horses(breed_ids=[id1, id2], user=None)
+    await service.get_filtered_horses(
+        breed_ids=[id1, id2], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["breed_ids"] == [id1, id2]
 
@@ -1441,7 +1546,9 @@ async def test_u21_coat_color_ids_passed_to_repo() -> None:
     """coat_color_ids=[uuid1] → WHERE coat_color_id IN (...)."""
     service, horse_repo, _, _, _, _ = make_service()
     id1 = uuid4()
-    await service.get_filtered_horses(coat_color_ids=[id1], user=None)
+    await service.get_filtered_horses(
+        coat_color_ids=[id1], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["coat_color_ids"] == [id1]
 
@@ -1450,7 +1557,9 @@ async def test_u22_horse_owner_ids_passed_to_repo() -> None:
     """horse_owner_ids=[uuid1] → WHERE horse_owner_id IN (...)."""
     service, horse_repo, _, _, _, _ = make_service()
     id1 = uuid4()
-    await service.get_filtered_horses(horse_owner_ids=[id1], user=None)
+    await service.get_filtered_horses(
+        horse_owner_ids=[id1], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["horse_owner_ids"] == [id1]
 
@@ -1458,7 +1567,11 @@ async def test_u22_horse_owner_ids_passed_to_repo() -> None:
 async def test_u23_kind_filter_passed_to_repo() -> None:
     """kind=['horse'] → WHERE kind IN ('horse')."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(kind=[HorseKindEnum.HORSE], user=None)
+    await service.get_filtered_horses(
+        kind=[HorseKindEnum.HORSE],
+        user=None,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["kind"] == [HorseKindEnum.HORSE]
 
@@ -1467,7 +1580,9 @@ async def test_u24_sex_filter_passed_to_repo() -> None:
     """sex=['male', 'female'] → WHERE sex IN ('male', 'female')."""
     service, horse_repo, _, _, _, _ = make_service()
     await service.get_filtered_horses(
-        sex=[HorseSexEnum.MALE, HorseSexEnum.FEMALE], user=None
+        sex=[HorseSexEnum.MALE, HorseSexEnum.FEMALE],
+        user=None,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sex"] == [HorseSexEnum.MALE, HorseSexEnum.FEMALE]
@@ -1476,7 +1591,9 @@ async def test_u24_sex_filter_passed_to_repo() -> None:
 async def test_u25_height_gte_passed_to_repo() -> None:
     """height_gte=150 → WHERE height >= 150."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(height_gte=150, user=None)
+    await service.get_filtered_horses(
+        height_gte=150, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["height_gte"] == 150
 
@@ -1489,7 +1606,9 @@ async def test_u25_height_gte_passed_to_repo() -> None:
 async def test_u26_limit_zero_clamped_to_one() -> None:
     """limit=0 → service clamps to 1 before passing to repo."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(limit=0, user=None)
+    await service.get_filtered_horses(
+        limit=0, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["limit"] == 1
 
@@ -1497,7 +1616,9 @@ async def test_u26_limit_zero_clamped_to_one() -> None:
 async def test_u27_limit_too_large_clamped_to_100() -> None:
     """limit=200 → service clamps to 100."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(limit=200, user=None)
+    await service.get_filtered_horses(
+        limit=200, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["limit"] == 100
 
@@ -1505,7 +1626,9 @@ async def test_u27_limit_too_large_clamped_to_100() -> None:
 async def test_u28_negative_offset_clamped_to_zero() -> None:
     """offset=-1 → service clamps to 0."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(offset=-1, user=None)
+    await service.get_filtered_horses(
+        offset=-1, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["offset"] == 0
 
@@ -1524,7 +1647,9 @@ async def test_u29_sort_none_result_items_order_preserved() -> None:
     }
     horse_repo.list_result = (items, 3)
 
-    result = await service.get_filtered_horses(sort=None, user=None)
+    result = await service.get_filtered_horses(
+        sort=None, user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert result.total == 3
     assert [h.id for h in result.items] == ids
@@ -1533,7 +1658,9 @@ async def test_u29_sort_none_result_items_order_preserved() -> None:
 async def test_u30_sort_breed_name_passes_breed_name_to_repo() -> None:
     """sort=['breed_name'] → repo receives sort=['breed_name'] (repo sorts by breeds.c.short_name)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=["breed_name"], user=None)
+    await service.get_filtered_horses(
+        sort=["breed_name"], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] == ["breed_name"]
 
@@ -1541,7 +1668,9 @@ async def test_u30_sort_breed_name_passes_breed_name_to_repo() -> None:
 async def test_u31_sort_coat_color_name_passes_coat_color_name_to_repo() -> None:
     """sort=['coat_color_name'] → repo receives sort=['coat_color_name'] (repo sorts by coat_color.c.short_name)."""
     service, horse_repo, _, _, _, _ = make_service()
-    await service.get_filtered_horses(sort=["coat_color_name"], user=None)
+    await service.get_filtered_horses(
+        sort=["coat_color_name"], user=None, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     kwargs = get_list_call_kwargs(horse_repo)
     assert kwargs["sort"] == ["coat_color_name"]
 

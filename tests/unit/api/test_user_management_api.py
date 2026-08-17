@@ -1,4 +1,5 @@
 """Unit tests for User Management API endpoints."""
+
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -95,8 +96,8 @@ class TestUserManagementAPI:
         from api.depends.user_management import require_user_management
 
         app.dependency_overrides[get_user_management_service] = lambda: mock_service
-        app.dependency_overrides[require_user_management] = (
-            lambda: mock_require_user_management
+        app.dependency_overrides[require_user_management] = lambda: (
+            mock_require_user_management
         )
         yield TestClient(app)
         app.dependency_overrides.clear()
@@ -159,7 +160,9 @@ class TestUserManagementAPI:
     async def test_get_user_by_id_not_found_returns_404(self, client, mock_service):
         """GET /api/user-management/users/{id} returns 404 if not found."""
         # Arrange
-        mock_service.get_user_by_id.side_effect = NotFoundError("Пользователь не найден")
+        mock_service.get_user_by_id.side_effect = NotFoundError(
+            "Пользователь не найден"
+        )
 
         # Act
         response = client.get(f"/api/user-management/users/{uuid4()}")
@@ -189,7 +192,9 @@ class TestUserManagementAPI:
         # Assert
         assert response.status_code == 201
 
-    async def test_create_user_duplicate_username_returns_400(self, client, mock_service):
+    async def test_create_user_duplicate_username_returns_400(
+        self, client, mock_service
+    ):
         """POST /api/user-management/users returns 400 for duplicate username."""
         # Arrange
         mock_service.create_user.side_effect = ClientError("уже существует")
@@ -208,7 +213,9 @@ class TestUserManagementAPI:
         # Assert
         assert response.status_code == 400
 
-    async def test_create_user_password_mismatch_returns_400(self, client, mock_service):
+    async def test_create_user_password_mismatch_returns_400(
+        self, client, mock_service
+    ):
         """POST /api/user-management/users returns 400 for password mismatch."""
         # Act - Pydantic ValidationError -> 400 via exception handler
         response = client.post(
@@ -255,7 +262,9 @@ class TestUserManagementAPI:
         # Assert
         assert response.status_code == 404
 
-    async def test_update_user_um_cannot_edit_su_returns_403(self, client, mock_service):
+    async def test_update_user_um_cannot_edit_su_returns_403(
+        self, client, mock_service
+    ):
         """PATCH /api/user-management/users/{id} returns 403 when UM tries to edit SU."""
         # Arrange
         mock_service.update_user.side_effect = ForbiddenError(
@@ -287,7 +296,9 @@ class TestUserManagementAPI:
     async def test_delete_user_self_returns_403(self, client, mock_service):
         """DELETE /api/user-management/users/{id} returns 403 when deleting self."""
         # Arrange
-        mock_service.soft_delete_user.side_effect = ForbiddenError("Нельзя удалить самого себя")
+        mock_service.soft_delete_user.side_effect = ForbiddenError(
+            "Нельзя удалить самого себя"
+        )
 
         # Act
         response = client.delete(f"/api/user-management/users/{TEST_USER_ID}")
@@ -312,7 +323,9 @@ class TestUserManagementAPI:
     async def test_block_user_self_returns_403(self, client, mock_service):
         """PATCH /api/user-management/users/{id}/block returns 403 when blocking self."""
         # Arrange
-        mock_service.block_user.side_effect = ForbiddenError("Нельзя заблокировать самого себя")
+        mock_service.block_user.side_effect = ForbiddenError(
+            "Нельзя заблокировать самого себя"
+        )
 
         # Act
         response = client.patch(f"/api/user-management/users/{TEST_USER_ID}/block")

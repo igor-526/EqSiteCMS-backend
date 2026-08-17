@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -118,9 +120,17 @@ async def test_ensure_unique_name_uc01_uc15_allows_missing_and_self() -> None:
     service, repo = make_service()
     group = repo.add(make_group(name="Existing"))
 
-    assert await service._ensure_unique_name("New") == "New"
     assert (
-        await service._ensure_unique_name("Existing", exclude_id=group.id) == "Existing"
+        await service._ensure_unique_name(
+            "New", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "New"
+    )
+    assert (
+        await service._ensure_unique_name(
+            "Existing", exclude_id=group.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "Existing"
     )
 
 
@@ -129,14 +139,17 @@ async def test_ensure_unique_name_uc14_rejects_duplicate() -> None:
     repo.add(make_group(name="Existing"))
 
     with pytest.raises(ClientError):
-        await service._ensure_unique_name("Existing")
+        await service._ensure_unique_name(
+            "Existing", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_create_uc01_uc02_uc07_trims_and_creates_group() -> None:
     service, repo = make_service()
 
     created = await service.create(
-        PriceGroupCreateDto(name="  Конюшня  ", description="  Акции  ")
+        PriceGroupCreateDto(name="  Конюшня  ", description="  Акции  "),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert created.name == "Конюшня"
@@ -148,7 +161,9 @@ async def test_create_uc05_uc06_rejects_empty_name_before_repository_write() -> 
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(PriceGroupCreateDto(name="   "))
+        await service.create(
+            PriceGroupCreateDto(name="   "), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert repo.calls == []
 
@@ -157,7 +172,10 @@ async def test_create_uc10_uc11_rejects_too_long_name() -> None:
     service, repo = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(PriceGroupCreateDto(name="x" * 64))
+        await service.create(
+            PriceGroupCreateDto(name="x" * 64),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert repo.calls == []
 
@@ -167,7 +185,10 @@ async def test_create_uc14_duplicate_name_is_client_error() -> None:
     repo.add(make_group(name="Existing"))
 
     with pytest.raises(ClientError):
-        await service.create(PriceGroupCreateDto(name="Existing"))
+        await service.create(
+            PriceGroupCreateDto(name="Existing"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert [name for name, _ in repo.calls] == ["find_by_name"]
 
@@ -177,7 +198,9 @@ async def test_update_uc01_uc19_updates_only_provided_fields() -> None:
     group = repo.add(make_group(name="Old", description="Old desc"))
 
     updated = await service.update(
-        group.id, PriceGroupUpdateDto(description=" New desc ")
+        group.id,
+        PriceGroupUpdateDto(description=" New desc "),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.name == "Old"
@@ -188,7 +211,11 @@ async def test_update_uc13_not_found_is_client_error() -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.update(uuid4(), PriceGroupUpdateDto(name="New"))
+        await service.update(
+            uuid4(),
+            PriceGroupUpdateDto(name="New"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_uc20_empty_update_is_client_error_without_write() -> None:
@@ -196,7 +223,9 @@ async def test_update_uc20_empty_update_is_client_error_without_write() -> None:
     group = repo.add(make_group())
 
     with pytest.raises(ClientError):
-        await service.update(group.id, PriceGroupUpdateDto())
+        await service.update(
+            group.id, PriceGroupUpdateDto(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert [name for name, _ in repo.calls] == ["get_by_id"]
 
@@ -206,29 +235,37 @@ async def test_update_uc14_uc15_rejects_other_duplicate_allows_self() -> None:
     current = repo.add(make_group(name="Current"))
     repo.add(make_group(name="Other"))
 
-    updated = await service.update(current.id, PriceGroupUpdateDto(name="Current"))
+    updated = await service.update(
+        current.id,
+        PriceGroupUpdateDto(name="Current"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
     assert updated.name == "Current"
 
     with pytest.raises(ClientError):
-        await service.update(current.id, PriceGroupUpdateDto(name="Other"))
+        await service.update(
+            current.id,
+            PriceGroupUpdateDto(name="Other"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_get_by_id_uc13_service_level_not_found_contract() -> None:
     service, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.get_by_id(uuid4())
+        await service.get_by_id(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_uc01_uc13_deletes_existing_and_rejects_missing() -> None:
     service, repo = make_service()
     group = repo.add(make_group())
 
-    await service.delete(group.id)
+    await service.delete(group.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
     assert group.id not in repo.by_id
 
     with pytest.raises(ClientError):
-        await service.delete(group.id)
+        await service.delete(group.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_get_filtered_uc26_uc27_passes_filtering_and_pagination() -> None:
@@ -242,6 +279,7 @@ async def test_get_filtered_uc26_uc27_passes_filtering_and_pagination() -> None:
         sort=["name", "-name"],
         limit=10,
         offset=20,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert entities == groups
@@ -254,7 +292,9 @@ async def test_price_group_service_uc21_bubbles_repository_failure() -> None:
     repo.fail_on.add("find_by_name")
 
     with pytest.raises(RepositoryError):
-        await service.create(PriceGroupCreateDto(name="New"))
+        await service.create(
+            PriceGroupCreateDto(name="New"), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
 
 async def test_price_group_service_uc30_has_no_fastapi_or_settings_dependency() -> None:

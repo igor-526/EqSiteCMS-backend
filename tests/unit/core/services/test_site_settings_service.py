@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -218,7 +220,7 @@ async def test_create_validates_uniqueness_and_creates_with_normalized_value() -
         type=SiteSettingType.boolean,
     )
 
-    created = await service.create(data)
+    created = await service.create(data, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert created.value == "true"
     assert created.type == "boolean"
@@ -242,7 +244,8 @@ async def test_create_rejects_duplicate_key_and_name() -> None:
                 value="x",
                 name="New name",
                 type=SiteSettingType.string,
-            )
+            ),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     with pytest.raises(ClientError):
@@ -252,7 +255,8 @@ async def test_create_rejects_duplicate_key_and_name() -> None:
                 value="x",
                 name="Duplicate Name",
                 type=SiteSettingType.string,
-            )
+            ),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -261,11 +265,19 @@ async def test_update_rejects_not_found_and_empty_payload() -> None:
     missing_id = uuid4()
 
     with pytest.raises(ClientError):
-        await service.update(missing_id, SiteSettingUpdateDto(name="x"))
+        await service.update(
+            missing_id,
+            SiteSettingUpdateDto(name="x"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     existing = repository.add(make_setting())
     with pytest.raises(ClientError):
-        await service.update(existing.id, SiteSettingUpdateDto())
+        await service.update(
+            existing.id,
+            SiteSettingUpdateDto(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_self_exclusion_allows_same_key_and_name_for_current_entity() -> (
@@ -277,6 +289,7 @@ async def test_update_self_exclusion_allows_same_key_and_name_for_current_entity
     updated = await service.update(
         setting.id,
         SiteSettingUpdateDto(key=setting.key, name=setting.name),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.id == setting.id
@@ -289,9 +302,17 @@ async def test_update_rejects_duplicates_from_other_records() -> None:
     repository.add(make_setting(key="other_key", name="Other"))
 
     with pytest.raises(ClientError):
-        await service.update(setting.id, SiteSettingUpdateDto(key="other_key"))
+        await service.update(
+            setting.id,
+            SiteSettingUpdateDto(key="other_key"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
     with pytest.raises(ClientError):
-        await service.update(setting.id, SiteSettingUpdateDto(name="Other"))
+        await service.update(
+            setting.id,
+            SiteSettingUpdateDto(name="Other"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_type_only_revalidates_existing_value() -> None:
@@ -299,7 +320,9 @@ async def test_update_type_only_revalidates_existing_value() -> None:
     setting = repository.add(make_setting(value="12", type="number"))
 
     updated = await service.update(
-        setting.id, SiteSettingUpdateDto(type=SiteSettingType.float)
+        setting.id,
+        SiteSettingUpdateDto(type=SiteSettingType.float),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert updated.value == "12"
@@ -310,7 +333,11 @@ async def test_update_value_only_uses_existing_type_contract() -> None:
     service, repository = make_service()
     setting = repository.add(make_setting(value="false", type="boolean"))
 
-    updated = await service.update(setting.id, SiteSettingUpdateDto(value="ON"))
+    updated = await service.update(
+        setting.id,
+        SiteSettingUpdateDto(value="ON"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.value == "true"
     assert updated.type == "boolean"
@@ -323,13 +350,16 @@ async def test_update_type_and_value_transition_is_validated_atomically() -> Non
     updated = await service.update(
         setting.id,
         SiteSettingUpdateDto(type=SiteSettingType.object, value='{"enabled": true}'),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
     assert updated.value == '{"enabled":true}'
     assert updated.type == "object"
 
     with pytest.raises(ClientError):
         await service.update(
-            setting.id, SiteSettingUpdateDto(type=SiteSettingType.date)
+            setting.id,
+            SiteSettingUpdateDto(type=SiteSettingType.date),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -337,9 +367,12 @@ async def test_get_by_id_returns_entity_or_raises_not_found() -> None:
     service, repository = make_service()
     setting = repository.add(make_setting())
 
-    assert await service.get_by_id(setting.id) == setting
+    assert (
+        await service.get_by_id(setting.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
+        == setting
+    )
     with pytest.raises(ClientError):
-        await service.get_by_id(uuid4())
+        await service.get_by_id(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_get_by_id_bubbles_repository_failure_path() -> None:
@@ -347,18 +380,18 @@ async def test_get_by_id_bubbles_repository_failure_path() -> None:
     repository.fail_on.add("get_by_id")
 
     with pytest.raises(RuntimeError):
-        await service.get_by_id(uuid4())
+        await service.get_by_id(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_deletes_existing_entity_and_raises_for_missing() -> None:
     service, repository = make_service()
     setting = repository.add(make_setting())
 
-    await service.delete(setting.id)
+    await service.delete(setting.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
     assert setting.id not in repository.by_id
 
     with pytest.raises(ClientError):
-        await service.delete(uuid4())
+        await service.delete(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_bubbles_repository_failure_on_lookup() -> None:
@@ -366,7 +399,7 @@ async def test_delete_bubbles_repository_failure_on_lookup() -> None:
     repository.fail_on.add("get_by_id")
 
     with pytest.raises(RuntimeError):
-        await service.delete(uuid4())
+        await service.delete(uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_delete_bubbles_repository_failure_on_delete() -> None:
@@ -375,7 +408,7 @@ async def test_delete_bubbles_repository_failure_on_delete() -> None:
     repository.fail_on.add("delete")
 
     with pytest.raises(RuntimeError):
-        await service.delete(setting.id)
+        await service.delete(setting.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
 
 async def test_get_filtered_passes_all_filters_sorting_and_pagination_to_repository() -> (
@@ -393,6 +426,7 @@ async def test_get_filtered_passes_all_filters_sorting_and_pagination_to_reposit
         sort=["-name", "key"],
         limit=20,
         offset=40,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert result[1] == 12
@@ -421,6 +455,7 @@ async def test_get_filtered_bubbles_repository_failure_path() -> None:
             sort=["key"],
             limit=10,
             offset=0,
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
 
@@ -435,11 +470,16 @@ async def test_create_and_update_bubble_repository_failures() -> None:
                 value="v",
                 name="n",
                 type=SiteSettingType.string,
-            )
+            ),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     repository.fail_on.clear()
     setting = repository.add(make_setting())
     repository.fail_on.add("update")
     with pytest.raises(RuntimeError):
-        await service.update(setting.id, SiteSettingUpdateDto(name="renamed"))
+        await service.update(
+            setting.id,
+            SiteSettingUpdateDto(name="renamed"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )

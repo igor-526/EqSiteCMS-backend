@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -209,9 +211,24 @@ async def test_generate_unique_name_uc01_uc14_uc15_returns_available_suffix() ->
     service, repo, _, _ = make_service()
     existing = repo.add(make_photo(name="Hero"))
 
-    assert await service._generate_unique_name("New") == "New"
-    assert await service._generate_unique_name("Hero") == "Hero-1"
-    assert await service._generate_unique_name("Hero", exclude_id=existing.id) == "Hero"
+    assert (
+        await service._generate_unique_name(
+            "New", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "New"
+    )
+    assert (
+        await service._generate_unique_name(
+            "Hero", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "Hero-1"
+    )
+    assert (
+        await service._generate_unique_name(
+            "Hero", exclude_id=existing.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        == "Hero"
+    )
 
 
 async def test_file_name_helpers_uc01_uc07_uc12_handle_extensions_and_unicode() -> None:
@@ -241,6 +258,7 @@ async def test_create_uc01_uc22_saves_then_creates_entity() -> None:
     created = await service.create(
         PhotoCreateDto(name="Hero", description="Main"),
         make_upload(filename="hero.png"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert created.name == "Hero"
@@ -260,6 +278,7 @@ async def test_create_uc02_uc04_defaults_name_and_description() -> None:
     created = await service.create(
         PhotoCreateDto(),
         make_upload(filename="my-photo.jpeg"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert created.name == "my-photo"
@@ -270,7 +289,11 @@ async def test_create_uc12_empty_filename_is_client_error() -> None:
     service, repo, storage, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.create(PhotoCreateDto(name="X"), make_upload(filename=""))
+        await service.create(
+            PhotoCreateDto(name="X"),
+            make_upload(filename=""),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
     assert repo.calls == []
     assert storage.calls == []
@@ -283,6 +306,7 @@ async def test_create_uc14_duplicate_name_gets_suffix() -> None:
     created = await service.create(
         PhotoCreateDto(name="Photo"),
         make_upload(filename="x.png"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert created.name == "Photo-1"
@@ -296,6 +320,7 @@ async def test_create_uc29_invalid_extension_uses_client_error() -> None:
         await service.create(
             PhotoCreateDto(name="Doc"),
             make_upload(filename="doc.txt", content=b"text", content_type="text/plain"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert repo.calls == []
@@ -310,6 +335,7 @@ async def test_create_uc23_rolls_back_saved_file_on_repository_failure() -> None
         await service.create(
             PhotoCreateDto(name="Hero"),
             make_upload(filename="hero.png"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
 
     assert any(name == "save" for name, _ in storage.calls)
@@ -321,7 +347,11 @@ async def test_update_uc01_uc19_updates_only_provided_fields() -> None:
     service, repo, _, _ = make_service()
     photo = repo.add(make_photo(name="Old", description="Old desc"))
 
-    updated = await service.update(photo.id, PhotoUpdateDto(description="New desc"))
+    updated = await service.update(
+        photo.id,
+        PhotoUpdateDto(description="New desc"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.name == "Old"
     assert updated.description == "New desc"
@@ -331,7 +361,11 @@ async def test_update_uc19_fixes_description_assignment_bug() -> None:
     service, repo, _, _ = make_service()
     photo = repo.add(make_photo(description="Old"))
 
-    updated = await service.update(photo.id, PhotoUpdateDto(description="Exact value"))
+    updated = await service.update(
+        photo.id,
+        PhotoUpdateDto(description="Exact value"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
 
     assert updated.description == "Exact value"
 
@@ -340,14 +374,20 @@ async def test_update_uc13_not_found_is_client_error() -> None:
     service, _, _, _ = make_service()
 
     with pytest.raises(ClientError):
-        await service.update(uuid4(), PhotoUpdateDto(name="X"))
+        await service.update(
+            uuid4(),
+            PhotoUpdateDto(name="X"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
 
 
 async def test_update_uc20_empty_update_is_noop() -> None:
     service, repo, storage, _ = make_service()
     photo = repo.add(make_photo(name="Still", description="Same"))
 
-    updated = await service.update(photo.id, PhotoUpdateDto())
+    updated = await service.update(
+        photo.id, PhotoUpdateDto(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert updated == photo
     assert [name for name, _ in repo.calls] == ["get_by_id"]
@@ -361,7 +401,10 @@ async def test_update_uc22_forwards_upload_content_type_to_validator() -> None:
     await service.update(
         photo.id,
         PhotoUpdateDto(),
-        make_upload(filename="clip.mp4", content=b"video", content_type="video/mp4"),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        upload=make_upload(
+            filename="clip.mp4", content=b"video", content_type="video/mp4"
+        ),
     )
 
     assert media_type_validator.calls == [("clip.mp4", 5, "video/mp4")]
@@ -379,7 +422,8 @@ async def test_update_uc22_uc23_replaces_file_and_rolls_back_on_delete_failure()
         await service.update(
             photo.id,
             PhotoUpdateDto(),
-            make_upload(filename="new.png", content=b"new"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            upload=make_upload(filename="new.png", content=b"new"),
         )
 
     assert photo.path == "old.png"
@@ -398,7 +442,8 @@ async def test_update_uc23_rolls_back_saved_file_on_repository_failure() -> None
         await service.update(
             photo.id,
             PhotoUpdateDto(),
-            make_upload(filename="new.png", content=b"new"),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            upload=make_upload(filename="new.png", content=b"new"),
         )
 
     assert photo.path == "old.png"
@@ -413,7 +458,7 @@ async def test_delete_uc01_deletes_storage_before_repository() -> None:
     photo = repo.add(make_photo(path="to-delete.png"))
     storage.saved["to-delete.png"] = b"payload"
 
-    await service.delete(photo.id)
+    await service.delete(photo.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert storage.deleted == ["to-delete.png"]
     assert [name for name, _ in repo.calls] == ["get_by_id", "delete"]
@@ -432,7 +477,7 @@ async def test_delete_uc23_storage_failure_prevents_repository_delete() -> None:
     storage.fail_on_delete_for.add("blocked.png")
 
     with pytest.raises(StorageError):
-        await service.delete(photo.id)
+        await service.delete(photo.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert [name for name, _ in repo.calls] == ["get_by_id"]
 
@@ -444,7 +489,7 @@ async def test_delete_uc23_repository_failure_restores_deleted_file() -> None:
     repo.fail_on.add("delete")
 
     with pytest.raises(RepositoryError):
-        await service.delete(photo.id)
+        await service.delete(photo.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
 
     assert storage.deleted == ["restore.png"]
     assert storage.saved["restore.png"] == b"payload"
@@ -457,7 +502,9 @@ async def test_batch_delete_uc13_skips_missing_and_deletes_existing_only() -> No
     storage.saved["exists.png"] = b"payload"
     missing_id = uuid4()
 
-    await service.batch_delete([existing.id, missing_id])
+    await service.batch_delete(
+        [existing.id, missing_id], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert storage.deleted == ["exists.png"]
     assert ("batch_delete", [existing.id]) in repo.calls
@@ -473,7 +520,9 @@ async def test_batch_delete_uc22_deletes_storage_before_repository_batch_delete(
     storage.saved["first.png"] = b"first"
     storage.saved["second.png"] = b"second"
 
-    await service.batch_delete([first.id, second.id])
+    await service.batch_delete(
+        [first.id, second.id], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert storage.deleted == ["first.png", "second.png"]
     assert operation_log == [
@@ -498,7 +547,9 @@ async def test_batch_delete_uc23_storage_failure_prevents_repository_batch_delet
     storage.fail_on_delete_for.add("blocked.png")
 
     with pytest.raises(StorageError):
-        await service.batch_delete([photo.id])
+        await service.batch_delete(
+            [photo.id], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert ("batch_delete", [photo.id]) not in repo.calls
 
@@ -514,7 +565,9 @@ async def test_batch_delete_uc23_partial_storage_failure_restores_deleted_files(
     storage.fail_on_delete_for.add("second.png")
 
     with pytest.raises(StorageError):
-        await service.batch_delete([first.id, second.id])
+        await service.batch_delete(
+            [first.id, second.id], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert ("batch_delete", [first.id, second.id]) not in repo.calls
     assert storage.saved["first.png"] == b"first"
@@ -530,7 +583,9 @@ async def test_batch_delete_uc23_repository_failure_after_storage_delete_is_visi
     repo.fail_on.add("batch_delete")
 
     with pytest.raises(RepositoryError):
-        await service.batch_delete([photo.id])
+        await service.batch_delete(
+            [photo.id], equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
 
     assert storage.deleted == ["deleted-first.png"]
     assert storage.saved["deleted-first.png"] == b"payload"
@@ -549,6 +604,7 @@ async def test_get_filtered_uc25_uc26_uc27_passes_filters_through() -> None:
         sort=["name", "-created_at"],
         limit=10,
         offset=20,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
     assert entities == photos

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi.testclient import TestClient
 
 from core.entities.equestrian import Equestrian
@@ -77,6 +79,30 @@ def test_login_sets_refresh_cookie_for_api_root_and_clears_legacy_refresh_path()
     )
 
 
+def test_login_logs_safe_event_without_credentials(caplog) -> None:
+    client = TestClient(app)
+    override_auth_dependencies()
+
+    try:
+        with caplog.at_level(logging.INFO, logger="api.auth"):
+            response = client.post(
+                "/api/auth/login",
+                json={"username": "demo", "password": "secret"},
+            )
+    finally:
+        clear_auth_dependencies()
+
+    assert response.status_code == 200
+    auth_records = [record for record in caplog.records if record.name == "api.auth"]
+    assert any(
+        getattr(record, "auth_event", None) == "login_succeeded"
+        for record in auth_records
+    )
+    rendered = "\n".join(record.getMessage() for record in auth_records)
+    assert "access-token" not in rendered
+    assert "refresh-token" not in rendered
+
+
 def test_refresh_rotates_refresh_cookie_for_api_root_and_clears_legacy_refresh_path():
     client = TestClient(app)
     override_auth_dependencies()
@@ -101,6 +127,29 @@ def test_refresh_rotates_refresh_cookie_for_api_root_and_clears_legacy_refresh_p
         and "Max-Age=0" in header
         for header in set_cookie_headers
     )
+
+
+def test_refresh_logs_safe_event_without_input_or_rotated_credentials(caplog) -> None:
+    client = TestClient(app)
+    override_auth_dependencies()
+    client.cookies.set("refresh_token", "refresh-token", path="/")
+
+    try:
+        with caplog.at_level(logging.INFO, logger="api.auth"):
+            response = client.post("/api/auth/refresh")
+    finally:
+        clear_auth_dependencies()
+
+    assert response.status_code == 200
+    auth_records = [record for record in caplog.records if record.name == "api.auth"]
+    assert any(
+        getattr(record, "auth_event", None) == "refresh_succeeded"
+        for record in auth_records
+    )
+    rendered = "\n".join(record.getMessage() for record in auth_records)
+    assert "refresh-token" not in rendered
+    assert "new-access-for-refresh-token" not in rendered
+    assert "new-refresh-for-refresh-token" not in rendered
 
 
 def test_logout_deletes_current_and_legacy_refresh_cookie_paths():

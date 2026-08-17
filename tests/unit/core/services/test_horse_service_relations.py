@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tenant_context import TEST_ADMIN_USER
+
+from tenant_context import TEST_EQUESTRIAN_CONTEXT
+
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -168,6 +172,8 @@ async def test_create_relation_success() -> None:
     result = await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=service_entity.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
     assert result.service_id == service_entity.id
@@ -188,6 +194,8 @@ async def test_create_relation_with_overrides() -> None:
             description_override="Особое описание",
             price_override=5000,
         ),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
     assert result.description == "Особое описание"
@@ -202,12 +210,16 @@ async def test_create_duplicate_raises_conflict() -> None:
     await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=service_entity.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
     with pytest.raises(ConflictError):
         await svc.create(
             horse.id,
             HorseServiceRelationCreateDto(service_id=service_entity.id),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            user=TEST_ADMIN_USER,
         )
 
 
@@ -219,6 +231,8 @@ async def test_create_nonexistent_horse_raises_not_found() -> None:
         await svc.create(
             uuid4(),
             HorseServiceRelationCreateDto(service_id=service_entity.id),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            user=TEST_ADMIN_USER,
         )
 
 
@@ -230,6 +244,8 @@ async def test_create_nonexistent_service_raises_not_found() -> None:
         await svc.create(
             horse.id,
             HorseServiceRelationCreateDto(service_id=uuid4()),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            user=TEST_ADMIN_USER,
         )
 
 
@@ -241,12 +257,16 @@ async def test_update_relation_success() -> None:
     created = await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=service_entity.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
     result = await svc.update(
         horse.id,
         created.id,
         HorseServiceRelationUpdateDto(price_override=9999),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
     assert result.price == 9999
@@ -261,6 +281,8 @@ async def test_update_nonexistent_relation_raises_not_found() -> None:
             horse.id,
             uuid4(),
             HorseServiceRelationUpdateDto(price_override=100),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            user=TEST_ADMIN_USER,
         )
 
 
@@ -272,6 +294,8 @@ async def test_update_empty_data_raises_client_error() -> None:
     created = await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=service_entity.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
     with pytest.raises(ClientError):
@@ -279,6 +303,8 @@ async def test_update_empty_data_raises_client_error() -> None:
             horse.id,
             created.id,
             HorseServiceRelationUpdateDto(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            user=TEST_ADMIN_USER,
         )
 
 
@@ -290,9 +316,16 @@ async def test_delete_relation_success() -> None:
     created = await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=service_entity.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
-    await svc.delete(horse.id, created.id)
+    await svc.delete(
+        horse.id,
+        created.id,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
+    )
     assert len(rel_repo.relations) == 0
 
 
@@ -301,7 +334,12 @@ async def test_delete_nonexistent_raises_not_found() -> None:
     horse = horse_repo.add(make_horse())
 
     with pytest.raises(NotFoundError):
-        await svc.delete(horse.id, uuid4())
+        await svc.delete(
+            horse.id,
+            uuid4(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+            user=TEST_ADMIN_USER,
+        )
 
 
 async def test_get_list_by_horse_returns_relations() -> None:
@@ -310,13 +348,22 @@ async def test_get_list_by_horse_returns_relations() -> None:
     s1 = svc_repo.add(make_service_entity(name="Услуга 1", slug="usluga-1"))
     s2 = svc_repo.add(make_service_entity(name="Услуга 2", slug="usluga-2", price=2000))
 
-    await svc.create(horse.id, HorseServiceRelationCreateDto(service_id=s1.id))
+    await svc.create(
+        horse.id,
+        HorseServiceRelationCreateDto(service_id=s1.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
+    )
     await svc.create(
         horse.id,
         HorseServiceRelationCreateDto(service_id=s2.id, price_override=5000),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
     )
 
-    result = await svc.get_list_by_horse(horse.id)
+    result = await svc.get_list_by_horse(
+        horse.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
     assert result.total == 2
     assert len(result.items) == 2
     prices = {r.price for r in result.items}
@@ -329,10 +376,22 @@ async def test_get_list_by_horse_forwards_pagination_and_total() -> None:
     horse = horse_repo.add(make_horse())
     first = svc_repo.add(make_service_entity(name="Услуга 1", slug="usluga-1"))
     second = svc_repo.add(make_service_entity(name="Услуга 2", slug="usluga-2"))
-    await svc.create(horse.id, HorseServiceRelationCreateDto(service_id=first.id))
-    await svc.create(horse.id, HorseServiceRelationCreateDto(service_id=second.id))
+    await svc.create(
+        horse.id,
+        HorseServiceRelationCreateDto(service_id=first.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
+    )
+    await svc.create(
+        horse.id,
+        HorseServiceRelationCreateDto(service_id=second.id),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
+    )
 
-    result = await svc.get_list_by_horse(horse.id, limit=1, offset=1)
+    result = await svc.get_list_by_horse(
+        horse.id, limit=1, offset=1, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
 
     assert result.total == 2
     assert len(result.items) == 1
@@ -350,7 +409,9 @@ async def test_get_available_services_returns_unlinked() -> None:
         )
     ]
 
-    result = await svc.get_available_services(horse.id)
+    result = await svc.get_available_services(
+        horse.id, equestrian_context=TEST_EQUESTRIAN_CONTEXT, user=TEST_ADMIN_USER
+    )
     assert len(result) == 1
     assert result[0].description == "Полное описание"
     assert result[0].price == 2500
@@ -369,7 +430,12 @@ async def test_get_available_services_with_search() -> None:
     svc, _, horse_repo, _ = make_service()
     horse = horse_repo.add(make_horse())
 
-    result = await svc.get_available_services(horse.id, search="раз")
+    result = await svc.get_available_services(
+        horse.id,
+        search="раз",
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        user=TEST_ADMIN_USER,
+    )
     assert isinstance(result, list)
 
 

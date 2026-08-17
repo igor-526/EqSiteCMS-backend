@@ -1,11 +1,11 @@
+from uuid import UUID
+
 import pytest
 from fastapi.testclient import TestClient
 
 from core.entities.equestrian import Equestrian
 from core.entities.user import User
 from core.exceptions.auth import InvalidCredentials
-from core.exceptions.base import ClientError
-from core.exceptions.tenant import TenantNotFound
 from core.schemas.users import UserOutDto
 from depends.repositories import get_equestrian_repository
 from depends.services import (
@@ -22,6 +22,7 @@ class StubAuthService:
         self.tokens: list[str] = []
         self.user = UserOutDto.model_validate(
             User(
+                equestrian_id=UUID("11111111-1111-4111-8111-111111111111"),
                 username="demo",
                 password="hashed-password",
                 first_name="Demo",
@@ -144,10 +145,10 @@ async def test_get_read_equestrian_context_without_cookies_with_service_key_retu
 
 
 @pytest.mark.asyncio
-async def test_get_read_equestrian_context_without_cookies_and_service_key_raises_client_error():
+async def test_get_read_equestrian_context_without_cookies_and_service_key_raises_unauthorized():
     repository = StubEquestrianRepository()
 
-    with pytest.raises(ClientError, match="Отсутствует X-Equestrian-Service-Key"):
+    with pytest.raises(InvalidCredentials):
         await get_read_equestrian_context(
             current_user=None,
             equestrian_repository=repository,
@@ -159,10 +160,10 @@ async def test_get_read_equestrian_context_without_cookies_and_service_key_raise
 
 
 @pytest.mark.asyncio
-async def test_get_read_equestrian_context_with_blank_service_key_raises_client_error():
+async def test_get_read_equestrian_context_with_blank_service_key_raises_unauthorized():
     repository = StubEquestrianRepository()
 
-    with pytest.raises(ClientError, match="Отсутствует X-Equestrian-Service-Key"):
+    with pytest.raises(InvalidCredentials):
         await get_read_equestrian_context(
             current_user=None,
             equestrian_repository=repository,
@@ -189,10 +190,10 @@ async def test_get_read_equestrian_context_with_refresh_cookie_only_raises_inval
 
 
 @pytest.mark.asyncio
-async def test_get_read_equestrian_context_with_blank_refresh_cookie_keeps_public_missing_key_error():
+async def test_get_read_equestrian_context_with_blank_refresh_cookie_returns_unauthorized():
     repository = StubEquestrianRepository()
 
-    with pytest.raises(ClientError, match="Отсутствует X-Equestrian-Service-Key"):
+    with pytest.raises(InvalidCredentials):
         await get_read_equestrian_context(
             current_user=None,
             equestrian_repository=repository,
@@ -220,10 +221,10 @@ async def test_get_read_equestrian_context_with_refresh_cookie_and_service_key_r
 
 
 @pytest.mark.asyncio
-async def test_get_read_equestrian_context_with_invalid_service_key_raises_tenant_not_found():
+async def test_get_read_equestrian_context_with_invalid_service_key_raises_unauthorized():
     repository = StubEquestrianRepository()
 
-    with pytest.raises(TenantNotFound):
+    with pytest.raises(InvalidCredentials):
         await get_read_equestrian_context(
             current_user=None,
             equestrian_repository=repository,
@@ -249,7 +250,7 @@ def test_dual_mode_get_with_refresh_cookie_only_returns_401_not_400():
     assert response.status_code == 401
 
 
-def test_dual_mode_get_without_cookies_and_service_key_returns_400():
+def test_dual_mode_get_without_cookies_and_service_key_returns_401():
     client = TestClient(app)
     app.dependency_overrides[get_equestrian_repository] = StubEquestrianRepository
     app.dependency_overrides[get_breed_service] = StubBreedService
@@ -260,8 +261,24 @@ def test_dual_mode_get_without_cookies_and_service_key_returns_400():
         app.dependency_overrides.pop(get_equestrian_repository, None)
         app.dependency_overrides.pop(get_breed_service, None)
 
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Отсутствует X-Equestrian-Service-Key"
+    assert response.status_code == 401
+
+
+def test_dual_mode_get_with_unknown_service_key_returns_401():
+    client = TestClient(app)
+    app.dependency_overrides[get_equestrian_repository] = StubEquestrianRepository
+    app.dependency_overrides[get_breed_service] = StubBreedService
+
+    try:
+        response = client.get(
+            "/api/horses/breeds",
+            headers={"X-Equestrian-Service-Key": "unknown-key"},
+        )
+    finally:
+        app.dependency_overrides.pop(get_equestrian_repository, None)
+        app.dependency_overrides.pop(get_breed_service, None)
+
+    assert response.status_code == 401
 
 
 def test_dual_mode_get_with_valid_service_key_returns_200():

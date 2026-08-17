@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query
 
 from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
+from core.exceptions.auth import ForbiddenError
 from core.schemas.site_settings import (
     SiteSettingCreateDto,
     SiteSettingOutDto,
@@ -12,6 +13,7 @@ from core.schemas.site_settings import (
     SiteSettingUpdateDto,
 )
 from core.services.site_settings import SiteSettingsService
+from core.schemas.users import UserOutDto
 from depends.services import (
     get_current_user,
     get_protected_equestrian_context,
@@ -20,6 +22,17 @@ from depends.services import (
 )
 
 router = APIRouter()
+SITE_SETTINGS_WRITE_SCOPES = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
+
+
+async def require_site_settings_write_scope(
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
+) -> UserOutDto:
+    if not any(
+        scope.scope_name in SITE_SETTINGS_WRITE_SCOPES for scope in current_user.scopes
+    ):
+        raise ForbiddenError("Недостаточно прав для выполнения операции")
+    return current_user
 
 
 @router.get(
@@ -120,7 +133,7 @@ async def create_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    _: Annotated[UserOutDto, Depends(require_site_settings_write_scope)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
@@ -143,7 +156,7 @@ async def update_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    _: Annotated[UserOutDto, Depends(require_site_settings_write_scope)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],
@@ -165,7 +178,7 @@ async def delete_site_setting(
     site_settings_service: Annotated[
         SiteSettingsService, Depends(get_site_settings_service)
     ],
-    _: Annotated[object, Depends(get_current_user)],
+    _: Annotated[UserOutDto, Depends(require_site_settings_write_scope)],
     equestrian_context: Annotated[
         EquestrianContext, Depends(get_protected_equestrian_context)
     ],

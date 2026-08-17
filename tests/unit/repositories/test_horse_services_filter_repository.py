@@ -4,6 +4,7 @@ from uuid import UUID
 
 import pytest
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.sql import ClauseElement
 
 from core.entities import HorseKindEnum
 from repositories.horse_repository import HorseRepository
@@ -32,20 +33,20 @@ class EmptyResult:
 
 class CapturingSession:
     def __init__(self) -> None:
-        self.statements: list[object] = []
+        self.statements: list[ClauseElement] = []
 
-    async def execute(self, statement: object) -> EmptyResult:
+    async def execute(self, statement: ClauseElement) -> EmptyResult:
         self.statements.append(statement)
         return EmptyResult()
 
 
 class FailingSession(CapturingSession):
-    async def execute(self, statement: object) -> EmptyResult:
+    async def execute(self, statement: ClauseElement) -> EmptyResult:
         self.statements.append(statement)
         raise RuntimeError("database unavailable")
 
 
-def _sql(statement: object) -> str:
+def _sql(statement: ClauseElement) -> str:
     return str(
         statement.compile(
             dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
@@ -60,7 +61,8 @@ async def _queries(**kwargs: object) -> tuple[str, str]:
         photo_url_builder=FakePhotoUrlBuilder(),
     )
     await repository.get_horse_list_full_info(
-        equestrian_id=TENANT_ID, **kwargs  # type: ignore[arg-type]
+        equestrian_id=TENANT_ID,
+        **kwargs,  # type: ignore[arg-type]
     )
     assert len(session.statements) == 2
     return _sql(session.statements[0]), _sql(session.statements[1])

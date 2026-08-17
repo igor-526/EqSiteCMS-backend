@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
 
 from core.entities.horse import Horse, HorseKindEnum, HorseSexEnum
+from core.protocols.repositories import (
+    BreedRepositoryProtocol,
+    CoatColorRepositoryProtocol,
+    HorseChildrenRepositoryProtocol,
+    HorseOwnerRepositoryProtocol,
+    HorseRepositoryProtocol,
+    PhotoRepositoryProtocol,
+)
 from core.services.horse import HorseService
 
 pytestmark = pytest.mark.asyncio
@@ -89,12 +97,18 @@ def horse_repository() -> FakeHorseRepository:
 @pytest.fixture
 def horse_service(horse_repository: FakeHorseRepository) -> HorseService:
     return HorseService(
-        horse_repository=horse_repository,
-        horse_children_repository=FakeHorseChildrenRepository(),
-        breed_repository=FakeBreedRepository(),
-        coat_color_repository=FakeCoatColorRepository(),
-        horse_owner_repository=FakeHorseOwnerRepository(),
-        photo_repository=FakePhotoRepository(),
+        horse_repository=cast(HorseRepositoryProtocol, horse_repository),
+        horse_children_repository=cast(
+            HorseChildrenRepositoryProtocol, FakeHorseChildrenRepository()
+        ),
+        breed_repository=cast(BreedRepositoryProtocol, FakeBreedRepository()),
+        coat_color_repository=cast(
+            CoatColorRepositoryProtocol, FakeCoatColorRepository()
+        ),
+        horse_owner_repository=cast(
+            HorseOwnerRepositoryProtocol, FakeHorseOwnerRepository()
+        ),
+        photo_repository=cast(PhotoRepositoryProtocol, FakePhotoRepository()),
     )
 
 

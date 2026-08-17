@@ -84,7 +84,7 @@ async def login(
     response = JSONResponse({"status": "ok"}, status_code=200)
     set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
 
-    logger.info(f"accessToken для локальной разработки: {tokens.access_token}")
+    logger.info("Authentication succeeded", extra={"auth_event": "login_succeeded"})
     return response
 
 
@@ -105,6 +105,7 @@ async def refresh_access_token(
     tokens = await auth_service.refresh(refresh_token=refresh_token)
     response = JSONResponse({"status": "ok"}, status_code=200)
     set_auth_cookies(response, tokens.access_token, tokens.refresh_token)
+    logger.info("Authentication refreshed", extra={"auth_event": "refresh_succeeded"})
     return response
 
 

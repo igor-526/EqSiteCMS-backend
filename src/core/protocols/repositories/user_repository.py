@@ -17,6 +17,8 @@ class UserRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
         equestrian_ids: list[UUID] | None = None,
         equestrian_service_keys: list[str] | None = None,
         roles: list[str] | None = None,
+        exclude_deleted: bool = False,
+        exclude_blocked: bool = False,
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[list[User], int]: ...

@@ -1,6 +1,7 @@
 """Unit tests for UserManagementService business rules."""
+
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
@@ -44,8 +45,8 @@ ADMIN_SCOPE = UserScope(
 
 
 def create_user_dto(
-    user_id: UUID = None,
-    scopes: list[UserScope] = None,
+    user_id: UUID | None = None,
+    scopes: list[UserScope] | None = None,
     is_blocked: bool = False,
     is_deleted: bool = False,
 ) -> UserOutDto:
@@ -64,7 +65,7 @@ def create_user_dto(
 
 
 def create_user_entity(
-    user_id: UUID = None,
+    user_id: UUID | None = None,
     is_blocked: bool = False,
     is_deleted: bool = False,
 ) -> User:
@@ -144,7 +145,9 @@ class TestUserManagementService:
         mock_repository.get_user_scopes.return_value = [SUPERUSER_SCOPE]
 
         # Act & Assert
-        with pytest.raises(ClientError, match="USER_MANAGER не может удалить SUPERUSER"):
+        with pytest.raises(
+            ClientError, match="USER_MANAGER не может удалить SUPERUSER"
+        ):
             await service.soft_delete_user(um_user, TEST_SUPERUSER_ID)
 
     async def test_um_cannot_block_superuser(self, service, mock_repository):
@@ -160,7 +163,9 @@ class TestUserManagementService:
         mock_repository.get_user_scopes.return_value = [SUPERUSER_SCOPE]
 
         # Act & Assert
-        with pytest.raises(ClientError, match="USER_MANAGER не может заблокировать SUPERUSER"):
+        with pytest.raises(
+            ClientError, match="USER_MANAGER не может заблокировать SUPERUSER"
+        ):
             await service.block_user(um_user, TEST_SUPERUSER_ID)
 
     async def test_um_cannot_remove_own_um_role(self, service, mock_repository):
@@ -212,12 +217,18 @@ class TestUserManagementService:
 
         mock_repository.get_user_by_id.return_value = target_user
         mock_repository.get_user_scopes.return_value = [ADMIN_SCOPE]
-        mock_repository.get_all_roles.return_value = [SUPERUSER_SCOPE, USER_MANAGER_SCOPE, ADMIN_SCOPE]
+        mock_repository.get_all_roles.return_value = [
+            SUPERUSER_SCOPE,
+            USER_MANAGER_SCOPE,
+            ADMIN_SCOPE,
+        ]
 
         data = UpdateUserIn(scope_ids=[SUPERUSER_SCOPE.id])
 
         # Act & Assert
-        with pytest.raises(ClientError, match="USER_MANAGER не может назначать роль SUPERUSER"):
+        with pytest.raises(
+            ClientError, match="USER_MANAGER не может назначать роль SUPERUSER"
+        ):
             await service.update_user(um_user, TEST_USER_ID, data)
 
     async def test_um_cannot_act_on_superuser(self, service, mock_repository):
@@ -235,7 +246,9 @@ class TestUserManagementService:
         data = UpdateUserIn(first_name="New Name")
 
         # Act & Assert
-        with pytest.raises(ClientError, match="USER_MANAGER не может редактировать SUPERUSER"):
+        with pytest.raises(
+            ClientError, match="USER_MANAGER не может редактировать SUPERUSER"
+        ):
             await service.update_user(um_user, TEST_SUPERUSER_ID, data)
 
     async def test_su_can_delete_other_user(self, service, mock_repository):
@@ -275,7 +288,9 @@ class TestUserManagementService:
         )
 
         # Act & Assert
-        with pytest.raises(ClientError, match="USER_MANAGER не может менять пароль SUPERUSER"):
+        with pytest.raises(
+            ClientError, match="USER_MANAGER не может менять пароль SUPERUSER"
+        ):
             await service.change_password(um_user, TEST_SUPERUSER_ID, data)
 
     async def test_get_users_excludes_deleted(self, service, mock_repository):
@@ -297,7 +312,9 @@ class TestUserManagementService:
         assert result["total"] == 0
         assert result["items"] == []
 
-    async def test_create_user_hashes_password(self, service, mock_repository, mock_security):
+    async def test_create_user_hashes_password(
+        self, service, mock_repository, mock_security
+    ):
         """Пароль хешируется при создании пользователя."""
         # Arrange
         um_user = create_user_dto(
@@ -325,7 +342,9 @@ class TestUserManagementService:
         # Assert
         mock_security.hash_password.assert_called_once_with("SecurePass123")
 
-    async def test_create_user_duplicate_username_raises_error(self, service, mock_repository):
+    async def test_create_user_duplicate_username_raises_error(
+        self, service, mock_repository
+    ):
         """Создание пользователя с существующим username вызывает ошибку."""
         # Arrange
         um_user = create_user_dto(

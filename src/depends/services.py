@@ -2,6 +2,8 @@ from typing import Annotated
 
 from fastapi import Cookie, Depends, Header
 
+from clients.email_service.client import EmailServiceClient
+
 from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
@@ -11,6 +13,7 @@ from core.protocols.media import (
     MediaTypeValidatorProtocol,
     PhotoUrlBuilderProtocol,
 )
+from core.protocols.email_service import EmailServiceClientProtocol
 from core.protocols.repositories import (
     UserManagementRepositoryProtocol,
     BreedRepositoryProtocol,
@@ -31,6 +34,7 @@ from core.protocols.repositories.horse_repository import HorseChildrenRepository
 from core.protocols.security import SecurityProtocol
 from core.schemas.users import UserOutDto
 from core.services.auth import AuthService
+from core.services.email_proxy import EmailProxyService
 from core.services.breeds import BreedService
 from core.services.coat_color import CoatColorService
 from core.services.horse import HorseService
@@ -66,6 +70,7 @@ from depends.utils import (
     get_photo_url_builder,
     get_security,
 )
+from settings import settings
 
 
 async def get_auth_service(
@@ -108,6 +113,16 @@ async def get_optional_current_user(
     return await auth_service.get_current_user(token=access_token)
 
 
+async def get_email_service_client() -> EmailServiceClientProtocol:
+    return EmailServiceClient(base_url=settings.email_service_url)
+
+
+async def get_email_proxy_service(
+    client: Annotated[EmailServiceClientProtocol, Depends(get_email_service_client)],
+) -> EmailProxyService:
+    return EmailProxyService(client)
+
+
 async def get_public_equestrian_context(
     equestrian_repository: Annotated[
         EquestrianRepositoryProtocol, Depends(get_equestrian_repository)
@@ -146,10 +161,10 @@ async def get_read_equestrian_context(
     ):
         raise InvalidCredentials("Отсутствуют учетные данные")
     if service_key is None or not service_key.strip():
-        raise ClientError("Отсутствует X-Equestrian-Service-Key")
+        raise InvalidCredentials("Отсутствуют учетные данные")
     equestrian = await equestrian_repository.get_by_service_key(service_key.strip())
     if equestrian is None:
-        raise TenantNotFound("Конюшня не найдена")
+        raise InvalidCredentials("Невалидные учетные данные")
     return EquestrianContext(id=equestrian.id, source="public")
 
 
