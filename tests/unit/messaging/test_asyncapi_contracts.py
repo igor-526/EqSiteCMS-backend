@@ -19,12 +19,33 @@ class RecordingNatsClient:
         self.calls.append(kwargs)
 
 
-def _workspace_root() -> Path:
-    return Path(__file__).resolve().parents[5]
+def _find_backend_root(start: Path) -> Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "docs" / "asyncapi.yaml"
+        ).is_file():
+            return candidate
+    raise FileNotFoundError(f"backend root not found from {start}")
+
+
+def _find_workspace_root(start: Path) -> Path | None:
+    for candidate in (start, *start.parents):
+        if (candidate / "services" / "backend" / "docs" / "asyncapi.yaml").is_file():
+            return candidate
+    return None
 
 
 def _load(service: str) -> dict[str, Any]:
-    path = _workspace_root() / "services" / service / "docs" / "asyncapi.yaml"
+    source = Path(__file__).resolve()
+    if service == "backend":
+        path = _find_backend_root(source) / "docs" / "asyncapi.yaml"
+    else:
+        workspace = _find_workspace_root(source)
+        if workspace is None:
+            raise FileNotFoundError(
+                f"{service} AsyncAPI is unavailable in standalone backend checkout"
+            )
+        path = workspace / "services" / service / "docs" / "asyncapi.yaml"
     return cast(dict[str, Any], yaml.safe_load(path.read_text()))
 
 
@@ -60,16 +81,22 @@ def _payload(document: dict[str, Any], channel: str, operation: str) -> dict[str
 
 def test_all_asyncapi_documents_are_structurally_valid_and_aggregate_matches() -> None:
     backend = _load("backend")
-    notification = _load("notification-service")
-    email = _load("email-service")
+    workspace = _find_workspace_root(Path(__file__).resolve())
+    notification = _load("notification-service") if workspace is not None else None
+    email = _load("email-service") if workspace is not None else None
 
     for document in (backend, notification, email):
+        if document is None:
+            continue
         assert document["asyncapi"] == "2.6.0"
         assert document["info"]["title"]
         assert document["info"]["version"]
         assert document["servers"]["jetstream"]["protocol"] == "nats"
         assert document["channels"]
         _assert_refs_resolve(document)
+
+    if notification is None or email is None:
+        return
 
     callback = "events.site.callback.requested"
     command = "commands.notification.email.send"
@@ -89,6 +116,32 @@ def test_all_asyncapi_documents_are_structurally_valid_and_aggregate_matches() -
     assert email["channels"][command]["x-jetstream-consumer"]["durable"] == (
         "notification-service-commands-send-email"
     )
+
+
+def test_root_discovery_supports_standalone_and_nested_checkout(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "arbitrary-workspace"
+    backend = workspace / "services" / "backend"
+    test_file = backend / "tests" / "unit" / "test_file.py"
+    test_file.parent.mkdir(parents=True)
+    (backend / "docs").mkdir()
+    (backend / "docs" / "asyncapi.yaml").touch()
+    (backend / "pyproject.toml").touch()
+    monkeypatch.chdir(tmp_path)
+
+    assert _find_backend_root(test_file) == backend
+    assert _find_workspace_root(test_file) == workspace
+
+    standalone = tmp_path / "standalone-backend"
+    standalone_test = standalone / "tests" / "unit" / "test_file.py"
+    standalone_test.parent.mkdir(parents=True)
+    (standalone / "docs").mkdir()
+    (standalone / "docs" / "asyncapi.yaml").touch()
+    (standalone / "pyproject.toml").touch()
+
+    assert _find_backend_root(standalone_test) == standalone
+    assert _find_workspace_root(standalone_test) is None
 
 
 @pytest.mark.asyncio

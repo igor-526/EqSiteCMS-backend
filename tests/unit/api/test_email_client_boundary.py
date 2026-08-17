@@ -7,6 +7,14 @@ import pytest
 from clients.email_service.client import EmailServiceClient
 
 
+def _find_workspace_root(start: Path) -> Path | None:
+    """Find optional orchestration root without assuming checkout depth or name."""
+    for candidate in (start, *start.parents):
+        if (candidate / ".docker-compose").is_dir():
+            return candidate
+    return None
+
+
 class RecordingClient:
     def __init__(self, response: httpx.Response) -> None:
         self.response = response
@@ -44,10 +52,35 @@ async def test_downstream_request_contains_no_peer_credential(monkeypatch) -> No
 
 
 def test_peer_compose_services_have_no_host_port_and_share_private_network() -> None:
-    root = Path(__file__).resolve().parents[5]
+    root = _find_workspace_root(Path(__file__).resolve())
+    if root is None:
+        pytest.skip(
+            "orchestration compose files are not part of standalone backend checkout"
+        )
     for name in ("docker-compose.email.yml", "docker-compose.notification.yml"):
         compose = (root / ".docker-compose" / name).read_text()
         assert "    ports:" not in compose
         assert '      - "8000"' in compose
         assert "      - eqsitecms_network" in compose
         assert "external: true" in compose
+
+
+def test_workspace_discovery_supports_nested_checkout_and_ignores_cwd(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "checkout-with-arbitrary-name"
+    test_file = workspace / "services" / "backend" / "tests" / "unit" / "test_file.py"
+    (workspace / ".docker-compose").mkdir(parents=True)
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+    monkeypatch.chdir(tmp_path)
+
+    assert _find_workspace_root(test_file) == workspace
+
+
+def test_workspace_discovery_allows_standalone_service_checkout(tmp_path: Path) -> None:
+    test_file = tmp_path / "backend-checkout" / "tests" / "unit" / "test_file.py"
+    test_file.parent.mkdir(parents=True)
+    test_file.touch()
+
+    assert _find_workspace_root(test_file) is None
