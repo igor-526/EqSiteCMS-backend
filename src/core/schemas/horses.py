@@ -22,7 +22,9 @@ class HorseOutDto(BaseSchema):
         default=...,
         description="Имя лошади",
     )
-    code: str | None = Field(default=None, max_length=31, description="Код лошади")
+    pedigree_name: str | None = Field(
+        default=None, max_length=63, description="Кличка лошади в родословной"
+    )
 
     description: str | None = Field(
         default=None,
@@ -116,6 +118,9 @@ class FoalParentRefDto(BaseSchema):
 
     id: UUID = Field(..., description="Идентификатор лошади")
     name: str = Field(..., description="Кличка лошади")
+    pedigree_name: str | None = Field(
+        default=None, max_length=63, description="Кличка лошади в родословной"
+    )
 
 
 class FoalParentsDto(BaseSchema):
@@ -168,7 +173,9 @@ class HorseCreateInDto(BaseSchema):
         default=...,
         description="Имя лошади",
     )
-    code: str | None = Field(default=None, max_length=31, description="Код лошади")
+    pedigree_name: str | None = Field(
+        default=None, max_length=63, description="Кличка лошади в родословной"
+    )
 
     description: str | None = Field(
         default=None,
@@ -231,7 +238,9 @@ class HorseUpdateInDto(BaseSchema):
         default=None,
         description="Имя лошади",
     )
-    code: str | None = Field(default=None, max_length=31, description="Код лошади")
+    pedigree_name: str | None = Field(
+        default=None, max_length=63, description="Кличка лошади в родословной"
+    )
 
     description: str | None = Field(
         default=None,

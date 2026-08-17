@@ -74,10 +74,10 @@ class Horse(Entity, TimeStampMixin, SlugMixin):
         description="Описание лошади",
         examples=["Красивый и быстрый жеребец"],
     )
-    code: str | None = Field(
+    pedigree_name: str | None = Field(
         default=None,
-        max_length=31,
-        description="Внешний код лошади",
+        max_length=63,
+        description="Кличка лошади в родословной",
     )
 
     breed_id: UUID | None = Field(

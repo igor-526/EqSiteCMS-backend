@@ -2,7 +2,7 @@ from datetime import date
 from typing import Awaitable, Callable, Literal, Mapping, cast
 from uuid import UUID
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from core.entities import (
     _HORSE_AVAILABLE_SORT_FIELDS,
@@ -18,7 +18,7 @@ from core.entities import (
 )
 from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import ForbiddenError
-from core.exceptions.base import ClientError
+from core.exceptions.base import ClientError, NotFoundError
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
@@ -30,6 +30,7 @@ from core.protocols.repositories.photo_repository import PhotoRepositoryProtocol
 from core.schemas import (
     BreedOutDto,
     CoatColorOutDto,
+    FoalParentRefDto,
     HorseCreateInDto,
     HorseOutDto,
     HorseOwnerOutDto,
@@ -83,6 +84,35 @@ class HorseService:
             return False
         return True
 
+    @classmethod
+    def _project_public_horse_names(
+        cls,
+        value: HorseOutDto | HorseWithPedigreeOutDto | FoalParentRefDto,
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> HorseOutDto | HorseWithPedigreeOutDto | FoalParentRefDto:
+        """Return a detached public projection for every nested horse node."""
+        projected = value.model_copy(deep=True)
+        if equestrian_context.source != "public":
+            return projected
+
+        def apply(node: object) -> None:
+            if isinstance(node, (HorseOutDto, FoalParentRefDto)):
+                if node.pedigree_name is not None:
+                    node.name = node.pedigree_name
+            if isinstance(node, BaseModel):
+                for field_name in node.__class__.model_fields:
+                    apply(getattr(node, field_name))
+            elif isinstance(node, (list, tuple)):
+                for item in node:
+                    apply(item)
+            elif isinstance(node, dict):
+                for item in node.values():
+                    apply(item)
+
+        apply(projected)
+        return projected
+
     def _get_horse_dto(
         self,
         *,
@@ -112,7 +142,7 @@ class HorseService:
             id=horse.id,
             slug=horse.slug or "",
             name=horse.name,
-            code=horse.code,
+            pedigree_name=horse.pedigree_name,
             description=horse.description,
             breed=breed_dto,
             coat_color=coat_color_dto,
@@ -142,7 +172,7 @@ class HorseService:
             pedigree=pedigree,
         )
         if horse is None:
-            raise ClientError("Лошадь не найдена")
+            raise NotFoundError("Лошадь не найдена")
         return horse
 
     async def _get_horse_by_slug(
@@ -159,7 +189,7 @@ class HorseService:
             pedigree=pedigree,
         )
         if horse is None:
-            raise ClientError("Лошадь не найдена")
+            raise NotFoundError("Лошадь не найдена")
         return horse
 
     async def _get_breed_by_id(
@@ -351,7 +381,7 @@ class HorseService:
             horse = Horse(
                 equestrian_id=equestrian_context.id,
                 name=create_data.name,
-                code=create_data.code,
+                pedigree_name=create_data.pedigree_name,
                 description=create_data.description,
                 breed_id=create_data.breed_id,
                 coat_color_id=create_data.coat_color_id,
@@ -453,7 +483,12 @@ class HorseService:
                     equestrian_context=equestrian_context,
                     pedigree=pedigree,
                 )
-        return horse_dto
+        return cast(
+            HorseOutDto | HorseWithPedigreeOutDto,
+            self._project_public_horse_names(
+                horse_dto, equestrian_context=equestrian_context
+            ),
+        )
 
     async def get_available_pedigree(
         self,
@@ -518,7 +553,16 @@ class HorseService:
             offset=offset,
         )
         return PaginatedEntities(
-            items=[HorseOutDto.model_validate(h) for h in horses.values()],
+            items=[
+                cast(
+                    HorseOutDto,
+                    self._project_public_horse_names(
+                        HorseOutDto.model_validate(h),
+                        equestrian_context=equestrian_context,
+                    ),
+                )
+                for h in horses.values()
+            ],
             total=total,
         )
 
@@ -731,7 +775,15 @@ class HorseService:
             pedigree=pedigree,
         )
         return PaginatedEntities(
-            items=list(horses.values()),
+            items=[
+                cast(
+                    HorseOutDto | HorseWithPedigreeOutDto,
+                    self._project_public_horse_names(
+                        item, equestrian_context=equestrian_context
+                    ),
+                )
+                for item in horses.values()
+            ],
             total=total,
         )
 

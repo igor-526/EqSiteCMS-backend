@@ -11,7 +11,6 @@ import pytest
 from sqlalchemy import Column, MetaData, String
 from sqlalchemy import Table as SATable
 from sqlalchemy.dialects import postgresql
-
 from core.entities import (
     Breed,
     CoatColor,
@@ -100,7 +99,7 @@ class FakeHorseRepository:
             id=horse.id,
             slug=horse.slug or "",
             name=horse.name,
-            code=horse.code,
+            pedigree_name=horse.pedigree_name,
             description=horse.description,
             height=horse.height,
             sex=horse.sex,

@@ -23,7 +23,7 @@ horse = Table(
         index=True,
     ),
     Column("name", String(63), nullable=False, index=True),
-    Column("code", String(31), nullable=True),
+    Column("pedigree_name", String(63), nullable=True),
     Column("slug", String(63), nullable=False, index=True),
     Column("description", String(511), nullable=True),
     Column("breed_id", ForeignKey("breeds.id", ondelete="CASCADE"), nullable=True),

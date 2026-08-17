@@ -23,7 +23,7 @@ def _make_horse_data() -> dict[str, Any]:
         "id": uuid4(),
         "slug": "test-horse",
         "name": "Тестовая лошадь",
-        "code": None,
+        "pedigree_name": None,
         "description": None,
         "breed_id": None,
         "coat_color_id": None,

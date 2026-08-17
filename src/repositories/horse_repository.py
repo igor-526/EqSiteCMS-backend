@@ -146,7 +146,7 @@ class HorseRepository(TenantScopedRepository[Horse]):
             id=horse_data["id"],
             slug=horse_data.get("slug") or "",
             name=horse_data["name"],
-            code=horse_data.get("code"),
+            pedigree_name=horse_data.get("pedigree_name"),
             description=horse_data.get("description"),
             breed=breed_dto,
             coat_color=coat_color_dto,
@@ -794,7 +794,9 @@ class HorseRepository(TenantScopedRepository[Horse]):
                 dto = all_dtos.get(parent_id)
                 if dto is None:
                     return None
-                return FoalParentRefDto(id=dto.id, name=dto.name)
+                return FoalParentRefDto(
+                    id=dto.id, name=dto.name, pedigree_name=dto.pedigree_name
+                )
 
             def build_pedigree_dto(
                 h_id: UUID,
