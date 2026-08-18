@@ -867,6 +867,28 @@ async def test_set_horse_pedigree_dam_equal_bdate_rejected() -> None:
         )
 
 
+async def test_set_horse_pedigree_dam_dead_before_target_birth_rejected() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    target = horse_repo.add(make_horse(bdate=date(2020, 1, 1)))
+    dam = horse_repo.add(
+        make_horse(
+            name="Dam",
+            slug="dam",
+            sex=HorseSexEnum.FEMALE,
+            bdate=date(2010, 1, 1),
+            ddate=date(2019, 12, 31),
+        )
+    )
+
+    with pytest.raises(ClientError, match="Дата смерти матери"):
+        await service.set_horse_pedigree(
+            horse_id=target.id,
+            pedigree_data=HorseSetPedigreeInDto(dam_id=dam.id),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+
+
 async def test_set_horse_pedigree_foal_self_reference_rejected() -> None:
     service, horse_repo, _, _, _, _ = make_service()
     target = horse_repo.add(make_horse())
@@ -886,6 +908,26 @@ async def test_set_horse_pedigree_child_equal_bdate_rejected() -> None:
     foal = horse_repo.add(make_horse(name="Foal", slug="foal", bdate=target.bdate))
 
     with pytest.raises(ClientError, match="позже даты рождения"):
+        await service.set_horse_pedigree(
+            horse_id=target.id,
+            pedigree_data=HorseSetPedigreeInDto(foals=[foal.id]),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+
+
+async def test_set_horse_pedigree_child_after_mothers_death_rejected() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    target = horse_repo.add(
+        make_horse(
+            sex=HorseSexEnum.FEMALE,
+            bdate=date(2010, 1, 1),
+            ddate=date(2020, 1, 1),
+        )
+    )
+    foal = horse_repo.add(make_horse(name="Foal", slug="foal", bdate=date(2020, 1, 2)))
+
+    with pytest.raises(ClientError, match="позже даты смерти матери"):
         await service.set_horse_pedigree(
             horse_id=target.id,
             pedigree_data=HorseSetPedigreeInDto(foals=[foal.id]),
@@ -1032,8 +1074,8 @@ async def test_set_horse_pedigree_replacement_allows_existing_foal_to_remain() -
     )
 
 
-async def test_horse_kind_to_breed_set_pedigree_rejects_mismatched_breed_kind() -> None:
-    service, horse_repo, _, breed_repo, _, _ = make_service()
+async def test_set_pedigree_allows_sire_with_different_breed_kind() -> None:
+    service, horse_repo, children_repo, breed_repo, _, _ = make_service()
     horse_breed = breed_repo.add(
         Breed(
             equestrian_id=TEST_EQUESTRIAN_CONTEXT.id,
@@ -1064,13 +1106,15 @@ async def test_horse_kind_to_breed_set_pedigree_rejects_mismatched_breed_kind() 
         )
     )
 
-    with pytest.raises(ClientError, match="того же вида"):
-        await service.set_horse_pedigree(
-            horse_id=target.id,
-            pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
-            user=make_user(),
-            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
-        )
+    await service.set_horse_pedigree(
+        horse_id=target.id,
+        pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+
+    assert breed_repo.calls == []
+    assert children_repo.calls[-1][1]["sire_id"] == sire.id
 
 
 async def test_horse_kind_to_breed_set_pedigree_allows_matching_breed_kind() -> None:
@@ -1103,6 +1147,100 @@ async def test_horse_kind_to_breed_set_pedigree_allows_matching_breed_kind() -> 
     )
 
     assert children_repo.calls[-1][0] == "set_pedigree"
+
+
+async def test_set_pedigree_allows_dam_with_different_breed_kind() -> None:
+    service, horse_repo, children_repo, breed_repo, _, _ = make_service()
+    target = horse_repo.add(make_horse(breed_id=uuid4()))
+    dam = horse_repo.add(
+        make_horse(
+            name="Cross-kind dam",
+            slug="cross-kind-dam",
+            sex=HorseSexEnum.FEMALE,
+            bdate=date(2018, 1, 1),
+            breed_id=uuid4(),
+        )
+    )
+
+    await service.set_horse_pedigree(
+        horse_id=target.id,
+        pedigree_data=HorseSetPedigreeInDto(dam_id=dam.id),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+
+    assert breed_repo.calls == []
+    assert children_repo.calls[-1][1]["dam_id"] == dam.id
+
+
+async def test_set_pedigree_allows_child_with_different_breed_kind() -> None:
+    service, horse_repo, children_repo, breed_repo, _, _ = make_service()
+    target = horse_repo.add(make_horse(breed_id=uuid4()))
+    child = horse_repo.add(
+        make_horse(
+            name="Cross-kind child",
+            slug="cross-kind-child",
+            bdate=date(2022, 1, 1),
+            breed_id=uuid4(),
+        )
+    )
+
+    await service.set_horse_pedigree(
+        horse_id=target.id,
+        pedigree_data=HorseSetPedigreeInDto(foals=[child.id]),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+
+    assert breed_repo.calls == []
+    assert children_repo.calls[-1][1]["foals_ids"] == [child.id]
+
+
+async def test_set_pedigree_allows_bred_parent_for_target_without_breed() -> None:
+    service, horse_repo, children_repo, breed_repo, _, _ = make_service()
+    target = horse_repo.add(make_horse(breed_id=None))
+    sire = horse_repo.add(
+        make_horse(
+            name="Bred sire",
+            slug="bred-sire",
+            sex=HorseSexEnum.MALE,
+            bdate=date(2018, 1, 1),
+            breed_id=uuid4(),
+        )
+    )
+
+    await service.set_horse_pedigree(
+        horse_id=target.id,
+        pedigree_data=HorseSetPedigreeInDto(sire_id=sire.id),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+
+    assert breed_repo.calls == []
+    assert children_repo.calls[-1][1]["sire_id"] == sire.id
+
+
+async def test_set_pedigree_allows_unbred_child_for_target_with_breed() -> None:
+    service, horse_repo, children_repo, breed_repo, _, _ = make_service()
+    target = horse_repo.add(make_horse(breed_id=uuid4()))
+    child = horse_repo.add(
+        make_horse(
+            name="Unbred child",
+            slug="unbred-child",
+            bdate=date(2022, 1, 1),
+            breed_id=None,
+        )
+    )
+
+    await service.set_horse_pedigree(
+        horse_id=target.id,
+        pedigree_data=HorseSetPedigreeInDto(foals=[child.id]),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+
+    assert breed_repo.calls == []
+    assert children_repo.calls[-1][1]["foals_ids"] == [child.id]
 
 
 async def test_set_horse_pedigree_uc22_clear_then_set_order() -> None:

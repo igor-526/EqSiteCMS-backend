@@ -203,34 +203,6 @@ class HorseService:
             raise ClientError("Порода не найдена")
         return breed
 
-    async def _get_breed_kind_for_horse(
-        self, *, horse: Horse, equestrian_context: EquestrianContext
-    ) -> HorseKindEnum | None:
-        if horse.breed_id is None:
-            return None
-        breed = await self._get_breed_by_id(
-            breed_id=horse.breed_id, equestrian_context=equestrian_context
-        )
-        return breed.kind
-
-    async def _get_breed_kinds_for_horses(
-        self, *, horses: Mapping[UUID, Horse], equestrian_context: EquestrianContext
-    ) -> dict[UUID, HorseKindEnum | None]:
-        kinds: dict[UUID, HorseKindEnum | None] = {}
-        breed_cache: dict[UUID, HorseKindEnum] = {}
-        for horse_item in horses.values():
-            if horse_item.breed_id is None:
-                kinds[horse_item.id] = None
-                continue
-            if horse_item.breed_id not in breed_cache:
-                breed = await self._get_breed_by_id(
-                    breed_id=horse_item.breed_id,
-                    equestrian_context=equestrian_context,
-                )
-                breed_cache[horse_item.breed_id] = breed.kind
-            kinds[horse_item.id] = breed_cache[horse_item.breed_id]
-        return kinds
-
     async def _get_coat_color_by_id(
         self, *, coat_color_id: UUID, equestrian_context: EquestrianContext
     ) -> CoatColor:
@@ -278,9 +250,7 @@ class HorseService:
         *,
         mode: Literal["sire", "dam"],
         target: Horse,
-        target_kind: HorseKindEnum | None,
         parent: Horse,
-        parent_kind: HorseKindEnum | None,
         other_parent_id: UUID | None,
         final_foal_ids: set[UUID],
     ) -> None:
@@ -291,10 +261,6 @@ class HorseService:
             raise ClientError("Отец и мать не могут совпадать")
         if parent.id in final_foal_ids:
             raise ClientError(f"{role_title} не может быть потомком целевой лошади")
-        if parent_kind != target_kind:
-            raise ClientError(
-                f"{role_title} должен быть того же вида, что и целевая лошадь"
-            )
         if mode == "sire":
             if parent.sex != HorseSexEnum.MALE:
                 raise ClientError("Отец должен быть мужского пола")
@@ -321,9 +287,7 @@ class HorseService:
     def _validate_child_candidate(
         *,
         target: Horse,
-        target_kind: HorseKindEnum | None,
         child: Horse,
-        child_kind: HorseKindEnum | None,
         final_parent_ids: set[UUID],
         current_foal_ids: set[UUID],
         allow_existing_foal: bool,
@@ -334,8 +298,6 @@ class HorseService:
             raise ClientError("Ребёнок не может совпадать с родителем целевой лошади")
         if child.id in current_foal_ids and not allow_existing_foal:
             raise ClientError("Ребёнок уже указан потомком целевой лошади")
-        if child_kind != target_kind:
-            raise ClientError("Все дети должны быть того же вида, что и целевая лошадь")
         if target.bdate is not None and child.bdate is not None:
             if child.bdate <= target.bdate:
                 raise ClientError(
@@ -607,11 +569,6 @@ class HorseService:
             raise ClientError("Некоторые лошади не найдены")
 
         target = cast(Horse, horses_mapping.get(horse_id))
-        breed_kinds = await self._get_breed_kinds_for_horses(
-            horses=horses_mapping,
-            equestrian_context=equestrian_context,
-        )
-        target_kind = breed_kinds[target.id]
         (
             current_sire_id,
             current_dam_id,
@@ -637,9 +594,7 @@ class HorseService:
             self._validate_parent_candidate(
                 mode="sire",
                 target=target,
-                target_kind=target_kind,
                 parent=sire,
-                parent_kind=breed_kinds[sire.id],
                 other_parent_id=final_dam_id,
                 final_foal_ids=final_foal_ids_set,
             )
@@ -648,9 +603,7 @@ class HorseService:
             self._validate_parent_candidate(
                 mode="dam",
                 target=target,
-                target_kind=target_kind,
                 parent=dam,
-                parent_kind=breed_kinds[dam.id],
                 other_parent_id=final_sire_id,
                 final_foal_ids=final_foal_ids_set,
             )
@@ -664,9 +617,7 @@ class HorseService:
                 foal = horses_mapping[foal_id]
                 self._validate_child_candidate(
                     target=target,
-                    target_kind=target_kind,
                     child=foal,
-                    child_kind=breed_kinds[foal.id],
                     final_parent_ids=final_parent_ids,
                     current_foal_ids=current_foal_ids_set,
                     allow_existing_foal=foal_id in current_foal_ids_set,

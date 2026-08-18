@@ -884,19 +884,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
 
         return horses_dict, total
 
-    async def _get_breed_kind_for_horse(
-        self, *, target_horse: Horse
-    ) -> HorseKindEnum | None:
-        if target_horse.breed_id is None:
-            return None
-        stmt = select(breeds.c.kind).where(
-            breeds.c.id == target_horse.breed_id,
-            breeds.c.equestrian_id == target_horse.equestrian_id,
-        )
-        result = await self.session.execute(stmt)
-        value = result.scalar_one_or_none()
-        return HorseKindEnum(value) if value is not None else None
-
     async def set_horse_photos(
         self,
         horse_id: UUID,
@@ -940,9 +927,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
         """Получить доступных матерей."""
-        target_breed_kind = await self._get_breed_kind_for_horse(
-            target_horse=target_horse
-        )
         filters: dict = {
             "equestrian_id": target_horse.equestrian_id,
             "sex": [HorseSexEnum.FEMALE],
@@ -951,10 +935,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
             "limit": limit,
             "offset": offset,
         }
-        if target_breed_kind is not None:
-            filters["kind"] = [target_breed_kind]
-        else:
-            filters["breed_id_is_null"] = True
         if search:
             filters["name"] = search
         if target_horse.bdate is not None:
@@ -972,9 +952,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
         """Получить доступных отцов."""
-        target_breed_kind = await self._get_breed_kind_for_horse(
-            target_horse=target_horse
-        )
         filters: dict = {
             "equestrian_id": target_horse.equestrian_id,
             "sex": [HorseSexEnum.MALE],
@@ -983,10 +960,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
             "limit": limit,
             "offset": offset,
         }
-        if target_breed_kind is not None:
-            filters["kind"] = [target_breed_kind]
-        else:
-            filters["breed_id_is_null"] = True
         if search:
             filters["name"] = search
         if target_horse.bdate is not None:
@@ -1003,9 +976,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
         offset: int | None = 0,
     ) -> tuple[Mapping[UUID, HorseOutDto], int]:
         """Получить доступных детей (без дублирования отца/матери: исключаем уже имеющих родителя того же пола)."""
-        target_breed_kind = await self._get_breed_kind_for_horse(
-            target_horse=target_horse
-        )
         filters: dict = {
             "equestrian_id": target_horse.equestrian_id,
             "exclude_ids": list(dict.fromkeys([target_horse.id, *(exclude_ids or [])])),
@@ -1013,10 +983,6 @@ class HorseRepository(TenantScopedRepository[Horse]):
             "limit": limit,
             "offset": offset,
         }
-        if target_breed_kind is not None:
-            filters["kind"] = [target_breed_kind]
-        else:
-            filters["breed_id_is_null"] = True
         if search:
             filters["name"] = search
         if target_horse.bdate is not None:

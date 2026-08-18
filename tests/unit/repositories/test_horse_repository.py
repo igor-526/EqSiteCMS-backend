@@ -7,7 +7,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import ClauseElement
 
 from core.entities import Horse
-from core.entities.horse import HorseKindEnum
+from core.entities.horse import HorseKindEnum, HorseSexEnum
 from repositories.horse_repository import HorseRepository
 
 
@@ -205,6 +205,93 @@ async def test_horse_repository_can_filter_candidates_without_breed() -> None:
     sql = compile_sql(session.statements[0])
     assert "horse.breed_id IS NULL" in sql
     assert "horse.kind" not in sql
+
+
+@pytest.mark.parametrize(
+    ("method_name", "target_sex", "target_has_breed"),
+    [
+        ("get_available_sires", HorseSexEnum.FEMALE, True),
+        ("get_available_sires", HorseSexEnum.FEMALE, False),
+        ("get_available_dams", HorseSexEnum.MALE, True),
+        ("get_available_dams", HorseSexEnum.MALE, False),
+        ("get_available_children", HorseSexEnum.FEMALE, True),
+        ("get_available_children", HorseSexEnum.MALE, False),
+    ],
+    ids=[
+        "sire-target-with-breed",
+        "sire-target-without-breed",
+        "dam-target-with-breed",
+        "dam-target-without-breed",
+        "children-target-with-breed",
+        "children-target-without-breed",
+    ],
+)
+@pytest.mark.asyncio
+async def test_pedigree_candidate_queries_do_not_filter_or_lookup_breed(
+    method_name: str,
+    target_sex: HorseSexEnum,
+    target_has_breed: bool,
+) -> None:
+    session = FakeAsyncSession()
+    repository = HorseRepository(
+        session=session,  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    target = Horse(
+        equestrian_id=UUID("11111111-1111-4111-8111-111111111111"),
+        name="Target",
+        slug="target",
+        sex=target_sex,
+        breed_id=uuid4() if target_has_breed else None,
+    )
+
+    method = getattr(repository, method_name)
+    await method(
+        target_horse=target,
+        search="Cross breed",
+        exclude_ids=[UUID("22222222-2222-4222-8222-222222222222")],
+        limit=7,
+        offset=3,
+    )
+
+    sql_statements = [compile_sql(statement) for statement in session.statements]
+    assert len(sql_statements) == 2  # result query + count; no breed-kind lookup
+    assert all("breeds.kind IN" not in sql for sql in sql_statements)
+    assert all("horse.breed_id IS NULL" not in sql for sql in sql_statements)
+    assert "ORDER BY horse.name ASC NULLS FIRST" in sql_statements[0]
+    assert "LIMIT 7" in sql_statements[0]
+    assert "OFFSET 3" in sql_statements[0]
+
+
+@pytest.mark.parametrize(
+    ("method_name", "expected_sql"),
+    [
+        ("get_available_sires", "horse.sex IN ('male')"),
+        ("get_available_dams", "horse.sex IN ('female')"),
+        ("get_available_children", "horse.id NOT IN (SELECT horse_children.child_id"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_pedigree_candidate_queries_keep_non_breed_filters(
+    method_name: str, expected_sql: str
+) -> None:
+    session = FakeAsyncSession()
+    repository = HorseRepository(
+        session=session,  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    target = Horse(
+        equestrian_id=uuid4(),
+        name="Target",
+        slug="target",
+        sex=HorseSexEnum.FEMALE,
+    )
+
+    await getattr(repository, method_name)(target_horse=target)
+
+    sql = compile_sql(session.statements[0])
+    assert expected_sql in sql
+    assert str(target.id) in sql
 
 
 def test_horse_repository_module_does_not_depend_on_backend_media_settings() -> None:
