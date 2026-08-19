@@ -20,7 +20,11 @@ spec:
         - name: {{ .Values.name }}
           image: "{{ .Values.image }}:{{ .Values.imageTag }}"
           ports:
-            - containerPort: {{ .Values.containerPort }}
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+
+            - name: metrics
+              containerPort: {{ .Values.metricsPort }}
           resources: {{ .Values.resources | toYaml | nindent 12 }}
           envFrom:
             - secretRef:

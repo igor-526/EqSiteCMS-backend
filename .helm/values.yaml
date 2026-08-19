@@ -7,6 +7,7 @@ namespace: cms
 # App settings
 secretName: eqsitecms-backend-secret
 containerPort: 8000
+metricsPort: 9000
 resources:
   requests:
     cpu: 100m

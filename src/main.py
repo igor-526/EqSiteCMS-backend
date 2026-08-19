@@ -35,6 +35,9 @@ from settings import settings
 from utils.configure_logger import configure_logger
 from utils.seeding.init_registry import init_registry
 
+from prometheus_client import start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
+
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
 
 
@@ -57,6 +60,13 @@ app = FastAPI(
     title=settings.swagger_title,
     debug=settings.debug,
     lifespan=lifespan,
+)
+
+Instrumentator().instrument(app)
+
+start_http_server(
+    port=9000,
+    addr="0.0.0.0",
 )
 
 router = APIRouter(prefix="/api")

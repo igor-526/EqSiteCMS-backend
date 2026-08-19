@@ -3,10 +3,19 @@ kind: Service
 metadata:
   name: {{ .Values.name }}-service
   namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.name }}
 spec:
   type: ClusterIP
   ports:
-    - port: {{ .Values.containerPort }}
+    - name: http
+      port: {{ .Values.containerPort }}
+      targetPort: http
+      protocol: TCP
+
+    - name: metrics
+      port: {{ .Values.metricsPort }}
+      targetPort: metrics
       protocol: TCP
   selector:
     components: {{ .Values.componentsLabel }}
