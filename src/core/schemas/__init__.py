@@ -53,6 +53,7 @@ from .site_settings import (
     SiteSettingUpdateDto,
 )
 from .users import UserOutDto
+from .callbackrequest import CallbackRequestOutDto, CallbackRequestCreateDto
 
 __all__ = [
     "UserOutDto",
@@ -105,4 +106,6 @@ __all__ = [
     "CallbackRequestedData",
     "MessagingEvent",
     "MessagingBaseEventData",
+    "CallbackRequestOutDto",
+    "CallbackRequestCreateDto",
 ]

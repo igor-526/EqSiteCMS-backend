@@ -3,6 +3,7 @@ from uuid import UUID
 from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
 from core.entities.horse_service import HorseServiceRelations
+from core.entities.price import PriceFormatter
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.protocols.repositories.horse_repository import HorseRepositoryProtocol
@@ -65,7 +66,7 @@ class HorseServiceRelationsService:
         service_slug: str,
         service_description: str | None,
         service_price: int,
-        service_price_formatter: str,
+        service_price_formatter: PriceFormatter,
     ) -> HorseServiceRelationOutDto:
         return HorseServiceRelationOutDto(
             id=relation.id,
@@ -104,7 +105,7 @@ class HorseServiceRelationsService:
             service.slug or "",
             service.description,
             service.price,
-            str(service.price_formatter),
+            service.price_formatter,
         )
 
     async def create(

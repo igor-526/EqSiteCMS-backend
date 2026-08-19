@@ -8,6 +8,7 @@ from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
 from core.exceptions.tenant import TenantNotFound
+from core.protocols import CallbackRequestEventPublisherProtocol
 from core.protocols.email_service import EmailServiceClientProtocol
 from core.protocols.media import (
     MediaStorageProtocol,
@@ -51,6 +52,8 @@ from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
 from core.services.user_management import UserManagementService
 from core.services.users import UserService
+from core.services.callback_request import CallbackRequestService
+from depends.publishers import get_callback_request_event_publisher
 from depends.repositories import (
     get_breed_group_repository,
     get_breed_repository,
@@ -376,9 +379,18 @@ async def get_user_management_service(
     ],
     security: Annotated[SecurityProtocol, Depends(get_security)],
 ) -> UserManagementService:
-    from core.services.user_management import UserManagementService
-
     return UserManagementService(
         repository=user_management_repository,
         security=security,
+    )
+
+
+async def get_callback_request_service(
+    callback_request_event_publisher: Annotated[
+        CallbackRequestEventPublisherProtocol,
+        Depends(get_callback_request_event_publisher),
+    ],
+) -> CallbackRequestService:
+    return CallbackRequestService(
+        callback_request_event_publisher=callback_request_event_publisher
     )
