@@ -50,9 +50,17 @@ async def lifespan(_: FastAPI):
     await nats_client.connect()
     await nats_client.setup()
 
+    metrics_server, metrics_thread = start_http_server(
+        port=9000,
+        addr="0.0.0.0",
+    )
+
     try:
         yield
     finally:
+        metrics_server.shutdown()
+        metrics_server.server_close()
+        metrics_thread.join()
         await nats_client.close()
 
 
@@ -63,11 +71,6 @@ app = FastAPI(
 )
 
 Instrumentator().instrument(app)
-
-start_http_server(
-    port=9000,
-    addr="0.0.0.0",
-)
 
 router = APIRouter(prefix="/api")
 router.include_router(auth_router, prefix="/auth", tags=["Auth"])
