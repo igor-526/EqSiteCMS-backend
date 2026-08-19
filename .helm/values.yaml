@@ -16,6 +16,10 @@ resources:
     cpu: 500m
     memory: 512Mi
 
+metrics:
+  enabled: true
+  interval: 30s
+
 # Ingress settings
 url: api.eqcms.ru
 
