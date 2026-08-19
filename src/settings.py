@@ -111,6 +111,27 @@ class Settings(BaseSettings):
         )
 
 
+class SentrySettings(BaseSettings):
+    sentry_enabled: bool = Field(default=False, alias="SENTRY_ENABLED")
+    sentry_dsn: str = Field(default="", alias="SENTRY_DSN")
+    sentry_environment: str = Field(default="development", alias="SENTRY_ENVIRONMENT")
+    sentry_traces_sample_rate: float = Field(default=0.0, alias="SENTRY_TRACES_SAMPLE_RATE", ge=0.0, le=1.0)
+    sentry_release: str | None = Field(default=None, alias="SENTRY_RELEASE")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self) -> SentrySettings:
+        if self.sentry_enabled and not self.sentry_dsn:
+            raise ValueError("SENTRY_DSN is required when SENTRY_ENABLED=true")
+        return self
+
+
 class NatsSettings(BaseSettings):
     # BASE
     nats_servers_raw: str = Field(default="nats://localhost:4222", alias="NATS_SERVERS")
@@ -155,3 +176,4 @@ class NatsSettings(BaseSettings):
 
 settings = Settings()
 nats_settings = NatsSettings()
+sentry_settings = SentrySettings()

@@ -29,6 +29,7 @@ dependencies = [
     "dependency-injector>=4.49.1",
     "prometheus-fastapi-instrumentator>=7.1.0",
     "prometheus-client>=0.23.1",
+    "sentry-sdk[fastapi,sqlalchemy]>=2.47",
 ]
 
 [dependency-groups]

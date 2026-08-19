@@ -34,11 +34,13 @@ from core.middleware.cors import SplitCORSMiddleware
 from settings import settings
 from utils.configure_logger import configure_logger
 from utils.seeding.init_registry import init_registry
+from utils.configure_sentry import configure_sentry
 
 from prometheus_client import start_http_server
 from prometheus_fastapi_instrumentator import Instrumentator
 
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
+configure_sentry()
 
 
 @asynccontextmanager
@@ -49,18 +51,23 @@ async def lifespan(_: FastAPI):
 
     await nats_client.connect()
     await nats_client.setup()
+    metrics_runtime = None
 
-    metrics_server, metrics_thread = start_http_server(
-        port=9000,
-        addr="0.0.0.0",
-    )
+    if settings.environment == 'production':
+        metrics_runtime = start_http_server(
+            port=9000,
+            addr="0.0.0.0",
+        )
 
     try:
         yield
     finally:
-        metrics_server.shutdown()
-        metrics_server.server_close()
-        metrics_thread.join()
+        if metrics_runtime is not None:
+            metrics_server, metrics_thread = metrics_runtime
+
+            metrics_server.shutdown()
+            metrics_server.server_close()
+            metrics_thread.join()
         await nats_client.close()
 
 
