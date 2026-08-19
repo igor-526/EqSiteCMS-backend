@@ -30,6 +30,10 @@ class RecordingClient:
         self.requests.append({"url": url, **kwargs})
         return self.response
 
+    async def get(self, url: str, **kwargs):
+        self.requests.append({"url": url, **kwargs})
+        return self.response
+
 
 @pytest.mark.asyncio
 async def test_downstream_request_contains_no_peer_credential(monkeypatch) -> None:
@@ -84,3 +88,67 @@ def test_workspace_discovery_allows_standalone_service_checkout(tmp_path: Path) 
     test_file.touch()
 
     assert _find_workspace_root(test_file) is None
+
+
+@pytest.mark.asyncio
+async def test_read_owner_uses_existing_filtered_list_contract(monkeypatch) -> None:
+    user_id = uuid4()
+    response = httpx.Response(
+        200,
+        json=[
+            {
+                "id": str(uuid4()),
+                "user_id": str(user_id),
+                "email": "owner@example.com",
+                "approved": True,
+            }
+        ],
+        request=httpx.Request("GET", "http://email/emails"),
+    )
+    recording = RecordingClient(response)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda: recording)
+
+    result = await EmailServiceClient(base_url="http://email").get_email(
+        user_id=user_id
+    )
+
+    assert result is not None and result.user_id == user_id
+    assert recording.requests == [
+        {
+            "url": "http://email/emails",
+            "params": {"user_ids": str(user_id)},
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_read_owner_empty_list_means_missing(monkeypatch) -> None:
+    response = httpx.Response(
+        200, json=[], request=httpx.Request("GET", "http://email/emails")
+    )
+    monkeypatch.setattr(httpx, "AsyncClient", lambda: RecordingClient(response))
+
+    assert (
+        await EmailServiceClient(base_url="http://email").get_email(user_id=uuid4())
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_owner_rejects_foreign_response(monkeypatch) -> None:
+    response = httpx.Response(
+        200,
+        json=[
+            {
+                "id": str(uuid4()),
+                "user_id": str(uuid4()),
+                "email": "foreign@example.com",
+                "approved": True,
+            }
+        ],
+        request=httpx.Request("GET", "http://email/emails"),
+    )
+    monkeypatch.setattr(httpx, "AsyncClient", lambda: RecordingClient(response))
+
+    with pytest.raises(ValueError, match="ambiguous owner"):
+        await EmailServiceClient(base_url="http://email").get_email(user_id=uuid4())

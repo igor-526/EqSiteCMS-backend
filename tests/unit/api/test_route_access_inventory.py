@@ -14,7 +14,7 @@ def test_every_registered_api_route_has_exactly_one_access_classification() -> N
     )
     rows = inventory(app)
 
-    assert registered == 93
+    assert registered == 96
     assert len(rows) == registered
     assert len({(method, path) for method, path, _ in rows}) == registered
     assert all(rule.access_class and rule.tests for _, _, rule in rows)
@@ -29,6 +29,20 @@ def test_email_and_policy_exceptions_are_explicitly_classified() -> None:
     rules = {(method, path): rule for method, path, rule in inventory(app)}
 
     assert rules[("POST", "/api/emails")].access_class == "protected owner write"
+    assert rules[("GET", "/api/emails/me")].access_class == "protected GET exception"
+    assert (
+        rules[("GET", "/api/notification-settings")].access_class
+        == "protected GET exception"
+    )
+    assert (
+        rules[
+            (
+                "PATCH",
+                "/api/notification-settings/{event_code}/{channel_code}",
+            )
+        ].roles
+        == "ADMIN or SUPERUSER"
+    )
     assert (
         rules[("PATCH", "/api/emails/confirm")].access_class == "public write exception"
     )

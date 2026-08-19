@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import Cookie, Depends, Header
 
 from clients.email_service.client import EmailServiceClient
+from clients.notification_service.client import NotificationServiceClient
 from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
@@ -13,6 +14,7 @@ from core.protocols.media import (
     MediaTypeValidatorProtocol,
     PhotoUrlBuilderProtocol,
 )
+from core.protocols.notification_service import NotificationServiceClientProtocol
 from core.protocols.repositories import (
     BreedGroupRepositoryProtocol,
     BreedRepositoryProtocol,
@@ -43,6 +45,7 @@ from core.services.horse_owner import HorseOwnerService
 from core.services.horse_service import HorseServiceService
 from core.services.horse_service_relations import HorseServiceRelationsService
 from core.services.news import NewsService
+from core.services.notification_settings import NotificationSettingsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
@@ -123,6 +126,18 @@ async def get_email_proxy_service(
     client: Annotated[EmailServiceClientProtocol, Depends(get_email_service_client)],
 ) -> EmailProxyService:
     return EmailProxyService(client)
+
+
+async def get_notification_service_client() -> NotificationServiceClientProtocol:
+    return NotificationServiceClient(base_url=settings.notification_service_url)
+
+
+async def get_notification_settings_service(
+    client: Annotated[
+        NotificationServiceClientProtocol, Depends(get_notification_service_client)
+    ],
+) -> NotificationSettingsService:
+    return NotificationSettingsService(client)
 
 
 async def get_public_equestrian_context(

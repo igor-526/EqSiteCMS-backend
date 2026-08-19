@@ -1,6 +1,8 @@
 from uuid import UUID
 
+from clients.email_service.schemas import EmailResponse
 from core.exceptions.auth import ForbiddenError
+from core.exceptions.base import NotFoundError
 from core.protocols.email_service import EmailServiceClientProtocol
 from core.schemas.users import UserOutDto
 
@@ -17,6 +19,12 @@ class EmailProxyService:
     async def create(self, *, user_id: UUID, email: str, actor: UserOutDto) -> dict:
         self._require_owner(user_id=user_id, actor=actor)
         return await self._client.create_email(user_id=user_id, email=email)
+
+    async def get_mine(self, *, actor: UserOutDto) -> EmailResponse:
+        email = await self._client.get_email(user_id=actor.id)
+        if email is None:
+            raise NotFoundError("Email не найден")
+        return email
 
     async def update(self, *, user_id: UUID, email: str, actor: UserOutDto) -> dict:
         self._require_owner(user_id=user_id, actor=actor)

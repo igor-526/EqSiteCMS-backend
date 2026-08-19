@@ -1,8 +1,12 @@
 from typing import Protocol
 from uuid import UUID
 
+from clients.email_service.schemas import EmailResponse
+
 
 class EmailServiceClientProtocol(Protocol):
+    async def get_email(self, *, user_id: UUID) -> EmailResponse | None: ...
+
     async def create_email(self, *, user_id: UUID, email: str) -> dict: ...
 
     async def update_email(self, *, user_id: UUID, email: str) -> dict: ...

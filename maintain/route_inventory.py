@@ -31,6 +31,8 @@ PROTECTED_GET_PREFIXES = (
     "/api/news-cms",
     "/api/users/me",
     "/api/user-management/",
+    "/api/emails/me",
+    "/api/notification-settings",
 )
 EMAIL_OWNER = {
     ("POST", "/api/emails"),
@@ -38,6 +40,9 @@ EMAIL_OWNER = {
     ("DELETE", "/api/emails/{user_id}"),
 }
 SERVICE_ROUTES = {("GET", "/api/service/users/")}
+NOTIFICATION_SETTINGS_WRITE = {
+    ("PATCH", "/api/notification-settings/{event_code}/{channel_code}")
+}
 
 
 def classify(method: str, path: str) -> AccessRule:
@@ -79,6 +84,42 @@ def classify(method: str, path: str) -> AccessRule:
             "403 before lookup/downstream",
             "400 malformed/invalid; 404 missing; 409 different create",
             "tests/unit/api/test_email_proxy_api.py",
+        )
+    if key in NOTIFICATION_SETTINGS_WRITE:
+        return AccessRule(
+            "protected owner write",
+            "ADMIN or SUPERUSER",
+            "actor cookie",
+            "owner derived from actor; no user_id input",
+            "401",
+            "200",
+            "not addressable; 403 ineligible",
+            "400 malformed; 404 unknown/inactive combination",
+            "tests/unit/api/test_notification_ui_gateway.py",
+        )
+    if key == ("GET", "/api/emails/me"):
+        return AccessRule(
+            "protected GET exception",
+            "authenticated owner",
+            "actor cookie",
+            "owner derived from actor; PII is not public read",
+            "401",
+            "200 or 404",
+            "not addressable",
+            "502 malformed/unavailable downstream",
+            "tests/unit/api/test_notification_ui_gateway.py",
+        )
+    if key == ("GET", "/api/notification-settings"):
+        return AccessRule(
+            "protected GET exception",
+            "authenticated; catalog filtered by actor scopes",
+            "actor cookie",
+            "owner derived from actor; preferences are not public read",
+            "401",
+            "200, including empty catalog",
+            "not addressable",
+            "502 malformed/unavailable downstream",
+            "tests/unit/api/test_notification_ui_gateway.py",
         )
     if key == ("POST", "/api/auth/refresh"):
         return AccessRule(

@@ -2,7 +2,7 @@
 
 Generated from the registered FastAPI router graph. Do not edit manually.
 
-Route entries: **93**
+Route entries: **96**
 
 | method | path | access class | roles | tenant selector | owner rule | without auth | with auth | foreign | validation | tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -15,6 +15,7 @@ Route entries: **93**
 | PATCH | `/api/emails` | protected owner write | owner only | actor cookie | target user_id == actor.id; no role override | 401 | 200 | 403 before lookup/downstream | 400 malformed/invalid; 404 missing; 409 different create | tests/unit/api/test_email_proxy_api.py |
 | POST | `/api/emails` | protected owner write | owner only | actor cookie | target user_id == actor.id; no role override | 401 | 201 | 403 before lookup/downstream | 400 malformed/invalid; 404 missing; 409 different create | tests/unit/api/test_email_proxy_api.py |
 | PATCH | `/api/emails/confirm` | public write exception | all | body/host as applicable | N/A | success/domain status without access cookie | same contract | N/A | 400 malformed/invalid | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/emails/me` | protected GET exception | authenticated owner | actor cookie | owner derived from actor; PII is not public read | 401 | 200 or 404 | not addressable | 502 malformed/unavailable downstream | tests/unit/api/test_notification_ui_gateway.py |
 | POST | `/api/emails/send-confirmation` | public write exception | all | body/host as applicable | N/A | success/domain status without access cookie | same contract | N/A | 400 malformed/invalid | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | DELETE | `/api/emails/{user_id}` | protected owner write | owner only | actor cookie | target user_id == actor.id; no role override | 401 | 204 | 403 before lookup/downstream | 400 malformed/invalid; 404 missing; 409 different create | tests/unit/api/test_email_proxy_api.py |
 | GET | `/api/horses` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
@@ -62,6 +63,8 @@ Route entries: **93**
 | GET | `/api/news/{news_id}` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | PATCH | `/api/news/{news_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/news/{news_id}/photos` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/notification-settings` | protected GET exception | authenticated; catalog filtered by actor scopes | actor cookie | owner derived from actor; preferences are not public read | 401 | 200, including empty catalog | not addressable | 502 malformed/unavailable downstream | tests/unit/api/test_notification_ui_gateway.py |
+| PATCH | `/api/notification-settings/{event_code}/{channel_code}` | protected owner write | ADMIN or SUPERUSER | actor cookie | owner derived from actor; no user_id input | 401 | 200 | not addressable; 403 ineligible | 400 malformed; 404 unknown/inactive combination | tests/unit/api/test_notification_ui_gateway.py |
 | GET | `/api/photos` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/photos` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/photos/batch-delete` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |

@@ -18,6 +18,7 @@ from api import (
     horse_service_router,
     horses_router,
     news_router,
+    notification_settings_router,
     photos_router,
     prices_router,
     service_users_router,
@@ -25,7 +26,7 @@ from api import (
     user_management_router,
     users_router,
 )
-from containers import ApplicationContainer
+from containers import container
 from core.exceptions.auth import ForbiddenError, InvalidCredentials, InvalidServiceKey
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.exceptions.tenant import TenantNotFound
@@ -35,8 +36,6 @@ from utils.configure_logger import configure_logger
 from utils.seeding.init_registry import init_registry
 
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
-
-container = ApplicationContainer()
 
 
 @asynccontextmanager
@@ -71,6 +70,7 @@ router.include_router(horse_service_router)
 router.include_router(horse_service_relations_router)
 router.include_router(horses_router, prefix="/horses", tags=["Horses"])
 router.include_router(news_router)
+router.include_router(notification_settings_router)
 router.include_router(photos_router)
 router.include_router(prices_router)
 router.include_router(site_settings_router)

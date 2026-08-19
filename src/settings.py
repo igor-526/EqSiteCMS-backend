@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     email_service_url: str = Field(
         default="http://email-service:8000", alias="EMAIL_SERVICE_URL"
     )
+    notification_service_url: str = Field(
+        default="http://notification-service:8000", alias="NOTIFICATION_SERVICE_URL"
+    )
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

@@ -4,12 +4,14 @@ from uuid import UUID
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 
 from clients.email_service.schemas import (
     EmailConfirmRequest,
     EmailCreateRequest,
     EmailSendConfirmationRequest,
     EmailUpdateRequest,
+    EmailResponse,
 )
 from core.exceptions.base import ClientError
 from core.schemas.users import UserOutDto
@@ -30,6 +32,21 @@ def _raise_downstream_error(exc: httpx.HTTPStatusError) -> NoReturn:
     except ValueError:
         detail = "Email service returned an invalid response"
     raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+
+
+@router.get("/me", response_model=EmailResponse)
+async def get_my_email(
+    actor: Annotated[UserOutDto, Depends(get_current_user)],
+    service: Annotated[EmailProxyService, Depends(get_email_proxy_service)],
+) -> EmailResponse:
+    try:
+        return await service.get_mine(actor=actor)
+    except httpx.HTTPStatusError as exc:
+        _raise_downstream_error(exc)
+    except (httpx.RequestError, ValidationError, ValueError) as exc:
+        raise HTTPException(
+            status_code=502, detail="Email service unavailable"
+        ) from exc
 
 
 @router.post("", response_model=dict, status_code=201)

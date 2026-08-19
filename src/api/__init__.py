@@ -9,6 +9,7 @@ from .horse_service import router as horse_service_router
 from .horse_service_relations import router as horse_service_relations_router
 from .horses import router as horses_router
 from .news import router as news_router
+from .notification_settings import router as notification_settings_router
 from .photos import router as photos_router
 from .prices import router as prices_router
 from .service_users import router as service_users_router
@@ -28,6 +29,7 @@ __all__ = [
     "horse_service_relations_router",
     "horses_router",
     "news_router",
+    "notification_settings_router",
     "photos_router",
     "prices_router",
     "service_users_router",
