@@ -53,7 +53,7 @@ async def lifespan(_: FastAPI):
     await nats_client.setup()
     metrics_runtime = None
 
-    if settings.environment == 'production':
+    if settings.environment == "production":
         metrics_runtime = start_http_server(
             port=9000,
             addr="0.0.0.0",
