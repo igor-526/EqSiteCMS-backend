@@ -11,6 +11,7 @@
 - Alembic
 - NATS JetStream
 - Sentry (опционально)
+- Prometheus (production metrics во внутренней сети)
 
 ## Архитектура
 
@@ -81,4 +82,7 @@ Backend выступает в роли **Publisher** — публикует со
 | `NATS_STREAM_SITE_EVENTS` | Имя stream для событий сайта | `SITE_EVENTS` |
 | `NATS_SUBJECT_CALLBACK_REQUESTED` | Subject для событий обратного звонка | `events.site.callback.requested` |
 
-Sentry включается через `SENTRY_ENABLED=true` и `SENTRY_DSN`. Prometheus в шаблон не входит.
+Sentry включается через `SENTRY_ENABLED=true` и `SENTRY_DSN`. В production
+Prometheus доступен внутри контейнера на `:9000/metrics`; port не публикуется на
+host. Полная матрица настроек, проверка и rollback описаны в
+[`docs/operations/observability.md`](../../docs/operations/observability.md).

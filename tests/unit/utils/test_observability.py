@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from pydantic import ValidationError
@@ -101,3 +101,35 @@ def test_metrics_listener_is_production_only(
     monkeypatch.setattr(observability, "start_http_server", starter)
     assert observability.start_metrics_runtime(environment=environment) is None
     starter.assert_not_called()
+
+
+async def test_lifespan_keeps_nats_failure_and_does_not_start_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import main
+
+    nats = Mock(connect=AsyncMock(side_effect=RuntimeError("nats unavailable")))
+    monkeypatch.setattr(main, "init_registry", AsyncMock())
+    monkeypatch.setattr(main.container, "nats_client", Mock(return_value=nats))
+    start_metrics = Mock()
+    monkeypatch.setattr(main, "start_metrics_runtime", start_metrics)
+    with pytest.raises(RuntimeError, match="nats unavailable"):
+        async with main.lifespan(main.app):
+            pass
+    start_metrics.assert_not_called()
+
+
+async def test_lifespan_closes_metrics_and_nats_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import main
+
+    nats = Mock(connect=AsyncMock(), setup=AsyncMock(), close=AsyncMock())
+    runtime = Mock()
+    monkeypatch.setattr(main, "init_registry", AsyncMock())
+    monkeypatch.setattr(main.container, "nats_client", Mock(return_value=nats))
+    monkeypatch.setattr(main, "start_metrics_runtime", Mock(return_value=runtime))
+    async with main.lifespan(main.app):
+        pass
+    runtime.close.assert_called_once_with()
+    nats.close.assert_awaited_once_with()
