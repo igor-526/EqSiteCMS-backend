@@ -137,6 +137,28 @@ def test_horse_create_extra_kind_returns_structural_422() -> None:
     assert "body -> kind" in response.json()["detail"]
 
 
+def test_horse_create_missing_name_returns_structural_422() -> None:
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = lambda: object()
+    app.dependency_overrides[get_protected_equestrian_context] = lambda: (
+        EquestrianContext(
+            id=UUID("11111111-1111-4111-8111-111111111111"),
+            source="unit-test",
+        )
+    )
+    app.dependency_overrides[get_horse_service] = lambda: object()
+
+    try:
+        response = client.post("/api/horses", json={})
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        app.dependency_overrides.pop(get_protected_equestrian_context, None)
+        app.dependency_overrides.pop(get_horse_service, None)
+
+    assert response.status_code == 422
+    assert "body -> name" in response.json()["detail"]
+
+
 def test_horse_update_extra_kind_returns_structural_422() -> None:
     client = TestClient(app)
     app.dependency_overrides[get_current_user] = lambda: object()

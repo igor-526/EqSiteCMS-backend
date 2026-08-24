@@ -23,6 +23,8 @@ from core.entities import (
 )
 from core.entities.horse import HorseDateModeEnum
 from core.exceptions.base import ClientError
+from core.exceptions.auth import ForbiddenError
+from core.protocols.repositories.horse_repository import HorseSlugConflictError
 from core.schemas import (
     HorseCreateInDto,
     HorseOutDto,
@@ -33,7 +35,7 @@ from core.schemas import (
     UserOutDto,
 )
 from core.schemas.horses import FoalParentsDto, HorseFoalOutDto, HorsePhotosUpdateInDto
-from core.services.horse import HorseService
+from core.services.horse import HORSE_SLUG_MAX_ATTEMPTS, HorseService
 
 pytestmark = pytest.mark.asyncio
 
@@ -74,6 +76,20 @@ class FakeHorseRepository:
         self.calls.append(("create", entity))
         self._fail_if_needed("create")
         return self.add(entity)
+
+    async def find_by_slug(self, slug: str, *, equestrian_id: UUID) -> Horse | None:
+        self.calls.append(
+            ("find_by_slug", {"slug": slug, "equestrian_id": equestrian_id})
+        )
+        self._fail_if_needed("find_by_slug")
+        return next(
+            (
+                horse
+                for horse in self.by_id.values()
+                if horse.slug == slug and horse.equestrian_id == equestrian_id
+            ),
+            None,
+        )
 
     async def update(self, entity: Horse) -> Horse:
         self.calls.append(("update", entity))
@@ -438,7 +454,7 @@ async def test_create_horse_uc16_reference_validation_runs_before_create() -> No
         payload for name, payload in horse_repo.calls if name == "create"
     )
     assert not hasattr(created_entity, "kind")
-    assert [name for name, _ in horse_repo.calls] == ["create"]
+    assert [name for name, _ in horse_repo.calls] == ["find_by_slug", "create"]
 
 
 async def test_create_horse_uc16_missing_reference_returns_client_error() -> None:
@@ -452,6 +468,263 @@ async def test_create_horse_uc16_missing_reference_returns_client_error() -> Non
         )
 
     assert horse_repo.calls == []
+
+
+async def test_horse_slug_h01_first_name_uses_base_slug() -> None:
+    service, _, _, _, _, _ = make_service()
+    created = await service.create_horse(
+        create_data=HorseCreateInDto(name="Норманн"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert created.slug == "normann"
+
+
+@pytest.mark.parametrize(
+    ("occupied", "expected"),
+    [
+        (["normann"], "normann-1"),
+        (["normann", "normann-1", "normann-2"], "normann-3"),
+        (["normann", "normann-2"], "normann-1"),
+    ],
+    ids=["h02-second", "h03-contiguous", "h04-gap"],
+)
+async def test_horse_slug_h02_h04_chooses_minimal_suffix(
+    occupied: list[str], expected: str
+) -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    for slug in occupied:
+        horse_repo.add(make_horse(name=slug, slug=slug))
+    created = await service.create_horse(
+        create_data=HorseCreateInDto(name="Норманн"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert created.slug == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("Норманн", "normann"),
+        ("  Норманн  ", "normann"),
+        ("Норманн!!!", "normann"),
+    ],
+    ids=["h05-cyrillic", "h06-space-case", "h07-symbols"],
+)
+async def test_horse_slug_h05_h07_reuses_entity_normalization(
+    name: str, expected: str
+) -> None:
+    service, _, _, _, _, _ = make_service()
+    created = await service.create_horse(
+        create_data=HorseCreateInDto(name=name),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert created.slug == expected
+
+
+async def test_horse_slug_h08_h09_is_tenant_scoped() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    other_tenant = uuid4()
+    horse_repo.add(make_horse(slug="normann", equestrian_id=other_tenant))
+    created = await service.create_horse(
+        create_data=HorseCreateInDto(name="Норманн"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert created.slug == "normann"
+    lookup = next(
+        payload for name, payload in horse_repo.calls if name == "find_by_slug"
+    )
+    assert lookup["equestrian_id"] == TEST_EQUESTRIAN_CONTEXT.id
+
+
+@pytest.mark.parametrize(
+    ("occupied_count", "expected"),
+    [
+        (0, "a" * 63),
+        (1, f"{'a' * 61}-1"),
+        (10, f"{'a' * 60}-10"),
+    ],
+    ids=["h10-max-base", "h11-one-digit", "h12-multi-digit"],
+)
+async def test_horse_slug_h10_h13_obeys_full_length_limit(
+    occupied_count: int, expected: str
+) -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    base = "a" * 63
+    if occupied_count:
+        horse_repo.add(make_horse(name=base, slug=base))
+        for suffix in range(1, occupied_count):
+            suffix_text = f"-{suffix}"
+            horse_repo.add(
+                make_horse(slug=f"{base[: 63 - len(suffix_text)]}{suffix_text}")
+            )
+    created = await service.create_horse(
+        create_data=HorseCreateInDto(name=base),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert created.slug == expected
+    assert len(created.slug) <= 63
+    if occupied_count:
+        assert created.slug.endswith(f"-{occupied_count}")
+
+
+async def test_horse_slug_h14_degenerate_name_is_client_error() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    with pytest.raises(ClientError, match="slug"):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="!!!"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "create" for name, _ in horse_repo.calls)
+
+
+@pytest.mark.parametrize("scope", ["SUPERUSER", "ADMIN", "DEVELOPER"])
+async def test_horse_slug_h15_h17_allowed_scopes_create(scope: str) -> None:
+    service, _, _, _, _, _ = make_service()
+    created = await service.create_horse(
+        create_data=HorseCreateInDto(name=f"Horse {scope}"),
+        user=make_user(scope_names=[scope]),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert created.slug
+
+
+async def test_horse_slug_h18_missing_scope_fails_before_lookup() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    with pytest.raises(ForbiddenError):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Horse"),
+            user=make_user(scope_names=["CONTENT_EDITOR"]),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert horse_repo.calls == []
+
+
+async def test_horse_slug_h19_anonymous_fails_before_lookup() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    with pytest.raises(ClientError):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Horse"),
+            user=None,
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert horse_repo.calls == []
+
+
+@pytest.mark.parametrize(
+    ("field", "message"),
+    [
+        ("breed_id", "Порода"),
+        ("coat_color_id", "Масть"),
+        ("horse_owner_id", "Владелец"),
+    ],
+    ids=["h20-invalid-breed", "h21-invalid-coat", "h22-invalid-owner"],
+)
+async def test_horse_slug_h20_h22_invalid_reference_prevents_insert(
+    field: str, message: str
+) -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    with pytest.raises(ClientError, match=message):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Норманн", **{field: uuid4()}),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "create" for name, _ in horse_repo.calls)
+
+
+async def test_horse_slug_h23_entity_validation_maps_to_client_error() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    invalid_command = HorseCreateInDto.model_construct(name="x")
+    with pytest.raises(ClientError):
+        await service.create_horse(
+            create_data=invalid_command,
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "create" for name, _ in horse_repo.calls)
+
+
+async def test_horse_slug_h24_response_contains_suffix() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse_repo.add(make_horse(slug="normann"))
+    result = await service.create_horse(
+        create_data=HorseCreateInDto(name="Норманн"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "normann-1"
+
+
+async def test_horse_slug_h25_h27_race_becomes_bounded_client_error() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+
+    async def conflict(entity: Horse) -> Horse:
+        del entity
+        raise HorseSlugConflictError
+
+    horse_repo.create = conflict  # type: ignore[method-assign]
+    with pytest.raises(ClientError, match="повторите"):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Норманн"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert [name for name, _ in horse_repo.calls].count("find_by_slug") == 1
+
+
+async def test_horse_slug_h26_candidate_scan_has_hard_limit() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    lookups = 0
+
+    async def always_occupied(slug: str, *, equestrian_id: UUID) -> Horse:
+        nonlocal lookups
+        lookups += 1
+        return make_horse(slug=slug, equestrian_id=equestrian_id)
+
+    horse_repo.find_by_slug = always_occupied  # type: ignore[method-assign]
+    with pytest.raises(ClientError, match="подобрать свободный slug"):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Норманн"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "create" for name, _ in horse_repo.calls)
+    assert lookups == HORSE_SLUG_MAX_ATTEMPTS
+
+
+async def test_horse_slug_h29_generic_repository_error_propagates() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse_repo.fail_on.add("create")
+    with pytest.raises(RepositoryError):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Норманн"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+
+
+async def test_horse_slug_h30_input_is_not_mutated_between_calls() -> None:
+    service, _, _, _, _, _ = make_service()
+    command = HorseCreateInDto(name="Норманн")
+    before = command.model_dump()
+    first = await service.create_horse(
+        create_data=command,
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    second = await service.create_horse(
+        create_data=command,
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert command.model_dump() == before
+    assert (first.slug, second.slug) == ("normann", "normann-1")
 
 
 async def test_get_horse_by_slug_or_id_uc12_uuid_vs_slug_deterministic() -> None:

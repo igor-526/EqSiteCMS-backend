@@ -128,7 +128,10 @@ class SentrySettings(BaseSettings):
     )
 
     @model_validator(mode="after")
-    def validate_production_secrets(self) -> "SentrySettings":
+    def validate_sentry_configuration(self) -> "SentrySettings":
+        self.sentry_dsn = self.sentry_dsn.strip()
+        self.sentry_environment = self.sentry_environment.strip()
+        self.sentry_release = (self.sentry_release or "").strip() or None
         if self.sentry_enabled and not self.sentry_dsn:
             raise ValueError("SENTRY_DSN is required when SENTRY_ENABLED=true")
         return self

@@ -14,8 +14,16 @@ from core.schemas import HorseOutDto, HorseWithPedigreeOutDto
 from .base_repository import TenantBaseRepositoryProtocol
 
 
+class HorseSlugConflictError(Exception):
+    """The tenant-scoped horse slug unique constraint rejected an insert."""
+
+
 class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
     """Протокол для работы с лошадьми."""
+
+    async def find_by_slug(self, slug: str, *, equestrian_id: UUID) -> Horse | None:
+        """Return a horse with this slug in the selected tenant, if any."""
+        ...
 
     async def get_horse_full_info_by_slug(
         self, *, horse_slug: str, equestrian_id: UUID, pedigree: int | None = None

@@ -3,11 +3,13 @@ from __future__ import annotations
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import ClauseElement
 
 from core.entities import Horse
 from core.entities.horse import HorseKindEnum, HorseSexEnum
+from core.protocols.repositories.horse_repository import HorseSlugConflictError
 from repositories.horse_repository import HorseRepository
 
 
@@ -43,6 +45,15 @@ class FakeAsyncSession:
         return FakeExecuteResult()
 
     async def flush(self) -> None:
+        return None
+
+    def begin_nested(self) -> "FakeAsyncSession":
+        return self
+
+    async def __aenter__(self) -> "FakeAsyncSession":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
         return None
 
 
@@ -135,6 +146,73 @@ async def test_horse_repository_insert_and_update_pedigree_name() -> None:
     assert "pedigree_name" in insert_sql and "'EXT-1'" in insert_sql
     assert "pedigree_name=NULL" in update_sql
     assert str(tenant_id) in update_sql
+
+
+class ConstraintViolation(Exception):
+    def __init__(self, constraint_name: str) -> None:
+        self.constraint_name = constraint_name
+
+
+class AsyncpgIntegrityWrapper(Exception):
+    """Shape used by SQLAlchemy's asyncpg adapter around driver exceptions."""
+
+    def __init__(self, driver_error: BaseException) -> None:
+        super().__init__(str(driver_error))
+        self.__cause__ = driver_error
+
+
+class FailingAsyncSession(FakeAsyncSession):
+    def __init__(self, failure: str | BaseException) -> None:
+        super().__init__()
+        self.failure = failure
+
+    async def execute(self, statement: ClauseElement) -> FakeExecuteResult:
+        orig = (
+            self.failure
+            if isinstance(self.failure, BaseException)
+            else ConstraintViolation(self.failure)
+        )
+        raise IntegrityError(str(statement), {}, orig)
+
+
+@pytest.mark.asyncio
+async def test_horse_repository_h25_maps_only_slug_constraint() -> None:
+    repository = HorseRepository(
+        session=FailingAsyncSession("ix_horse_equestrian_slug"),  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    with pytest.raises(HorseSlugConflictError):
+        await repository.create(
+            Horse(equestrian_id=uuid4(), name="Норманн", slug="normann")
+        )
+
+
+@pytest.mark.asyncio
+async def test_horse_repository_h25_maps_nested_asyncpg_slug_constraint() -> None:
+    driver_error = ConstraintViolation("ix_horse_equestrian_slug")
+    repository = HorseRepository(
+        session=FailingAsyncSession(  # type: ignore[arg-type]
+            AsyncpgIntegrityWrapper(driver_error)
+        ),
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+
+    with pytest.raises(HorseSlugConflictError):
+        await repository.create(
+            Horse(equestrian_id=uuid4(), name="Норманн", slug="normann")
+        )
+
+
+@pytest.mark.asyncio
+async def test_horse_repository_h28_does_not_mask_other_constraint() -> None:
+    repository = HorseRepository(
+        session=FailingAsyncSession("some_other_unique_constraint"),  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    with pytest.raises(IntegrityError):
+        await repository.create(
+            Horse(equestrian_id=uuid4(), name="Норманн", slug="normann")
+        )
 
 
 @pytest.mark.asyncio

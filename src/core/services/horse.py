@@ -26,6 +26,7 @@ from core.protocols.repositories import (
     HorseRepositoryProtocol,
 )
 from core.protocols.repositories.horse_repository import HorseChildrenRepositoryProtocol
+from core.protocols.repositories.horse_repository import HorseSlugConflictError
 from core.protocols.repositories.photo_repository import PhotoRepositoryProtocol
 from core.schemas import (
     BreedOutDto,
@@ -44,12 +45,34 @@ from core.schemas import (
 )
 
 _PedigreeMode = Literal["sire", "dam", "children"]
+HORSE_SLUG_MAX_LENGTH = 63
+HORSE_SLUG_MAX_ATTEMPTS = 1_000
 
 
 class HorseService:
     """Сервис для работы с лошадьми."""
 
     _ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
+
+    async def _get_available_slug(
+        self, *, base_slug: str, equestrian_context: EquestrianContext
+    ) -> str:
+        if not base_slug:
+            raise ClientError("Не удалось сформировать slug из имени лошади")
+
+        for suffix in range(HORSE_SLUG_MAX_ATTEMPTS):
+            suffix_text = "" if suffix == 0 else f"-{suffix}"
+            candidate = (
+                f"{base_slug[: HORSE_SLUG_MAX_LENGTH - len(suffix_text)]}{suffix_text}"
+            )
+            if (
+                await self.horse_repository.find_by_slug(
+                    candidate, equestrian_id=equestrian_context.id
+                )
+                is None
+            ):
+                return candidate
+        raise ClientError("Не удалось подобрать свободный slug лошади")
 
     def __init__(
         self,
@@ -357,8 +380,14 @@ class HorseService:
                 this_stable=create_data.this_stable,
             )
         except ValidationError as ex:
-            raise ClientError(str(ex))
-        new_horse = await self.horse_repository.create(horse)
+            raise ClientError(str(ex)) from ex
+        horse.slug = await self._get_available_slug(
+            base_slug=horse.slug or "", equestrian_context=equestrian_context
+        )
+        try:
+            new_horse = await self.horse_repository.create(horse)
+        except HorseSlugConflictError as ex:
+            raise ClientError("Slug лошади уже занят; повторите создание") from ex
         return self._get_horse_dto(
             horse=new_horse,
             breed=horse_breed,

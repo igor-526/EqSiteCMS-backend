@@ -4,6 +4,7 @@ from typing import Mapping, Union
 from uuid import UUID
 
 from sqlalchemy import Table, and_, delete, exists, func, insert, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -16,6 +17,7 @@ from core.entities import (
     HorseSexEnum,
 )
 from core.protocols.media import PhotoUrlBuilderProtocol
+from core.protocols.repositories.horse_repository import HorseSlugConflictError
 from core.schemas import (
     BreedOutDto,
     CoatColorOutDto,
@@ -46,6 +48,35 @@ from .abstract_repository import TenantScopedRepository
 _BREED_PREFIX = "breed__"
 _COAT_COLOR_PREFIX = "coat_color__"
 _HORSE_OWNER_PREFIX = "horse_owner__"
+_HORSE_SLUG_CONSTRAINT = "ix_horse_equestrian_slug"
+
+
+def _integrity_error_constraint_name(error: IntegrityError) -> str | None:
+    """Extract a PostgreSQL constraint name through SQLAlchemy driver wrappers."""
+    pending: list[BaseException] = [error]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+
+        constraint_name = getattr(current, "constraint_name", None)
+        if isinstance(constraint_name, str):
+            return constraint_name
+        diag = getattr(current, "diag", None)
+        diagnostic_name = getattr(diag, "constraint_name", None)
+        if isinstance(diagnostic_name, str):
+            return diagnostic_name
+
+        for nested in (
+            getattr(current, "orig", None),
+            current.__cause__,
+            current.__context__,
+        ):
+            if isinstance(nested, BaseException):
+                pending.append(nested)
+    return None
 
 
 def _labeled_columns(table: Table, prefix: str) -> list:
@@ -79,6 +110,16 @@ class HorseRepository(TenantScopedRepository[Horse]):
     ) -> None:
         super().__init__(session=session)
         self.photo_url_builder = photo_url_builder
+
+    async def create(self, entity: Horse) -> Horse:
+        """Insert a horse behind a savepoint so a slug race keeps the UoW usable."""
+        try:
+            async with self.session.begin_nested():
+                return await super().create(entity)
+        except IntegrityError as ex:
+            if _integrity_error_constraint_name(ex) == _HORSE_SLUG_CONSTRAINT:
+                raise HorseSlugConflictError from ex
+            raise
 
     @staticmethod
     def _row_to_joined_table(row: Mapping, table: Table, suffixes: list[str]) -> dict:

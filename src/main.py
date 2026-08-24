@@ -35,8 +35,7 @@ from settings import settings
 from utils.configure_logger import configure_logger
 from utils.seeding.init_registry import init_registry
 from utils.configure_sentry import configure_sentry
-
-from prometheus_client import start_http_server
+from utils.observability import start_metrics_runtime
 from prometheus_fastapi_instrumentator import Instrumentator
 
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
@@ -51,23 +50,13 @@ async def lifespan(_: FastAPI):
 
     await nats_client.connect()
     await nats_client.setup()
-    metrics_runtime = None
-
-    if settings.environment == "production":
-        metrics_runtime = start_http_server(
-            port=9000,
-            addr="0.0.0.0",
-        )
+    metrics_runtime = start_metrics_runtime(environment=settings.environment)
 
     try:
         yield
     finally:
         if metrics_runtime is not None:
-            metrics_server, metrics_thread = metrics_runtime
-
-            metrics_server.shutdown()
-            metrics_server.server_close()
-            metrics_thread.join()
+            metrics_runtime.close()
         await nats_client.close()
 
 
@@ -170,6 +159,12 @@ def validation_error_handler(
                 and error.get("loc", [None])[0] == "body"
             )
             or error.get("type") == "extra_forbidden"
+            or (
+                request.method == "POST"
+                and request.url.path == "/api/horses"
+                and error.get("loc", [None])[0] == "body"
+                and error.get("type") == "missing"
+            )
             or error.get("loc", [None, None])[:2] == ("query", "sort")
             or error.get("loc", [None, None])[:2] == ("query", "services")
             for error in errors
