@@ -5,6 +5,7 @@ metadata:
   namespace: {{ .Values.namespace }}
   annotations:
     nginx.ingress.kubernetes.io/add-base-url: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingressProxyBodySize | quote }}
     cert-manager.io/cluster-issuer: "letsencrypt-production"
 spec:
   tls:

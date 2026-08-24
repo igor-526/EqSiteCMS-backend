@@ -22,6 +22,7 @@ metrics:
 
 # Ingress settings
 url: api.eqcms.ru
+ingressProxyBodySize: 20m
 
 # Image settings
 image: ghcr.io/igor-526/eqsitecms-backend

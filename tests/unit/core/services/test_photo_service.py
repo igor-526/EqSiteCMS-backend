@@ -53,12 +53,23 @@ class FakePhotoRepository:
         self.add(entity)
         return entity
 
+    async def try_create(self, entity: Photo) -> Photo | None:
+        if entity.name in self.by_name:
+            return None
+        return await self.create(entity)
+
     async def update(self, entity: Photo) -> Photo:
         self.calls.append(("update", entity))
         self.operation_log.append("repo.update")
         self._fail_if_needed("update")
         self.add(entity)
         return entity
+
+    async def try_update(self, entity: Photo) -> Photo | None:
+        existing = self.by_name.get(entity.name)
+        if existing is not None and existing.id != entity.id:
+            return None
+        return await self.update(entity)
 
     async def get_by_id(self, id: UUID) -> Photo | None:
         self.calls.append(("get_by_id", id))
@@ -220,7 +231,7 @@ async def test_generate_unique_name_uc01_uc14_uc15_returns_available_suffix() ->
         await service._generate_unique_name(
             "Hero", equestrian_context=TEST_EQUESTRIAN_CONTEXT
         )
-        == "Hero-1"
+        == "Hero-2"
     )
     assert (
         await service._generate_unique_name(
@@ -263,9 +274,8 @@ async def test_create_uc01_uc22_saves_then_creates_entity() -> None:
     assert created.name == "Hero"
     assert created.description == "Main"
     assert [name for name, _ in storage.calls] == ["save"]
-    assert [name for name, _ in repo.calls] == ["find_by_name", "create"]
+    assert [name for name, _ in repo.calls] == ["create"]
     assert operation_log == [
-        "repo.find_by_name",
         f"storage.save:{created.path}",
         "repo.create",
     ]
@@ -308,7 +318,7 @@ async def test_create_uc14_duplicate_name_gets_suffix() -> None:
         equestrian_context=TEST_EQUESTRIAN_CONTEXT,
     )
 
-    assert created.name == "Photo-1"
+    assert created.name == "Photo-2"
 
 
 async def test_create_uc29_invalid_extension_uses_client_error() -> None:

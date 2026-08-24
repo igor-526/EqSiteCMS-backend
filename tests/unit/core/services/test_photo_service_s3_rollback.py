@@ -60,11 +60,22 @@ class FakeRepo:
         self.add(entity)
         return entity
 
+    async def try_create(self, entity: Photo) -> Photo | None:
+        if entity.name in self.by_name:
+            return None
+        return await self.create(entity)
+
     async def update(self, entity: Photo) -> Photo:
         self.calls.append(("update", entity))
         self._fail_if("update")
         self.add(entity)
         return entity
+
+    async def try_update(self, entity: Photo) -> Photo | None:
+        existing = self.by_name.get(entity.name)
+        if existing is not None and existing.id != entity.id:
+            return None
+        return await self.update(entity)
 
     async def get_by_id(self, id: UUID) -> Photo | None:
         self.calls.append(("get_by_id", id))

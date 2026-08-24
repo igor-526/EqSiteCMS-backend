@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Index, String, Table
+from sqlalchemy import Column, ForeignKey, String, Table, UniqueConstraint
 
 from utils.basemodel import metadata, timestamp_columns, uuid_pk
 
@@ -16,5 +16,5 @@ photos = Table(
     Column("name", String(63), nullable=False, index=True),
     Column("description", String(511), nullable=True),
     Column("path", String(511), nullable=False),
-    Index("ix_photos_equestrian_name", "equestrian_id", "name"),
+    UniqueConstraint("equestrian_id", "name", name="uq_photos_equestrian_name"),
 )

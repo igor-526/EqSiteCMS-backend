@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from pathlib import Path
 from typing import Literal
@@ -6,6 +7,12 @@ from uuid import UUID
 from core.entities.equestrian import EquestrianContext
 from core.entities.photos import Photo
 from core.exceptions.base import ClientError
+from core.exceptions.base import ConflictError
+from core.photo_names import (
+    MAX_NAME_ATTEMPTS,
+    add_name_discriminator,
+    build_bounded_photo_name,
+)
 from core.protocols.media import (
     MediaStorageProtocol,
     MediaTypeValidatorProtocol,
@@ -35,10 +42,8 @@ class PhotoService:
         equestrian_context: EquestrianContext,
         exclude_id: UUID | None = None,
     ) -> str:
-        counter = 1
-        current_name = base_name
-
-        while True:
+        for attempt in range(1, MAX_NAME_ATTEMPTS + 1):
+            current_name = add_name_discriminator(base_name, attempt)
             existing = await self.photo_repository.find_by_name(
                 current_name, equestrian_id=equestrian_context.id
             )
@@ -46,8 +51,23 @@ class PhotoService:
                 exclude_id is not None and existing.id == exclude_id
             ):
                 return current_name
-            current_name = f"{base_name}-{counter}"
-            counter += 1
+        raise ConflictError("Не удалось подобрать уникальное имя фотографии")
+
+    async def _create_with_unique_name(self, photo: Photo, base_name: str) -> Photo:
+        for attempt in range(1, MAX_NAME_ATTEMPTS + 1):
+            photo.name = add_name_discriminator(base_name, attempt)
+            created = await self.photo_repository.try_create(photo)
+            if created is not None:
+                return created
+        raise ConflictError("Не удалось подобрать уникальное имя фотографии")
+
+    async def _update_with_unique_name(self, photo: Photo, base_name: str) -> Photo:
+        for attempt in range(1, MAX_NAME_ATTEMPTS + 1):
+            photo.name = add_name_discriminator(base_name, attempt)
+            updated = await self.photo_repository.try_update(photo)
+            if updated is not None:
+                return updated
+        raise ConflictError("Не удалось подобрать уникальное имя фотографии")
 
     def _get_file_extension(self, filename: str) -> str:
         return Path(filename).suffix
@@ -62,6 +82,10 @@ class PhotoService:
 
     def _get_name_from_filename(self, filename: str) -> str:
         return Path(filename).stem
+
+    def _get_display_name_from_filename(self, filename: str) -> str:
+        stem = self._get_name_from_filename(filename)
+        return filename if len(stem) > 63 else stem
 
     def _validate_file_type(
         self, filename: str, content: bytes, content_type: str | None = None
@@ -92,12 +116,12 @@ class PhotoService:
         if not upload.filename:
             raise ClientError("Имя файла не указано")
         self._validate_file_type(upload.filename, upload.content, upload.content_type)
-        name = data.name
-        if not name or name.strip() == "":
-            name = self._get_name_from_filename(upload.filename)
-
-        name = await self._generate_unique_name(
-            name, equestrian_context=equestrian_context
+        source_name = data.name
+        if not source_name or source_name.strip() == "":
+            source_name = self._get_display_name_from_filename(upload.filename)
+        name = build_bounded_photo_name(
+            source_name,
+            identity=b"C" + hashlib.sha256(upload.content).digest(),
         )
         description = data.description if data.description is not None else ""
         filename = self._generate_filename(upload.filename)
@@ -110,7 +134,7 @@ class PhotoService:
             path=filename,
         )
         try:
-            return await self.photo_repository.create(photo)
+            return await self._create_with_unique_name(photo, name)
         except Exception:
             await self._safe_delete_file(filename)
             raise
@@ -147,19 +171,17 @@ class PhotoService:
         update_data = {}
 
         if data.name is not None:
-            name_value = data.name
-            if not name_value or name_value.strip() == "":
+            source_name = data.name
+            if not source_name or source_name.strip() == "":
                 if upload is not None:
-                    name_value = self._get_name_from_filename(upload.filename)
+                    source_name = self._get_display_name_from_filename(upload.filename)
                 else:
-                    name_value = self._get_name_from_filename(photo.path)
+                    source_name = self._get_name_from_filename(photo.path)
 
-            name_value = await self._generate_unique_name(
-                name_value,
-                equestrian_context=equestrian_context,
-                exclude_id=photo.id,
+            update_data["name"] = build_bounded_photo_name(
+                source_name,
+                identity=b"U" + photo.id.bytes,
             )
-            update_data["name"] = name_value
 
         if data.description is not None:
             update_data["description"] = data.description
@@ -171,7 +193,12 @@ class PhotoService:
             return photo
 
         try:
-            updated = await self.photo_repository.update(photo)
+            if "name" in update_data:
+                updated = await self._update_with_unique_name(
+                    photo, update_data["name"]
+                )
+            else:
+                updated = await self.photo_repository.update(photo)
         except Exception:
             if old_filename is not None and new_filename is not None:
                 photo.path = old_filename

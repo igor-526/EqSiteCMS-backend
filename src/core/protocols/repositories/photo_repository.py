@@ -9,6 +9,10 @@ from .base_repository import TenantBaseRepositoryProtocol
 class PhotoRepositoryProtocol(TenantBaseRepositoryProtocol[Photo], Protocol):
     async def find_by_name(self, name: str, *, equestrian_id: UUID) -> Photo | None: ...
 
+    async def try_create(self, entity: Photo) -> Photo | None: ...
+
+    async def try_update(self, entity: Photo) -> Photo | None: ...
+
     async def get_filtered(
         self,
         *,

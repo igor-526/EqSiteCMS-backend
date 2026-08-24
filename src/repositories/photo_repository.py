@@ -2,6 +2,7 @@ from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import Table, func, or_, select
+from sqlalchemy.exc import IntegrityError
 
 from core.entities.photos import Photo
 from models.horse import horse_photos
@@ -14,6 +15,33 @@ from .abstract_repository import TenantScopedRepository
 class PhotoRepository(TenantScopedRepository[Photo]):
     table: Table = photos
     entity = Photo
+
+    @staticmethod
+    def _is_name_conflict(exc: IntegrityError) -> bool:
+        constraint_name = getattr(
+            getattr(exc.orig, "diag", None), "constraint_name", None
+        ) or getattr(exc.orig, "constraint_name", None)
+        return constraint_name == "uq_photos_equestrian_name" or (
+            'constraint "uq_photos_equestrian_name"' in str(exc.orig)
+        )
+
+    async def try_create(self, entity: Photo) -> Photo | None:
+        try:
+            async with self.session.begin_nested():
+                return await super().create(entity)
+        except IntegrityError as exc:
+            if self._is_name_conflict(exc):
+                return None
+            raise
+
+    async def try_update(self, entity: Photo) -> Photo | None:
+        try:
+            async with self.session.begin_nested():
+                return await super().update(entity)
+        except IntegrityError as exc:
+            if self._is_name_conflict(exc):
+                return None
+            raise
 
     async def find_by_name(self, name: str, *, equestrian_id: UUID) -> Photo | None:
         stmt = select(self.table).where(
