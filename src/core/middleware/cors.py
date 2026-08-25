@@ -16,6 +16,17 @@ _PROTECTED_GET_PATH_PREFIXES: tuple[str, ...] = (
 
 _MUTATING_METHODS: frozenset[str] = frozenset({"POST", "PATCH", "DELETE", "PUT"})
 
+# Public write exceptions are deliberately exact method/path pairs.  Do not use
+# prefixes here: adjacent callback CMS/service routes must remain strict.
+_PUBLIC_CORS_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {("POST", "/api/callback_requests")}
+)
+_PUBLIC_CALLBACK_METHODS = "POST, OPTIONS"
+_PUBLIC_CALLBACK_HEADERS: frozenset[str] = frozenset(
+    {"content-type", "x-equestrian-service-key"}
+)
+_CORS_MAX_AGE = "600"
+
 
 def _is_protected_request(
     method: str,
@@ -23,6 +34,9 @@ def _is_protected_request(
     preflight_request_method: str | None = None,
 ) -> bool:
     effective_method = (preflight_request_method or method).upper()
+
+    if (effective_method, path) in _PUBLIC_CORS_ROUTES:
+        return False
 
     if effective_method in _MUTATING_METHODS:
         return True
@@ -60,11 +74,20 @@ class SplitCORSMiddleware:
 
         if method == "OPTIONS" and "access-control-request-method" in headers:
             preflight_method = headers.get("access-control-request-method", "")
+            public_callback = (
+                preflight_method.upper(),
+                path,
+            ) in _PUBLIC_CORS_ROUTES
             protected = (
                 _is_protected_request("OPTIONS", path, preflight_method)
                 or origin in self.cms_origins
             )
-            response = self._preflight_response(origin, headers, protected=protected)
+            response = self._preflight_response(
+                origin,
+                headers,
+                protected=protected,
+                public_callback=public_callback,
+            )
             await response(scope, receive, send)
             return
 
@@ -85,6 +108,7 @@ class SplitCORSMiddleware:
         origin: str,
         request_headers: Headers,
         protected: bool,
+        public_callback: bool,
     ) -> Response:
         if protected:
             if origin not in self.cms_origins:
@@ -96,17 +120,32 @@ class SplitCORSMiddleware:
                 "Access-Control-Allow-Headers": request_headers.get(
                     "access-control-request-headers", "*"
                 ),
-                "Access-Control-Max-Age": "600",
+                "Access-Control-Max-Age": _CORS_MAX_AGE,
                 "Vary": "Origin",
             }
         else:
+            requested_headers = {
+                item.strip().lower()
+                for item in request_headers.get(
+                    "access-control-request-headers", ""
+                ).split(",")
+                if item.strip()
+            }
+            if public_callback and not requested_headers.issubset(
+                _PUBLIC_CALLBACK_HEADERS
+            ):
+                return PlainTextResponse("Disallowed CORS headers", status_code=400)
             resp_headers = {
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": request_headers.get(
-                    "access-control-request-headers", "*"
+                "Access-Control-Allow-Methods": (
+                    _PUBLIC_CALLBACK_METHODS if public_callback else "GET, OPTIONS"
                 ),
-                "Access-Control-Max-Age": "600",
+                "Access-Control-Allow-Headers": (
+                    "Content-Type, X-Equestrian-Service-Key"
+                    if public_callback
+                    else request_headers.get("access-control-request-headers", "*")
+                ),
+                "Access-Control-Max-Age": _CORS_MAX_AGE,
             }
         return PlainTextResponse("OK", status_code=200, headers=resp_headers)
 

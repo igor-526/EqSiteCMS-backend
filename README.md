@@ -66,6 +66,21 @@ make test
 | GET | `/health` | Healthcheck | Public |
 | POST | `/api/callback_requests` | Создание заявки (`name` ≤127, `phone` 1..63, `comment` ≤2000; `X-Equestrian-Service-Key` обязателен) | Public write exception |
 
+### CORS для публичной callback-формы
+
+Только точный runtime route `POST /api/callback_requests` является публичным
+CORS write-исключением. Для consumer origin preflight разрешает `POST, OPTIONS`
+и заголовки `Content-Type`, `X-Equestrian-Service-Key`, отвечает с
+`Access-Control-Allow-Origin: *` без credentials. Неизвестный requested header
+отклоняется. CMS origins по-прежнему получают reflected origin, credentials и
+`Vary: Origin`. Trailing slash, detail/service routes, похожие prefixes и любые
+иные write-запросы остаются в strict CORS режиме.
+
+Tenant selector не является авторизацией и продолжает проверяться application
+слоем: missing/invalid selector возвращает `401`, структурно неверное тело —
+`422`. CORS-заголовок добавляется также к этим ответам, чтобы consumer мог их
+прочитать; payload, БД и NATS-контракты middleware не изменяет.
+
 ## NATS JetStream
 
 Backend выступает в роли **Publisher** — публикует события в NATS JetStream.
