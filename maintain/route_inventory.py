@@ -40,6 +40,13 @@ EMAIL_OWNER = {
     ("DELETE", "/api/emails/{user_id}"),
 }
 SERVICE_ROUTES = {("GET", "/api/service/users/")}
+SERVICE_ROUTES.update(
+    {
+        ("PATCH", "/api/service/callback_requests/{id}/status"),
+        ("PATCH", "/api/service/callback_requests/{id}/spam"),
+        ("PATCH", "/api/service/callback_requests/{id}/notifications-delivered"),
+    }
+)
 NOTIFICATION_SETTINGS_WRITE = {
     ("PATCH", "/api/notification-settings/{event_code}/{channel_code}")
 }
@@ -60,6 +67,10 @@ def classify(method: str, path: str) -> AccessRule:
             "N/A",
             "tests/unit/api/test_route_order.py",
         )
+    if key == ("GET", "/api/callback_requests/statuses"):
+        return AccessRule("public read", "all", "N/A", "N/A", "200", "200", "N/A", "N/A", "tests/unit/api/test_callback_requests_api.py")
+    if method == "GET" and path.startswith("/api/callback_requests"):
+        return AccessRule("protected GET exception", "ADMIN or SUPERUSER", "actor cookie", "tenant scoped", "401", "200; other role 403", "404/non-disclosing", "422 malformed", "tests/unit/api/test_callback_requests_api.py")
     if key in SERVICE_ROUTES:
         return AccessRule(
             "service API",
@@ -70,8 +81,10 @@ def classify(method: str, path: str) -> AccessRule:
             "200 with X-Service-Key",
             "401",
             "400 malformed",
-            "tests/unit/api/test_service_users_api.py",
+            "tests/unit/api/test_callback_requests_api.py" if "callback_requests" in path else "tests/unit/api/test_service_users_api.py",
         )
+    if key == ("POST", "/api/callback_requests"):
+        return AccessRule("public write exception", "anonymous/authenticated", "X-Equestrian-Service-Key or CMS cookie", "tenant scoped", "201; missing/invalid selector 401", "201", "tenant isolated", "422 structural", "tests/unit/api/test_callback_requests_api.py")
     if key in EMAIL_OWNER:
         success = "201" if method == "POST" else ("200" if method == "PATCH" else "204")
         return AccessRule(

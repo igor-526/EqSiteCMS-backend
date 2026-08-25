@@ -11,3 +11,4 @@ from .photo_repository import PhotoRepository
 from .price_repository import PriceGroupRepository, PriceRepository
 from .site_settings_repository import SiteSettingsRepository
 from .user_repository import UserRepository
+from .callback_request_repository import CallbackRequestRepository

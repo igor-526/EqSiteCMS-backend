@@ -14,3 +14,4 @@ from .site_settings_repository import SiteSettingsRepositoryProtocol
 from .token_repository import TokenRepositoryProtocol
 from .user_management_repository import UserManagementRepositoryProtocol
 from .user_repository import UserRepositoryProtocol
+from .callback_request_repository import CallbackRequestRepositoryProtocol

@@ -22,12 +22,9 @@ components:
       headers:
         type: object
         additionalProperties: false
-        required: [Nats-Msg-Id, X-Equestrian-Id]
+        required: [Nats-Msg-Id]
         properties:
           Nats-Msg-Id:
-            type: string
-            format: uuid
-          X-Equestrian-Id:
             type: string
             format: uuid
       payload:

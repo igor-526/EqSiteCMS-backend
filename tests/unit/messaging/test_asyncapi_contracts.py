@@ -151,7 +151,6 @@ async def test_backend_callback_publisher_matches_subject_headers_and_payload() 
     publisher = CallbackRequestEventPublisher(
         client=cast(NatsJetstreamClient, client), settings=settings
     )
-    equestrian_id = uuid4()
     callback_id = uuid4()
 
     event_id = await publisher.publish(
@@ -161,14 +160,11 @@ async def test_backend_callback_publisher_matches_subject_headers_and_payload() 
             comment=None,
             phone="+79990000000",
         ),
-        equestrian_id=equestrian_id,
     )
 
     call = client.calls[0]
     payload = CallbackRequestedData.model_validate_json(call["payload"])
     assert call["subject"] == "events.site.callback.requested"
-    assert call["headers"] == {
-        "Nats-Msg-Id": str(event_id),
-        "X-Equestrian-Id": str(equestrian_id),
-    }
+    assert call["headers"] == {"Nats-Msg-Id": str(event_id)}
+    assert "equestrian_id" not in payload.model_dump()
     assert payload.callback_request_id == callback_id

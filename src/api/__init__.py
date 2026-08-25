@@ -2,6 +2,7 @@ from .auth import router as auth_router
 from .breed_groups import router as breed_groups_router
 from .breeds import router as breeds_router
 from .callback_request import router as callback_request_router
+from .callback_request import service_router as service_callback_request_router
 from .coat_color import router as coat_color_router
 from .emails import router as emails_router
 from .horse_owner import router as horse_owner_router
@@ -22,6 +23,7 @@ __all__ = [
     "breeds_router",
     "breed_groups_router",
     "callback_request_router",
+    "service_callback_request_router",
     "coat_color_router",
     "emails_router",
     "horse_owner_router",

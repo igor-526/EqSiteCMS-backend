@@ -9,7 +9,7 @@ from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from utils.database import get_db
-from utils.seeding.seeders import UserScopesSeeder
+from utils.seeding.seeders import CallbackRequestStatusesSeeder, UserScopesSeeder
 from utils.seeding.seeders.base_seeder import BaseSeeder
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ async def run_seeders_with_retry(
 
 
 def _build_seeders(session: AsyncSession) -> list[BaseSeeder]:
-    return [UserScopesSeeder(session)]
+    return [UserScopesSeeder(session), CallbackRequestStatusesSeeder(session)]
 
 
 async def init_registry() -> None:

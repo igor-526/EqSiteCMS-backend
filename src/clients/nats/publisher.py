@@ -46,15 +46,12 @@ class CallbackRequestEventPublisher(NatsEventPublisher):
             settings=settings,
         )
 
-    async def publish(
-        self, *, payload: CallbackRequestedData, equestrian_id: UUID
-    ) -> UUID:
+    async def publish(self, *, payload: CallbackRequestedData) -> UUID:
         event = MessagingEvent(
             event_subject=self._settings.nats_subject_callback_requested
         )
         await self._publish_event(
             event=event,
             payload=payload,
-            headers={"X-Equestrian-Id": str(equestrian_id)},
         )
         return event.event_id

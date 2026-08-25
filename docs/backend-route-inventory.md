@@ -2,7 +2,7 @@
 
 Generated from the registered FastAPI router graph. Do not edit manually.
 
-Route entries: **96**
+Route entries: **104**
 
 | method | path | access class | roles | tenant selector | owner rule | without auth | with auth | foreign | validation | tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -11,7 +11,12 @@ Route entries: **96**
 | GET | `/api/auth/me` | protected GET exception | authenticated/scoped | cookie tenant | tenant/role scoped | 401 | 200 | 403 or tenant-scoped | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/auth/refresh` | public auth exception | refresh-cookie holder | N/A | self | 401 without refresh cookie | 200 with valid refresh cookie | N/A | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/auth/register` | public write exception | all | body/host as applicable | N/A | success/domain status without access cookie | same contract | N/A | 400/422 by endpoint contract | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| POST | `/api/callback_requests` | public write exception | all | body/host as applicable | N/A | success/domain status without access cookie | same contract | N/A | 400/422 by endpoint contract | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/callback_requests` | protected GET exception | ADMIN or SUPERUSER | actor cookie | tenant scoped | 401 | 200; other role 403 | 404/non-disclosing | 422 malformed | tests/unit/api/test_callback_requests_api.py |
+| POST | `/api/callback_requests` | public write exception | anonymous/authenticated | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 201; missing/invalid selector 401 | 201 | tenant isolated | 422 structural | tests/unit/api/test_callback_requests_api.py |
+| GET | `/api/callback_requests/statuses` | public read | all | N/A | N/A | 200 | 200 | N/A | N/A | tests/unit/api/test_callback_requests_api.py |
+| GET | `/api/callback_requests/{id}` | protected GET exception | ADMIN or SUPERUSER | actor cookie | tenant scoped | 401 | 200; other role 403 | 404/non-disclosing | 422 malformed | tests/unit/api/test_callback_requests_api.py |
+| PATCH | `/api/callback_requests/{id}/spam` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| PATCH | `/api/callback_requests/{id}/status` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | PATCH | `/api/emails` | protected owner write | owner only | actor cookie | target user_id == actor.id; no role override | 401 | 200 | 403 before lookup/downstream | 400 malformed/invalid; 404 missing; 409 different create | tests/unit/api/test_email_proxy_api.py |
 | POST | `/api/emails` | protected owner write | owner only | actor cookie | target user_id == actor.id; no role override | 401 | 201 | 403 before lookup/downstream | 400 malformed/invalid; 404 missing; 409 different create | tests/unit/api/test_email_proxy_api.py |
 | PATCH | `/api/emails/confirm` | public write exception | all | body/host as applicable | N/A | success/domain status without access cookie | same contract | N/A | 400 malformed/invalid | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
@@ -83,6 +88,9 @@ Route entries: **96**
 | GET | `/api/prices/{slug_or_id}` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | PATCH | `/api/prices/{slug_or_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/prices/{slug_or_id}/photos` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| PATCH | `/api/service/callback_requests/{id}/notifications-delivered` | service API | microservice | N/A | N/A | 401 | 200 with X-Service-Key | 401 | 400 malformed | tests/unit/api/test_callback_requests_api.py |
+| PATCH | `/api/service/callback_requests/{id}/spam` | service API | microservice | N/A | N/A | 401 | 200 with X-Service-Key | 401 | 400 malformed | tests/unit/api/test_callback_requests_api.py |
+| PATCH | `/api/service/callback_requests/{id}/status` | service API | microservice | N/A | N/A | 401 | 200 with X-Service-Key | 401 | 400 malformed | tests/unit/api/test_callback_requests_api.py |
 | GET | `/api/service/users/` | service API | microservice | N/A | N/A | 401 | 200 with X-Service-Key | 401 | 400 malformed | tests/unit/api/test_service_users_api.py |
 | GET | `/api/site_settings` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/site_settings` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |

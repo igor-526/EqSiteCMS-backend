@@ -11,3 +11,4 @@ from models.prices import price_groups, price_groups_relations, price_photos, pr
 from models.site_settings import site_settings
 from models.tokens import tokens
 from models.users import user_scopes, users
+from models.callback_request import callback_request_statuses, callback_requests

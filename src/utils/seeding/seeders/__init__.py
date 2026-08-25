@@ -1,1 +1,2 @@
 from .user_scopes_seeder import UserScopesSeeder
+from .callback_request_statuses_seeder import CallbackRequestStatusesSeeder

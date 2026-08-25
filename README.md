@@ -64,7 +64,7 @@ make test
 | Метод | Путь | Назначение | Доступ |
 |-------|------|------------|--------|
 | GET | `/health` | Healthcheck | Public |
-| POST | `/api/callback_requests` | Создание заявки на обратный звонок | Public |
+| POST | `/api/callback_requests` | Создание заявки (`name` ≤127, `phone` 1..63, `comment` ≤2000; `X-Equestrian-Service-Key` обязателен) | Public write exception |
 
 ## NATS JetStream
 

@@ -11,6 +11,7 @@ from api import (
     breed_groups_router,
     breeds_router,
     callback_request_router,
+    service_callback_request_router,
     coat_color_router,
     emails_router,
     horse_owner_router,
@@ -28,7 +29,12 @@ from api import (
 )
 from containers import container
 from core.exceptions.auth import ForbiddenError, InvalidCredentials, InvalidServiceKey
-from core.exceptions.base import ClientError, ConflictError, NotFoundError
+from core.exceptions.base import (
+    ClientError,
+    ConflictError,
+    NotFoundError,
+    UnprocessableEntityError,
+)
 from core.exceptions.tenant import TenantNotFound
 from core.middleware.cors import SplitCORSMiddleware
 from settings import settings
@@ -94,6 +100,11 @@ service_router = APIRouter(prefix="/api/service")
 service_router.include_router(
     service_users_router, prefix="/users", tags=["Service Users"]
 )
+service_router.include_router(
+    service_callback_request_router,
+    prefix="/callback_requests",
+    tags=["Service Callback Requests"],
+)
 app.include_router(service_router)
 app.include_router(user_management_router)
 
@@ -129,6 +140,13 @@ def client_error_handler(_: Request, exc: ClientError) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
+@app.exception_handler(UnprocessableEntityError)
+def unprocessable_entity_error_handler(
+    _: Request, exc: UnprocessableEntityError
+) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=422)
+
+
 @app.exception_handler(TenantNotFound)
 def tenant_not_found_handler(_: Request, exc: TenantNotFound) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=404)
@@ -152,7 +170,8 @@ def validation_error_handler(
     errors = exc.errors()
     status_code = (
         422
-        if any(
+        if request.url.path.startswith("/api/callback_requests")
+        or any(
             error.get("loc", [None])[0] == "path"
             or (
                 request.url.path.startswith("/api/horses/breed-groups")

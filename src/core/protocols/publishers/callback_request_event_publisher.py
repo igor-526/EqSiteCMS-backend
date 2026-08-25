@@ -5,6 +5,4 @@ from core.schemas import CallbackRequestedData
 
 
 class CallbackRequestEventPublisherProtocol(Protocol):
-    async def publish(
-        self, *, payload: CallbackRequestedData, equestrian_id: UUID
-    ) -> UUID: ...
+    async def publish(self, *, payload: CallbackRequestedData) -> UUID: ...

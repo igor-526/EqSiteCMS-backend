@@ -32,6 +32,7 @@ from core.protocols.repositories import (
     SiteSettingsRepositoryProtocol,
     UserManagementRepositoryProtocol,
     UserRepositoryProtocol,
+    CallbackRequestRepositoryProtocol,
 )
 from core.protocols.repositories.horse_repository import HorseChildrenRepositoryProtocol
 from core.protocols.security import SecurityProtocol
@@ -71,6 +72,7 @@ from depends.repositories import (
     get_site_settings_repository,
     get_user_management_repository,
     get_user_repository,
+    get_callback_request_repository,
 )
 from depends.utils import (
     get_media_storage,
@@ -390,7 +392,11 @@ async def get_callback_request_service(
         CallbackRequestEventPublisherProtocol,
         Depends(get_callback_request_event_publisher),
     ],
+    repository: Annotated[
+        CallbackRequestRepositoryProtocol, Depends(get_callback_request_repository)
+    ],
 ) -> CallbackRequestService:
     return CallbackRequestService(
-        callback_request_event_publisher=callback_request_event_publisher
+        callback_request_event_publisher=callback_request_event_publisher,
+        repository=repository,
     )

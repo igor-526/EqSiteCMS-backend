@@ -21,6 +21,7 @@ from core.protocols.repositories import (
     SiteSettingsRepositoryProtocol,
     UserManagementRepositoryProtocol,
     UserRepositoryProtocol,
+    CallbackRequestRepositoryProtocol,
 )
 from depends.utils import get_photo_url_builder, get_session
 from repositories import (
@@ -39,7 +40,14 @@ from repositories import (
     PriceRepository,
     SiteSettingsRepository,
     UserRepository,
+    CallbackRequestRepository,
 )
+
+
+async def get_callback_request_repository(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> CallbackRequestRepositoryProtocol:
+    return CallbackRequestRepository(session=session)
 
 
 async def get_user_repository(

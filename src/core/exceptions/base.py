@@ -10,6 +10,12 @@ class NotFoundError(ClientError):
     pass
 
 
+class UnprocessableEntityError(ClientError):
+    """Structurally valid request whose callback query cannot be processed safely."""
+
+    pass
+
+
 class ConsistencyError(Exception):
     """Never should be raised."""
 
