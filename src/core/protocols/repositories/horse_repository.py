@@ -15,7 +15,7 @@ from .base_repository import TenantBaseRepositoryProtocol
 
 
 class HorseSlugConflictError(Exception):
-    """The tenant-scoped horse slug unique constraint rejected an insert."""
+    """The tenant-scoped horse slug unique constraint rejected a mutation."""
 
 
 class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
@@ -23,6 +23,12 @@ class HorseRepositoryProtocol(TenantBaseRepositoryProtocol[Horse], Protocol):
 
     async def find_by_slug(self, slug: str, *, equestrian_id: UUID) -> Horse | None:
         """Return a horse with this slug in the selected tenant, if any."""
+        ...
+
+    async def exists_in_other_tenant(
+        self, horse_id: UUID, *, equestrian_id: UUID
+    ) -> bool:
+        """Return whether the UUID belongs to a different tenant."""
         ...
 
     async def get_horse_full_info_by_slug(

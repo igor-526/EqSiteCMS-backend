@@ -111,11 +111,33 @@ class HorseRepository(TenantScopedRepository[Horse]):
         super().__init__(session=session)
         self.photo_url_builder = photo_url_builder
 
+    async def exists_in_other_tenant(
+        self, horse_id: UUID, *, equestrian_id: UUID
+    ) -> bool:
+        stmt = select(
+            exists().where(
+                self.table.c.id == horse_id,
+                self.table.c.equestrian_id != equestrian_id,
+            )
+        )
+        result = await self.session.execute(stmt)
+        return bool(result.scalar())
+
     async def create(self, entity: Horse) -> Horse:
         """Insert a horse behind a savepoint so a slug race keeps the UoW usable."""
         try:
             async with self.session.begin_nested():
                 return await super().create(entity)
+        except IntegrityError as ex:
+            if _integrity_error_constraint_name(ex) == _HORSE_SLUG_CONSTRAINT:
+                raise HorseSlugConflictError from ex
+            raise
+
+    async def update(self, entity: Horse) -> Horse:
+        """Update behind a savepoint and map only the horse slug constraint."""
+        try:
+            async with self.session.begin_nested():
+                return await super().update(entity)
         except IntegrityError as ex:
             if _integrity_error_constraint_name(ex) == _HORSE_SLUG_CONSTRAINT:
                 raise HorseSlugConflictError from ex

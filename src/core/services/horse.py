@@ -55,7 +55,11 @@ class HorseService:
     _ADMIN_SCOPE_NAMES: frozenset[str] = frozenset({"SUPERUSER", "ADMIN", "DEVELOPER"})
 
     async def _get_available_slug(
-        self, *, base_slug: str, equestrian_context: EquestrianContext
+        self,
+        *,
+        base_slug: str,
+        equestrian_context: EquestrianContext,
+        exclude_horse_id: UUID | None = None,
     ) -> str:
         if not base_slug:
             raise ClientError("Не удалось сформировать slug из имени лошади")
@@ -65,12 +69,10 @@ class HorseService:
             candidate = (
                 f"{base_slug[: HORSE_SLUG_MAX_LENGTH - len(suffix_text)]}{suffix_text}"
             )
-            if (
-                await self.horse_repository.find_by_slug(
-                    candidate, equestrian_id=equestrian_context.id
-                )
-                is None
-            ):
+            occupied = await self.horse_repository.find_by_slug(
+                candidate, equestrian_id=equestrian_context.id
+            )
+            if occupied is None or occupied.id == exclude_horse_id:
                 return candidate
         raise ClientError("Не удалось подобрать свободный slug лошади")
 
@@ -362,10 +364,22 @@ class HorseService:
                 horse_owner_id=create_data.horse_owner_id,
                 equestrian_context=equestrian_context,
             )
+        manual_slug = create_data.slug not in (None, "")
+        normalized_slug: str | None = None
+        if manual_slug:
+            normalized_slug = Horse.normalize_slug(create_data.slug or "")
+            if not normalized_slug:
+                raise ClientError("Не удалось сформировать slug из указанного значения")
+            occupied = await self.horse_repository.find_by_slug(
+                normalized_slug, equestrian_id=equestrian_context.id
+            )
+            if occupied is not None:
+                raise ClientError("Slug лошади уже занят")
         try:
             horse = Horse(
                 equestrian_id=equestrian_context.id,
                 name=create_data.name,
+                slug=normalized_slug,
                 pedigree_name=create_data.pedigree_name,
                 description=create_data.description,
                 breed_id=create_data.breed_id,
@@ -381,13 +395,14 @@ class HorseService:
             )
         except ValidationError as ex:
             raise ClientError(str(ex)) from ex
-        horse.slug = await self._get_available_slug(
-            base_slug=horse.slug or "", equestrian_context=equestrian_context
-        )
+        if not manual_slug:
+            horse.slug = await self._get_available_slug(
+                base_slug=horse.slug or "", equestrian_context=equestrian_context
+            )
         try:
             new_horse = await self.horse_repository.create(horse)
         except HorseSlugConflictError as ex:
-            raise ClientError("Slug лошади уже занят; повторите создание") from ex
+            raise ClientError("Slug лошади уже занят; повторите операцию") from ex
         return self._get_horse_dto(
             horse=new_horse,
             breed=horse_breed,
@@ -411,6 +426,10 @@ class HorseService:
             horse_id, equestrian_id=equestrian_context.id
         )
         if horse is None:
+            if await self.horse_repository.exists_in_other_tenant(
+                horse_id, equestrian_id=equestrian_context.id
+            ):
+                raise ForbiddenError("Недостаточно прав для изменения чужой лошади")
             raise ClientError("Лошадь не найдена")
         update_data = data.model_dump(exclude_unset=True)
         if not update_data:
@@ -432,9 +451,40 @@ class HorseService:
                 horse_owner_id=update_data["horse_owner_id"],
                 equestrian_context=equestrian_context,
             )
-        for key, value in update_data.items():
-            setattr(horse, key, value)
-        await self.horse_repository.update(horse)
+        slug_supplied = "slug" in update_data
+        requested_slug = update_data.pop("slug", None) if slug_supplied else None
+        final_data = {**horse.model_dump(), **update_data}
+        if slug_supplied:
+            manual_slug = requested_slug not in (None, "")
+            if manual_slug:
+                normalized_slug = Horse.normalize_slug(cast(str, requested_slug))
+                if not normalized_slug:
+                    raise ClientError(
+                        "Не удалось сформировать slug из указанного значения"
+                    )
+                occupied = await self.horse_repository.find_by_slug(
+                    normalized_slug, equestrian_id=equestrian_context.id
+                )
+                if occupied is not None and occupied.id != horse.id:
+                    raise ClientError("Slug лошади уже занят")
+                final_data["slug"] = normalized_slug
+            else:
+                generated_slug = Horse.normalize_slug(cast(str, final_data["name"]))
+                final_data["slug"] = await self._get_available_slug(
+                    base_slug=generated_slug,
+                    equestrian_context=equestrian_context,
+                    exclude_horse_id=horse.id,
+                )
+        try:
+            updated_entity = Horse.model_validate(final_data)
+        except ValidationError as ex:
+            raise ClientError(str(ex)) from ex
+        for field_name in updated_entity.__class__.model_fields:
+            setattr(horse, field_name, getattr(updated_entity, field_name))
+        try:
+            await self.horse_repository.update(horse)
+        except HorseSlugConflictError as ex:
+            raise ClientError("Slug лошади уже занят") from ex
         updated_horse = await self.horse_repository.get_horse_full_info_by_id(
             horse_id=horse.id, equestrian_id=equestrian_context.id
         )

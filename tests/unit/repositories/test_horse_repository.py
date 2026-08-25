@@ -216,6 +216,30 @@ async def test_horse_repository_h28_does_not_mask_other_constraint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_horse_repository_update_maps_only_slug_constraint() -> None:
+    repository = HorseRepository(
+        session=FailingAsyncSession("ix_horse_equestrian_slug"),  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    with pytest.raises(HorseSlugConflictError):
+        await repository.update(
+            Horse(equestrian_id=uuid4(), name="Норманн", slug="normann")
+        )
+
+
+@pytest.mark.asyncio
+async def test_horse_repository_update_does_not_mask_other_constraint() -> None:
+    repository = HorseRepository(
+        session=FailingAsyncSession("other_constraint"),  # type: ignore[arg-type]
+        photo_url_builder=FakePhotoUrlBuilder(),
+    )
+    with pytest.raises(IntegrityError):
+        await repository.update(
+            Horse(equestrian_id=uuid4(), name="Норманн", slug="normann")
+        )
+
+
+@pytest.mark.asyncio
 async def test_horse_list_query_keeps_limit_and_offset_with_pedigree_name() -> None:
     session = FakeAsyncSession()
     repository = HorseRepository(

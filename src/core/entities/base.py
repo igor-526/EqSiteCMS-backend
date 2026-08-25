@@ -124,13 +124,18 @@ class SlugMixin(BaseModel):
         examples=["example-slug"],
     )
 
+    @staticmethod
+    def normalize_slug(value: str) -> str:
+        """Normalize an explicit slug with the same algorithm as generation."""
+        return _generate_slug(value.strip())
+
     @model_validator(mode="after")
     def _generate_slug_from_name(self) -> "SlugMixin":
         """Генерирует slug из name, если slug не задан явно."""
         if hasattr(self, "name") and (self.slug is None or self.slug == ""):
             name_value = getattr(self, "name", None)
             if name_value and str(name_value).strip():
-                self.slug = _generate_slug(str(name_value).strip())
+                self.slug = self.normalize_slug(str(name_value))
         return self
 
 

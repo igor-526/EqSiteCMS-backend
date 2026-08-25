@@ -173,6 +173,11 @@ class HorseCreateInDto(BaseSchema):
         default=...,
         description="Имя лошади",
     )
+    slug: str | None = Field(
+        default=None,
+        max_length=63,
+        description="Путь URL (генерируется автоматически, если не задан)",
+    )
     pedigree_name: str | None = Field(
         default=None, max_length=63, description="Кличка лошади в родословной"
     )
@@ -237,6 +242,11 @@ class HorseUpdateInDto(BaseSchema):
     name: str | None = Field(
         default=None,
         description="Имя лошади",
+    )
+    slug: str | None = Field(
+        default=None,
+        max_length=63,
+        description="Путь URL; null или пустая строка запускают автогенерацию",
     )
     pedigree_name: str | None = Field(
         default=None, max_length=63, description="Кличка лошади в родословной"

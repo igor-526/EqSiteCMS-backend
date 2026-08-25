@@ -6,6 +6,7 @@ from typing import Any, Mapping, cast
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import Column, MetaData, String
 from sqlalchemy import Table as SATable
 from sqlalchemy.dialects import postgresql
@@ -62,10 +63,19 @@ class FakeHorseRepository:
         if method in self.fail_on:
             raise RepositoryError(method)
 
-    async def get_by_id(self, id: UUID) -> Horse | None:
+    async def get_by_id(
+        self, id: UUID, *, equestrian_id: UUID | None = None
+    ) -> Horse | None:
         self.calls.append(("get_by_id", id))
         self._fail_if_needed("get_by_id")
-        return self.by_id.get(id)
+        horse = self.by_id.get(id)
+        if (
+            horse is not None
+            and equestrian_id is not None
+            and horse.equestrian_id != equestrian_id
+        ):
+            return None
+        return horse
 
     async def get_by_ids(self, ids: list[UUID]) -> Mapping[UUID, Horse]:
         self.calls.append(("get_by_ids", ids))
@@ -90,6 +100,18 @@ class FakeHorseRepository:
             ),
             None,
         )
+
+    async def exists_in_other_tenant(
+        self, horse_id: UUID, *, equestrian_id: UUID
+    ) -> bool:
+        self.calls.append(
+            (
+                "exists_in_other_tenant",
+                {"horse_id": horse_id, "equestrian_id": equestrian_id},
+            )
+        )
+        horse = self.by_id.get(horse_id)
+        return horse is not None and horse.equestrian_id != equestrian_id
 
     async def update(self, entity: Horse) -> Horse:
         self.calls.append(("update", entity))
@@ -725,6 +747,239 @@ async def test_horse_slug_h30_input_is_not_mutated_between_calls() -> None:
     )
     assert command.model_dump() == before
     assert (first.slug, second.slug) == ("normann", "normann-1")
+
+
+@pytest.mark.parametrize("value", [None, ""], ids=["null", "empty"])
+async def test_horse_slug_create_empty_values_generate_from_name(
+    value: str | None,
+) -> None:
+    service, _, _, _, _, _ = make_service()
+    result = await service.create_horse(
+        create_data=HorseCreateInDto(name="Белый Ветер", slug=value),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "belyy-veter"
+
+
+async def test_horse_slug_manual_create_is_normalized() -> None:
+    service, _, _, _, _, _ = make_service()
+    result = await service.create_horse(
+        create_data=HorseCreateInDto(name="Horse", slug=" Мой URL "),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "moy-url"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"name": "Horse"},
+        {"name": "Horse", "slug": None},
+        {"name": "Horse", "slug": ""},
+        {"name": "Horse", "slug": "a" * 63},
+    ],
+    ids=["omitted", "null", "empty", "max-length"],
+)
+async def test_horse_slug_create_dto_accepts_contract_values(
+    payload: dict[str, Any],
+) -> None:
+    command = HorseCreateInDto.model_validate(payload)
+    assert command.slug == payload.get("slug")
+
+
+@pytest.mark.parametrize(
+    "dto_type,payload",
+    [
+        (HorseCreateInDto, {"name": "Horse", "slug": "a" * 64}),
+        (HorseUpdateInDto, {"slug": "a" * 64}),
+    ],
+    ids=["create", "update"],
+)
+async def test_horse_slug_dto_rejects_values_over_63(
+    dto_type: type[HorseCreateInDto] | type[HorseUpdateInDto],
+    payload: dict[str, Any],
+) -> None:
+    with pytest.raises(ValidationError):
+        dto_type.model_validate(payload)
+
+
+async def test_horse_slug_create_dto_keeps_extra_forbidden() -> None:
+    with pytest.raises(ValidationError):
+        HorseCreateInDto.model_validate({"name": "Horse", "unknown": True})
+
+
+async def test_horse_slug_manual_create_conflict_is_not_suffixed() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse_repo.add(make_horse(slug="reserved"))
+    with pytest.raises(ClientError, match="занят"):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Horse", slug=" Reserved "),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "create" for name, _ in horse_repo.calls)
+
+
+async def test_horse_slug_manual_create_degenerate_is_client_error() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    with pytest.raises(ClientError, match="slug"):
+        await service.create_horse(
+            create_data=HorseCreateInDto(name="Horse", slug="!!!"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "create" for name, _ in horse_repo.calls)
+
+
+async def test_horse_slug_patch_omitted_preserves_current_value() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="stable-url"))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(description="updated"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "stable-url"
+    assert not any(name == "find_by_slug" for name, _ in horse_repo.calls)
+
+
+async def test_horse_slug_patch_manual_normalizes_and_updates_once() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="old-url"))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(slug=" Новый URL ", description="changed"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "novyy-url"
+    assert result.description == "changed"
+    assert [name for name, _ in horse_repo.calls].count("update") == 1
+
+
+async def test_horse_slug_patch_current_value_has_no_self_conflict() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="same-url"))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(slug=" SAME URL "),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "same-url"
+
+
+async def test_horse_slug_patch_null_regenerates_from_current_name() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(name="Белый Ветер", slug="custom"))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(slug=None),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "belyy-veter"
+
+
+async def test_horse_slug_patch_empty_regenerates_from_new_name() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="custom"))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(name="Новый Конь", slug=""),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "novyy-kon"
+
+
+async def test_horse_slug_patch_generated_collision_uses_minimal_suffix() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(name="Target", slug="custom"))
+    horse_repo.add(make_horse(name="Новый Конь", slug="novyy-kon"))
+    horse_repo.add(make_horse(name="Новый Конь 2", slug="novyy-kon-2"))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(name="Новый Конь", slug=None),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "novyy-kon-1"
+
+
+async def test_horse_slug_patch_manual_conflict_does_not_update() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="original"))
+    horse_repo.add(make_horse(slug="reserved"))
+    with pytest.raises(ClientError, match="занят"):
+        await service.update_horse(
+            horse_id=horse.id,
+            data=HorseUpdateInDto(slug="reserved", description="must-not-change"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "update" for name, _ in horse_repo.calls)
+    assert horse.description is None
+
+
+async def test_horse_slug_patch_degenerate_does_not_update() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="original"))
+    with pytest.raises(ClientError, match="slug"):
+        await service.update_horse(
+            horse_id=horse.id,
+            data=HorseUpdateInDto(slug="!!!"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "update" for name, _ in horse_repo.calls)
+
+
+async def test_horse_slug_patch_constraint_race_is_client_error() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="original"))
+
+    async def conflict(entity: Horse) -> Horse:
+        del entity
+        raise HorseSlugConflictError
+
+    horse_repo.update = conflict  # type: ignore[method-assign]
+    with pytest.raises(ClientError, match="занят"):
+        await service.update_horse(
+            horse_id=horse.id,
+            data=HorseUpdateInDto(slug="new-url"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+
+
+async def test_horse_slug_patch_other_tenant_slug_is_available() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    horse = horse_repo.add(make_horse(slug="original"))
+    horse_repo.add(make_horse(slug="shared", equestrian_id=uuid4()))
+    result = await service.update_horse(
+        horse_id=horse.id,
+        data=HorseUpdateInDto(slug="shared"),
+        user=make_user(),
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    assert result.slug == "shared"
+
+
+async def test_horse_slug_foreign_tenant_patch_is_forbidden_before_mutation() -> None:
+    service, horse_repo, _, _, _, _ = make_service()
+    foreign = horse_repo.add(make_horse(equestrian_id=uuid4(), slug="foreign"))
+    with pytest.raises(ForbiddenError):
+        await service.update_horse(
+            horse_id=foreign.id,
+            data=HorseUpdateInDto(slug="stolen"),
+            user=make_user(),
+            equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+        )
+    assert not any(name == "update" for name, _ in horse_repo.calls)
 
 
 async def test_get_horse_by_slug_or_id_uc12_uuid_vs_slug_deterministic() -> None:

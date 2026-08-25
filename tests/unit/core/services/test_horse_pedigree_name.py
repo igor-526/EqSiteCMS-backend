@@ -27,6 +27,7 @@ from core.services.horse import HorseService
 def dependencies() -> tuple[HorseService, AsyncMock]:
     repository = AsyncMock()
     repository.find_by_slug.return_value = None
+    repository.exists_in_other_tenant.return_value = False
     return (
         HorseService(
             horse_repository=repository,
