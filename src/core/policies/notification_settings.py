@@ -2,10 +2,11 @@ from core.schemas.users import UserOutDto
 
 NOTIFICATION_ELIGIBILITY: dict[tuple[str, str], frozenset[str]] = {
     ("callback", "email"): frozenset({"ADMIN", "SUPERUSER"}),
+    ("callback", "vk"): frozenset({"ADMIN", "SUPERUSER"}),
 }
 
-# Notification-service owns these active catalog dimensions. The CMS currently
-# exposes only callback/email, but valid private-service tuples for other
+# Notification-service owns these active catalog dimensions. The CMS exposes
+# callback/email and callback/vk, but valid private-service tuples for other
 # channels must be filtered rather than treated as a broken response.
 KNOWN_NOTIFICATION_EVENTS = frozenset({"callback"})
 KNOWN_NOTIFICATION_CHANNELS = frozenset({"email", "vk", "sms"})

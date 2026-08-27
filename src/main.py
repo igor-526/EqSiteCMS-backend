@@ -20,6 +20,7 @@ from api import (
     horses_router,
     news_router,
     notification_settings_router,
+    vks_router,
     photos_router,
     prices_router,
     service_users_router,
@@ -90,6 +91,7 @@ router.include_router(photos_router)
 router.include_router(prices_router)
 router.include_router(site_settings_router)
 router.include_router(users_router, prefix="/users", tags=["Users"])
+router.include_router(vks_router)
 router.include_router(
     callback_request_router, prefix="/callback_requests", tags=["Callback Requests"]
 )

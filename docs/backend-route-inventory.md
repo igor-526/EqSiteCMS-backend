@@ -2,7 +2,7 @@
 
 Generated from the registered FastAPI router graph. Do not edit manually.
 
-Route entries: **104**
+Route entries: **108**
 
 | method | path | access class | roles | tenant selector | owner rule | without auth | with auth | foreign | validation | tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -109,4 +109,8 @@ Route entries: **104**
 | GET | `/api/users/me` | protected GET exception | authenticated/scoped | cookie tenant | tenant/role scoped | 401 | 200 | 403 or tenant-scoped | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | PATCH | `/api/users/me` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | PATCH | `/api/users/me/password` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/vks/bot-info` | public read | all | N/A | N/A | 200; 503 while the VK group is unconfigured | same contract | N/A | 502 unavailable downstream | tests/unit/api/test_vk_proxy_api.py |
+| POST | `/api/vks/issue-confirmation` | protected owner write | owner only | actor cookie | owner derived from actor; no role override | 401 | 201 | 403 before lookup/downstream | 400 malformed; 409 active/blocked binding | tests/unit/api/test_vk_proxy_api.py |
+| GET | `/api/vks/me` | protected GET exception | authenticated owner | actor cookie | owner derived from actor; binding state is not public read | 401 | 200 or 404 | not addressable | 502 malformed/unavailable downstream | tests/unit/api/test_vk_proxy_api.py |
+| DELETE | `/api/vks/{user_id}` | protected owner write | owner only | actor cookie | owner derived from actor; no role override | 401 | 204 | 403 before lookup/downstream | 400 malformed; 409 active/blocked binding | tests/unit/api/test_vk_proxy_api.py |
 | GET | `/health` | public health | all | N/A | N/A | 200 | 200 | N/A | N/A | tests/unit/api/test_route_order.py |

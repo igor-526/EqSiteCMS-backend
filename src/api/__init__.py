@@ -32,6 +32,7 @@ __all__ = [
     "horses_router",
     "news_router",
     "notification_settings_router",
+    "vks_router",
     "photos_router",
     "prices_router",
     "service_users_router",
@@ -39,3 +40,4 @@ __all__ = [
     "users_router",
 ]
 from .user_management import router as user_management_router
+from .vks import router as vks_router

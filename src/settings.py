@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     notification_service_url: str = Field(
         default="http://notification-service:8000", alias="NOTIFICATION_SERVICE_URL"
     )
+    vk_service_url: str = Field(
+        default="http://eqsitecms-vk-service:8000", alias="VK_SERVICE_URL"
+    )
 
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":

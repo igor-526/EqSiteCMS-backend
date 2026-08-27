@@ -4,6 +4,7 @@ from fastapi import Cookie, Depends, Header
 
 from clients.email_service.client import EmailServiceClient
 from clients.notification_service.client import NotificationServiceClient
+from clients.vk_service.client import VkServiceClient
 from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import InvalidCredentials
 from core.exceptions.base import ClientError
@@ -16,6 +17,7 @@ from core.protocols.media import (
     PhotoUrlBuilderProtocol,
 )
 from core.protocols.notification_service import NotificationServiceClientProtocol
+from core.protocols.vk_service import VkServiceClientProtocol
 from core.protocols.repositories import (
     BreedGroupRepositoryProtocol,
     BreedRepositoryProtocol,
@@ -53,6 +55,7 @@ from core.services.prices import PriceGroupService, PriceService
 from core.services.site_settings import SiteSettingsService
 from core.services.user_management import UserManagementService
 from core.services.users import UserService
+from core.services.vk_proxy import VkProxyService
 from core.services.callback_request import CallbackRequestService
 from depends.publishers import get_callback_request_event_publisher
 from depends.repositories import (
@@ -131,6 +134,16 @@ async def get_email_proxy_service(
     client: Annotated[EmailServiceClientProtocol, Depends(get_email_service_client)],
 ) -> EmailProxyService:
     return EmailProxyService(client)
+
+
+async def get_vk_service_client() -> VkServiceClientProtocol:
+    return VkServiceClient(base_url=settings.vk_service_url)
+
+
+async def get_vk_proxy_service(
+    client: Annotated[VkServiceClientProtocol, Depends(get_vk_service_client)],
+) -> VkProxyService:
+    return VkProxyService(client)
 
 
 async def get_notification_service_client() -> NotificationServiceClientProtocol:

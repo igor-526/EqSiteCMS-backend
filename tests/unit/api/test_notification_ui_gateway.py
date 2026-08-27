@@ -174,7 +174,7 @@ def test_u08_superuser_sees_callback_email(client: TestClient) -> None:
 
 
 @pytest.mark.parametrize("scope", ["ADMIN", "SUPERUSER"])
-def test_supported_email_catalog_ignores_valid_vk_and_sms_tuples(
+def test_supported_catalog_exposes_email_and_vk_but_filters_sms(
     client: TestClient, scope: str
 ) -> None:
     actor, downstream = make_actor(scope), AsyncMock()
@@ -189,8 +189,113 @@ def test_supported_email_catalog_ignores_valid_vk_and_sms_tuples(
 
     assert response.status_code == 200
     assert [(item["event_code"], item["channel_code"]) for item in response.json()] == [
-        ("callback", "email")
+        ("callback", "email"),
+        ("callback", "vk"),
     ]
+
+
+@pytest.mark.parametrize("scope", ["ADMIN", "SUPERUSER"])
+def test_eligible_catalog_keeps_the_two_channels_independent(
+    client: TestClient, scope: str
+) -> None:
+    actor, downstream = make_actor(scope), AsyncMock()
+    downstream.get_settings.return_value = [
+        setting(actor, enabled=True),
+        setting(actor, channel_code="vk", enabled=False),
+    ]
+    wire_settings(actor, downstream)
+
+    body = client.get("/api/notification-settings").json()
+
+    assert {item["channel_code"]: item["enabled"] for item in body} == {
+        "email": True,
+        "vk": False,
+    }
+
+
+@pytest.mark.parametrize("scope", ["DEVELOPER", "USER_MANAGER"])
+def test_ineligible_scope_never_sees_the_vk_channel(
+    client: TestClient, scope: str
+) -> None:
+    actor, downstream = make_actor(scope), AsyncMock()
+    downstream.get_settings.return_value = [
+        setting(actor, enabled=True),
+        setting(actor, channel_code="vk", enabled=True),
+    ]
+    wire_settings(actor, downstream)
+
+    response = client.get("/api/notification-settings")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.parametrize("scope", ["ADMIN", "SUPERUSER"])
+@pytest.mark.parametrize("enabled", [True, False])
+def test_eligible_owner_toggles_the_vk_channel(
+    client: TestClient, scope: str, enabled: bool
+) -> None:
+    actor, downstream = make_actor(scope), AsyncMock()
+    downstream.set_setting.return_value = setting(
+        actor, channel_code="vk", enabled=enabled
+    )
+    wire_settings(actor, downstream)
+
+    response = client.patch(
+        "/api/notification-settings/callback/vk", json={"enabled": enabled}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["enabled"] is enabled
+    downstream.set_setting.assert_awaited_once_with(
+        user_id=actor.id, event_code="callback", channel_code="vk", enabled=enabled
+    )
+
+
+@pytest.mark.parametrize("scope", ["DEVELOPER", "USER_MANAGER"])
+def test_ineligible_scope_cannot_toggle_the_vk_channel(
+    client: TestClient, scope: str
+) -> None:
+    actor, downstream = make_actor(scope), AsyncMock()
+    wire_settings(actor, downstream)
+
+    response = client.patch(
+        "/api/notification-settings/callback/vk", json={"enabled": True}
+    )
+
+    assert response.status_code == 403
+    downstream.set_setting.assert_not_awaited()
+
+
+def test_anonymous_cannot_toggle_the_vk_channel(client: TestClient) -> None:
+    downstream = AsyncMock()
+
+    async def no_actor() -> None:
+        raise InvalidCredentials("Отсутствуют учетные данные")
+
+    app.dependency_overrides[get_current_user] = no_actor
+    app.dependency_overrides[get_notification_settings_service] = lambda: (
+        NotificationSettingsService(downstream)
+    )
+
+    response = client.patch(
+        "/api/notification-settings/callback/vk", json={"enabled": True}
+    )
+
+    assert response.status_code == 401
+    downstream.set_setting.assert_not_awaited()
+
+
+def test_the_unmapped_sms_channel_is_still_unknown(client: TestClient) -> None:
+    actor, downstream = make_actor("SUPERUSER"), AsyncMock()
+    wire_settings(actor, downstream)
+
+    response = client.patch(
+        "/api/notification-settings/callback/sms", json={"enabled": True}
+    )
+
+    assert response.status_code == 404
+    downstream.set_setting.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

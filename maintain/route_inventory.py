@@ -50,6 +50,10 @@ SERVICE_ROUTES.update(
 NOTIFICATION_SETTINGS_WRITE = {
     ("PATCH", "/api/notification-settings/{event_code}/{channel_code}")
 }
+VK_OWNER_WRITE = {
+    ("POST", "/api/vks/issue-confirmation"),
+    ("DELETE", "/api/vks/{user_id}"),
+}
 
 
 def classify(method: str, path: str) -> AccessRule:
@@ -109,6 +113,42 @@ def classify(method: str, path: str) -> AccessRule:
             "not addressable; 403 ineligible",
             "400 malformed; 404 unknown/inactive combination",
             "tests/unit/api/test_notification_ui_gateway.py",
+        )
+    if key in VK_OWNER_WRITE:
+        return AccessRule(
+            "protected owner write",
+            "owner only",
+            "actor cookie",
+            "owner derived from actor; no role override",
+            "401",
+            "201" if method == "POST" else "204",
+            "403 before lookup/downstream",
+            "400 malformed; 409 active/blocked binding",
+            "tests/unit/api/test_vk_proxy_api.py",
+        )
+    if key == ("GET", "/api/vks/bot-info"):
+        return AccessRule(
+            "public read",
+            "all",
+            "N/A",
+            "N/A",
+            "200; 503 while the VK group is unconfigured",
+            "same contract",
+            "N/A",
+            "502 unavailable downstream",
+            "tests/unit/api/test_vk_proxy_api.py",
+        )
+    if key == ("GET", "/api/vks/me"):
+        return AccessRule(
+            "protected GET exception",
+            "authenticated owner",
+            "actor cookie",
+            "owner derived from actor; binding state is not public read",
+            "401",
+            "200 or 404",
+            "not addressable",
+            "502 malformed/unavailable downstream",
+            "tests/unit/api/test_vk_proxy_api.py",
         )
     if key == ("GET", "/api/emails/me"):
         return AccessRule(
