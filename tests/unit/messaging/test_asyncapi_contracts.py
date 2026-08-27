@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from clients.nats.client import NatsJetstreamClient
 from clients.nats.publisher import CallbackRequestEventPublisher
@@ -152,9 +153,11 @@ async def test_backend_callback_publisher_matches_subject_headers_and_payload() 
         client=cast(NatsJetstreamClient, client), settings=settings
     )
     callback_id = uuid4()
+    tenant_id = uuid4()
 
     event_id = await publisher.publish(
         payload=CallbackRequestedData(
+            equestrian_id=tenant_id,
             callback_request_id=callback_id,
             name="Owner",
             comment=None,
@@ -166,5 +169,33 @@ async def test_backend_callback_publisher_matches_subject_headers_and_payload() 
     payload = CallbackRequestedData.model_validate_json(call["payload"])
     assert call["subject"] == "events.site.callback.requested"
     assert call["headers"] == {"Nats-Msg-Id": str(event_id)}
-    assert "equestrian_id" not in payload.model_dump()
+    assert payload.equestrian_id == tenant_id
+    assert payload.model_dump(mode="json")["equestrian_id"] == str(tenant_id)
     assert payload.callback_request_id == callback_id
+
+
+def test_backend_callback_dto_requires_valid_tenant_uuid_and_forbids_extra() -> None:
+    values = {
+        "callback_request_id": uuid4(),
+        "phone": "+79990000000",
+    }
+
+    with pytest.raises(ValidationError):
+        CallbackRequestedData.model_validate(values)
+    with pytest.raises(ValidationError):
+        CallbackRequestedData.model_validate(values | {"equestrian_id": "not-a-uuid"})
+    with pytest.raises(ValidationError):
+        CallbackRequestedData.model_validate(
+            values | {"equestrian_id": uuid4(), "unexpected": True}
+        )
+
+
+def test_backend_callback_asyncapi_requires_tenant_uuid_and_forbids_extra() -> None:
+    schema = _payload(_load("backend"), "events.site.callback.requested", "publish")
+
+    assert "equestrian_id" in schema["required"]
+    assert schema["properties"]["equestrian_id"] == {
+        "type": "string",
+        "format": "uuid",
+    }
+    assert schema["additionalProperties"] is False

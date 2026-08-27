@@ -33,11 +33,14 @@ components:
     CallbackRequestedPayload:
       type: object
       additionalProperties: false
-      required: [occurred_at, callback_request_id, phone]
+      required: [occurred_at, equestrian_id, callback_request_id, phone]
       properties:
         occurred_at:
           type: string
           format: date-time
+        equestrian_id:
+          type: string
+          format: uuid
         callback_request_id:
           type: string
           format: uuid

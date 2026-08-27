@@ -80,6 +80,7 @@ class CallbackRequestService:
         )
         await self.repository.create_and_commit(entity)
         event = CallbackRequestedData(
+            equestrian_id=entity.equestrian_id,
             callback_request_id=entity.id,
             name=entity.name,
             comment=entity.comment,

@@ -51,9 +51,10 @@ def dependencies():
 )
 async def test_create_defaults_nullable_and_boundaries(dependencies, name, comment):
     service, repository, publisher = dependencies
+    tenant_id = uuid4()
     result = await service.create(
         data=CallbackRequestCreateDto(name=name, phone="1" * 63, comment=comment),
-        equestrian_context=EquestrianContext(id=uuid4(), source="public"),
+        equestrian_context=EquestrianContext(id=tenant_id, source="public"),
     )
     assert (
         result.status == 1
@@ -66,6 +67,12 @@ async def test_create_defaults_nullable_and_boundaries(dependencies, name, comme
     assert (
         publisher.publish.await_args.kwargs["payload"].callback_request_id
         == persisted.id
+    )
+    assert persisted.equestrian_id == tenant_id
+    assert publisher.publish.await_args.kwargs["payload"].equestrian_id == tenant_id
+    assert (
+        publisher.publish.await_args.kwargs["payload"].equestrian_id
+        == persisted.equestrian_id
     )
     assert list(publisher.publish.await_args.kwargs) == ["payload"]
 
