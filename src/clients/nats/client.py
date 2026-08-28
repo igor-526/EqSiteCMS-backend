@@ -1,8 +1,14 @@
+import logging
+
+import nats.errors
 from nats import NATS
 from nats.js import JetStreamContext
 from nats.js.api import PubAck, RetentionPolicy, StorageType, StreamConfig
 
+from clients.nats.lifecycle import NatsConnectionErrorPolicy
 from settings import NatsSettings
+
+logger = logging.getLogger(__name__)
 
 
 class NatsJetstreamClient:
@@ -11,6 +17,10 @@ class NatsJetstreamClient:
 
         self._connection: NATS | None = None
         self._jetstream: JetStreamContext | None = None
+        self._error_policy = NatsConnectionErrorPolicy(
+            service_name="main-backend",
+            report_after_attempts=settings.nats_error_report_after_attempts,
+        )
 
     @property
     def is_connected(self) -> bool:
@@ -27,6 +37,7 @@ class NatsJetstreamClient:
             return
 
         self._connection = NATS()
+        self._error_policy.reset()
 
         await self._connection.connect(
             servers=self._settings.nats_servers,
@@ -34,6 +45,10 @@ class NatsJetstreamClient:
             connect_timeout=5,
             reconnect_time_wait=2,
             max_reconnect_attempts=-1,
+            error_cb=self._error_policy.on_error,
+            disconnected_cb=self._error_policy.on_disconnected,
+            reconnected_cb=self._error_policy.on_reconnected,
+            closed_cb=self._error_policy.on_closed,
         )
 
         self._jetstream = self._connection.jetstream()
@@ -44,7 +59,14 @@ class NatsJetstreamClient:
 
         try:
             if not self._connection.is_closed:
-                await self._connection.drain()
+                try:
+                    await self._connection.drain()
+                except (TimeoutError, nats.errors.Error) as error:
+                    logger.warning(
+                        "NATS drain failed on shutdown, closing connection: %s",
+                        error,
+                    )
+                    await self._connection.close()
         finally:
             self._connection = None
             self._jetstream = None

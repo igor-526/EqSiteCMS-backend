@@ -167,6 +167,11 @@ class NatsSettings(BaseSettings):
         alias="NATS_SUBJECT_CALLBACK_REQUESTED",
     )
 
+    # CONNECTION ERROR POLICY
+    nats_error_report_after_attempts: int = Field(
+        default=3, alias="NATS_ERROR_REPORT_AFTER_ATTEMPTS", ge=1
+    )
+
     @property
     def nats_subjects_site_events(self) -> list[str]:
         if self.nats_subjects_site_events_raw.strip():
