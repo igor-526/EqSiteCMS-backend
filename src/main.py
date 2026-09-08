@@ -43,7 +43,7 @@ from utils.configure_logger import configure_logger
 from utils.seeding.init_registry import init_registry
 from utils.configure_sentry import configure_sentry
 from utils.observability import start_metrics_runtime
-from prometheus_fastapi_instrumentator import Instrumentator, metrics
+from prometheus_fastapi_instrumentator import Instrumentator
 
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
 configure_sentry()
@@ -67,21 +67,13 @@ async def lifespan(_: FastAPI):
         await nats_client.close()
 
 
-def ignore_prometheus_routes(info: metrics.Info) -> bool:
-    blacklisted = [
-        "/health"
-    ]
-    return info.target in blacklisted
-
-
 app = FastAPI(
     title=settings.swagger_title,
     debug=settings.debug,
     lifespan=lifespan,
 )
 
-instrumentator = Instrumentator()
-instrumentator.add_filter(ignore_prometheus_routes)
+instrumentator = Instrumentator(excluded_handlers=[r"^/health$"])
 instrumentator.instrument(app)
 
 router = APIRouter(prefix="/api")

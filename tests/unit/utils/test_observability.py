@@ -9,6 +9,19 @@ from utils import configure_sentry as sentry_module
 from utils import observability
 
 
+def test_health_route_is_excluded_from_request_metrics() -> None:
+    import main
+
+    assert any(
+        pattern.fullmatch("/health")
+        for pattern in main.instrumentator.excluded_handlers
+    )
+    assert not any(
+        pattern.fullmatch("/health/details")
+        for pattern in main.instrumentator.excluded_handlers
+    )
+
+
 def test_disabled_sentry_is_noop(monkeypatch: pytest.MonkeyPatch) -> None:
     init = Mock()
     monkeypatch.setattr(sentry_module.sentry_sdk, "init", init)
