@@ -895,3 +895,158 @@ async def test_ut50_get_public_list_response_has_no_content_is_deleted() -> None
     assert not hasattr(public_dto, "content")
     assert not hasattr(public_dto, "is_deleted")
     assert not hasattr(public_dto, "deleted_at")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Ёж, щука и Юлия!",
+        "  Конный -- КЛУБ  ",
+        "中文 🎠",
+        "___",
+        "",
+        "A" * 200,
+        "a" * 126 + " - b",
+    ],
+)
+async def test_news_slug_matches_frozen_backfill(name: str) -> None:
+    from importlib import import_module
+    from core.utils.news_slug import generate_news_slug
+
+    migration = import_module("migration.versions.7d28fbc9a631_add_news_slug")
+    identity = UUID("12345678-9abc-def0-1234-56789abcdef0")
+    slug = generate_news_slug(name, identity)
+    assert slug == migration._generate_slug(name, identity)
+    assert len(slug) <= 160
+
+
+async def test_ut_be04_old_payload_generates_distinct_persisted_slugs() -> None:
+    service, repo, *_ = make_service()
+    dto = NewsCreateDto(name="Конный клуб", content="<p>x</p>", published_at=_PAST)
+    first = await service.create(
+        dto, user=make_admin_user(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
+    second = await service.create(
+        dto, user=make_admin_user(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
+    assert first.slug == f"konnyy-klub-{first.id.hex}"
+    assert second.slug == f"konnyy-klub-{second.id.hex}"
+    assert first.slug != second.slug
+    assert repo.by_id[first.id].slug == first.slug
+
+
+async def test_ut_be05_rename_content_and_delete_preserve_slug() -> None:
+    service, repo, *_ = make_service()
+    user = make_admin_user()
+    item = await service.create(
+        NewsCreateDto(name="Название", content="<p>x</p>", published_at=_PAST),
+        user=user,
+        equestrian_context=TEST_EQUESTRIAN_CONTEXT,
+    )
+    slug = item.slug
+    for dto in [NewsUpdateDto(name="Новое имя"), NewsUpdateDto(content="<p>New</p>")]:
+        updated = await service.update(
+            item.id, dto, user=user, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        assert updated.slug == slug
+    await service.soft_delete(
+        item.id, user=user, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+    )
+    assert repo.by_id[item.id].slug == slug
+
+
+async def test_ut_be06_slug_service_passes_tenant_and_maps_missing_only() -> None:
+    from unittest.mock import AsyncMock
+    from core.exceptions.base import NotFoundError
+
+    service, repo, *_ = make_service()
+    item = make_news(slug="public-slug")
+    lookup = AsyncMock(return_value=item)
+    repo.get_public_by_slug = lookup  # type: ignore[attr-defined]
+    assert (
+        await service.get_public_detail_by_slug(
+            item.slug, equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+        is item
+    )
+    lookup.assert_awaited_once_with(item.slug, equestrian_id=TEST_EQUESTRIAN_CONTEXT.id)
+    lookup.return_value = None
+    with pytest.raises(NotFoundError):
+        await service.get_public_detail_by_slug(
+            "missing", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+
+
+@pytest.mark.parametrize("method", ["slug", "id", "list"])
+async def test_ut_be07_database_errors_propagate(method: str) -> None:
+    from unittest.mock import AsyncMock
+
+    service, repo, *_ = make_service()
+    error = RuntimeError("database unavailable")
+    operation: Any
+    if method == "slug":
+        repo.get_public_by_slug = AsyncMock(side_effect=error)  # type: ignore[attr-defined]
+        operation = service.get_public_detail_by_slug(
+            "slug", equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+    elif method == "id":
+        repo.get_public_by_id = AsyncMock(side_effect=error)  # type: ignore[method-assign]
+        operation = service.get_public_detail(
+            uuid4(), equestrian_context=TEST_EQUESTRIAN_CONTEXT
+        )
+    else:
+        repo.get_public_filtered = AsyncMock(side_effect=error)  # type: ignore[method-assign]
+        operation = service.get_public_list(equestrian_context=TEST_EQUESTRIAN_CONTEXT)
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await operation
+
+
+@pytest.mark.parametrize("method", ["slug", "id", "list"])
+async def test_ut_be06_07_repository_public_query_contract(method: str) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+    from sqlalchemy.dialects import postgresql
+    from repositories.news_repository import NewsRepository
+
+    result = MagicMock()
+    result.mappings.return_value.first.return_value = None
+    result.mappings.return_value.all.return_value = []
+    result.scalar.return_value = 0
+    session = AsyncMock()
+    session.execute.return_value = result
+    repository = NewsRepository(session=session)
+    tenant = TEST_EQUESTRIAN_CONTEXT.id
+    identity = uuid4()
+    if method == "slug":
+        assert (
+            await repository.get_public_by_slug("exact-slug", equestrian_id=tenant)
+            is None
+        )
+    elif method == "id":
+        assert await repository.get_public_by_id(identity, equestrian_id=tenant) is None
+    else:
+        assert await repository.get_public_filtered(
+            equestrian_id=tenant, limit=12, offset=12
+        ) == ([], 0)
+
+    # Check the actual PostgreSQL predicates, including inclusive publication time.
+    for call in session.execute.await_args_list:
+        query = call.args[0].compile(dialect=postgresql.dialect())
+        sql = str(query)
+        assert "news.equestrian_id =" in sql
+        assert tenant in query.params.values()
+        assert "news.is_deleted = false" in sql
+        assert "news.published_at <= now()" in sql
+        if method == "slug":
+            assert "news.slug =" in sql
+            assert "exact-slug" in query.params.values()
+        elif method == "id":
+            assert "news.id =" in sql
+            assert identity in query.params.values()
+    if method == "list":
+        query = (
+            session.execute.await_args_list[0]
+            .args[0]
+            .compile(dialect=postgresql.dialect())
+        )
+        assert "ORDER BY news.published_at DESC, news.id DESC" in str(query)
+        assert list(query.params.values()).count(12) == 2

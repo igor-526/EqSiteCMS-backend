@@ -7,6 +7,7 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    UniqueConstraint,
     text,
 )
 
@@ -24,11 +25,13 @@ news = Table(
         index=True,
     ),
     Column("name", String(63), nullable=False),
+    Column("slug", String(160), nullable=False),
     Column("snippet", String(255), nullable=True),
     Column("content", Text(), nullable=False, server_default=text("''")),
     Column("published_at", DateTime(timezone=True), nullable=False),
     *soft_delete_columns(),
     Index("ix_news_equestrian_id", "equestrian_id"),
+    UniqueConstraint("equestrian_id", "slug", name="uq_news_equestrian_slug"),
     Index("ix_news_published_at", "published_at"),
     Index("ix_news_is_deleted", "is_deleted"),
 )

@@ -182,6 +182,17 @@ def validation_error_handler(
             )
             or error.get("type") == "extra_forbidden"
             or (
+                (
+                    (request.method == "POST" and request.url.path == "/api/news")
+                    or (
+                        request.method == "PATCH"
+                        and getattr(request.scope.get("route"), "path", None)
+                        == "/api/news/{news_id}"
+                    )
+                )
+                and error.get("loc", [None])[0] == "body"
+            )
+            or (
                 request.method == "POST"
                 and request.url.path == "/api/horses"
                 and error.get("loc", [None])[0] == "body"

@@ -2,7 +2,7 @@
 
 Generated from the registered FastAPI router graph. Do not edit manually.
 
-Route entries: **108**
+Route entries: **109**
 
 | method | path | access class | roles | tenant selector | owner rule | without auth | with auth | foreign | validation | tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -61,12 +61,13 @@ Route entries: **108**
 | DELETE | `/api/horses/{horse_id}/services/{relation_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | PATCH | `/api/horses/{horse_id}/services/{relation_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | GET | `/api/horses/{slug_or_id}` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| GET | `/api/news` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| POST | `/api/news` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| GET | `/api/news-cms` | protected GET exception | authenticated/scoped | cookie tenant | tenant/role scoped | 401 | 200 | 403 or tenant-scoped | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| DELETE | `/api/news/{news_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| GET | `/api/news/{news_id}` | public read | all | X-Equestrian-Service-Key or CMS cookie | tenant scoped | 401 missing/invalid selector | 200 | tenant isolated | 400 malformed | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
-| PATCH | `/api/news/{news_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/news` | public read | all | X-Equestrian-Service-Key (required even with cookie) | tenant scoped; published and not deleted | 200/404; missing/invalid selector 401 | same public contract; no privileged bypass | 404 detail; excluded from list | 422 structural | tests/unit/api/test_news_access.py |
+| POST | `/api/news` | protected write | SUPERUSER or ADMIN or DEVELOPER | CMS cookie tenant | tenant scoped | 401 | 201; no scope 403; invalid context 401 | 400 missing/foreign write; excluded from CMS list | 400 business; 422 structural | tests/unit/api/test_news_access.py |
+| GET | `/api/news-cms` | protected GET exception | SUPERUSER or ADMIN or DEVELOPER | CMS cookie tenant | tenant scoped | 401 | 200; no scope 403; invalid context 401 | 400 missing/foreign write; excluded from CMS list | 400 business; 422 structural | tests/unit/api/test_news_access.py |
+| GET | `/api/news/by-slug/{slug}` | public read | all | X-Equestrian-Service-Key (required even with cookie) | tenant scoped; published and not deleted | 200/404; missing/invalid selector 401 | same public contract; no privileged bypass | 404 detail; excluded from list | 422 structural | tests/unit/api/test_news_access.py |
+| DELETE | `/api/news/{news_id}` | protected write | SUPERUSER or ADMIN or DEVELOPER | CMS cookie tenant | tenant scoped | 401 | 204; no scope 403; invalid context 401 | 400 missing/foreign write; excluded from CMS list | 400 business; 422 structural | tests/unit/api/test_news_access.py |
+| GET | `/api/news/{news_id}` | public read | all | X-Equestrian-Service-Key (required even with cookie) | tenant scoped; published and not deleted | 200/404; missing/invalid selector 401 | same public contract; no privileged bypass | 404 detail; excluded from list | 422 structural | tests/unit/api/test_news_access.py |
+| PATCH | `/api/news/{news_id}` | protected write | SUPERUSER or ADMIN or DEVELOPER | CMS cookie tenant | tenant scoped | 401 | 200; no scope 403; invalid context 401 | 400 missing/foreign write; excluded from CMS list | 400 business; 422 structural | tests/unit/api/test_news_access.py |
 | POST | `/api/news/{news_id}/photos` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | GET | `/api/notification-settings` | protected GET exception | authenticated; catalog filtered by actor scopes | actor cookie | owner derived from actor; preferences are not public read | 401 | 200, including empty catalog | not addressable | 502 malformed/unavailable downstream | tests/unit/api/test_notification_ui_gateway.py |
 | PATCH | `/api/notification-settings/{event_code}/{channel_code}` | protected owner write | ADMIN or SUPERUSER | actor cookie | owner derived from actor; no user_id input | 401 | 200 | not addressable; 403 ineligible | 400 malformed; 404 unknown/inactive combination | tests/unit/api/test_notification_ui_gateway.py |

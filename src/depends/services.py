@@ -173,6 +173,20 @@ async def get_public_equestrian_context(
     return EquestrianContext(id=equestrian.id, source="public")
 
 
+async def get_public_news_equestrian_context(
+    equestrian_repository: Annotated[
+        EquestrianRepositoryProtocol, Depends(get_equestrian_repository)
+    ],
+    service_key: Annotated[str | None, Header(alias="X-Equestrian-Service-Key")] = None,
+) -> EquestrianContext:
+    if service_key is None or not service_key.strip():
+        raise InvalidCredentials("Отсутствует X-Equestrian-Service-Key")
+    equestrian = await equestrian_repository.get_by_service_key(service_key.strip())
+    if equestrian is None:
+        raise InvalidCredentials("Невалидный X-Equestrian-Service-Key")
+    return EquestrianContext(id=equestrian.id, source="public")
+
+
 async def get_protected_equestrian_context(
     current_user: Annotated[UserOutDto, Depends(get_current_user)],
 ) -> EquestrianContext:

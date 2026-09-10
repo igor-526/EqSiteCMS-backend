@@ -11,6 +11,7 @@ from core.schemas.news import (
     NewsCreateDto,
     NewsOutDto,
     NewsPhotosUpdateDto,
+    NewsPublicDetailOutDto,
     NewsPublicOutDto,
     NewsUpdateDto,
 )
@@ -20,7 +21,7 @@ from depends.services import (
     get_current_user,
     get_news_service,
     get_protected_equestrian_context,
-    get_public_equestrian_context,
+    get_public_news_equestrian_context,
 )
 
 router = APIRouter()
@@ -78,7 +79,7 @@ async def get_news_cms(
 async def get_news_public(
     news_service: Annotated[NewsService, Depends(get_news_service)],
     equestrian_context: Annotated[
-        EquestrianContext, Depends(get_public_equestrian_context)
+        EquestrianContext, Depends(get_public_news_equestrian_context)
     ],
     page: int = Query(1, ge=1),
     limit: int = Query(25, ge=1, le=100),
@@ -99,8 +100,29 @@ async def get_news_public(
 
 
 @router.get(
+    "/news/by-slug/{slug}",
+    response_model=NewsPublicDetailOutDto,
+    tags=["News"],
+    description="Деталь публичной новости по slug (только опубликованные, не удалённые)",
+)
+async def get_news_detail_by_slug(
+    slug: str,
+    news_service: Annotated[NewsService, Depends(get_news_service)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_public_news_equestrian_context)
+    ],
+) -> NewsPublicDetailOutDto:
+    news_item = await news_service.get_public_detail_by_slug(
+        slug, equestrian_context=equestrian_context
+    )
+    return await news_service.build_public_detail_out_dto(
+        news_item, equestrian_context=equestrian_context
+    )
+
+
+@router.get(
     "/news/{news_id}",
-    response_model=NewsPublicOutDto,
+    response_model=NewsPublicDetailOutDto,
     tags=["News"],
     description="Деталь публичной новости (только опубликованные, не удалённые)",
 )
@@ -108,13 +130,13 @@ async def get_news_detail(
     news_id: UUID,
     news_service: Annotated[NewsService, Depends(get_news_service)],
     equestrian_context: Annotated[
-        EquestrianContext, Depends(get_public_equestrian_context)
+        EquestrianContext, Depends(get_public_news_equestrian_context)
     ],
-) -> NewsPublicOutDto:
+) -> NewsPublicDetailOutDto:
     news_item = await news_service.get_public_detail(
         news_id, equestrian_context=equestrian_context
     )
-    return await news_service.build_public_out_dto(
+    return await news_service.build_public_detail_out_dto(
         news_item, equestrian_context=equestrian_context
     )
 

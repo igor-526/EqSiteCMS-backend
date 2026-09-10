@@ -132,7 +132,7 @@ class NewsRepository(TenantScopedRepository[News]):
         stmt = (
             select(self.table)
             .where(where_clause)
-            .order_by(self.table.c.published_at.desc())
+            .order_by(self.table.c.published_at.desc(), self.table.c.id.desc())
             .limit(limit)
             .offset(offset)
         )
@@ -151,6 +151,21 @@ class NewsRepository(TenantScopedRepository[News]):
     async def get_public_by_id(self, id: UUID, *, equestrian_id: UUID) -> News | None:
         stmt = select(self.table).where(
             self.table.c.id == id,
+            self.table.c.equestrian_id == equestrian_id,
+            self.table.c.is_deleted == False,  # noqa: E712
+            self.table.c.published_at <= func.now(),
+        )
+        row = await self.session.execute(stmt)
+        mapping = row.mappings().first()
+        if mapping is None:
+            return None
+        return self.entity.model_validate(dict(mapping))
+
+    async def get_public_by_slug(
+        self, slug: str, *, equestrian_id: UUID
+    ) -> News | None:
+        stmt = select(self.table).where(
+            self.table.c.slug == slug,
             self.table.c.equestrian_id == equestrian_id,
             self.table.c.is_deleted == False,  # noqa: E712
             self.table.c.published_at <= func.now(),

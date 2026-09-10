@@ -11,6 +11,7 @@ class NewsOutDto(BaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    slug: str
     name: str
     snippet: str | None
     content: str
@@ -36,6 +37,7 @@ class NewsPublicOutDto(BaseSchema):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    slug: str
     name: str
     snippet: str | None
     published_at: datetime
@@ -48,6 +50,10 @@ class NewsPublicOutDto(BaseSchema):
     @field_serializer("published_at")
     def serialize_datetime(self, value: datetime) -> str:
         return value.isoformat()
+
+
+class NewsPublicDetailOutDto(NewsPublicOutDto):
+    content: str
 
 
 class NewsCreateDto(BaseSchema):

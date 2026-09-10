@@ -14,12 +14,14 @@ from core.schemas.news import (
     NewsCreateDto,
     NewsOutDto,
     NewsPhotosUpdateDto,
+    NewsPublicDetailOutDto,
     NewsPublicOutDto,
     NewsUpdateDto,
 )
 from core.schemas.photos import PhotoOutShortDto
 from core.schemas.users import UserOutDto
 from core.utils.html_security import validate_no_js_in_html
+from core.utils.news_slug import generate_news_slug
 
 NEWS_NAME_MAX_LENGTH = 63
 NEWS_SNIPPET_MAX_LENGTH = 255
@@ -143,6 +145,7 @@ class NewsService:
                 )
 
         news = News(**news_data, equestrian_id=equestrian_context.id)
+        news.slug = generate_news_slug(news.name, news.id)
         news = await self.news_repository.create(news)
 
         if unique_photo_ids:
@@ -306,6 +309,16 @@ class NewsService:
             raise NotFoundError("Новость не найдена")
         return news
 
+    async def get_public_detail_by_slug(
+        self, slug: str, *, equestrian_context: EquestrianContext
+    ) -> News:
+        news = await self.news_repository.get_public_by_slug(
+            slug, equestrian_id=equestrian_context.id
+        )
+        if news is None:
+            raise NotFoundError("Новость не найдена")
+        return news
+
     async def _build_photos(
         self,
         news_item: News,
@@ -342,6 +355,7 @@ class NewsService:
         )
         return NewsOutDto(
             id=news_item.id,
+            slug=news_item.slug,
             name=news_item.name,
             snippet=news_item.snippet,
             content=news_item.content,
@@ -361,8 +375,19 @@ class NewsService:
         )
         return NewsPublicOutDto(
             id=news_item.id,
+            slug=news_item.slug,
             name=news_item.name,
             snippet=news_item.snippet,
             published_at=news_item.published_at,
             photos=photos,
+        )
+
+    async def build_public_detail_out_dto(
+        self, news_item: News, *, equestrian_context: EquestrianContext
+    ) -> NewsPublicDetailOutDto:
+        public_dto = await self.build_public_out_dto(
+            news_item, equestrian_context=equestrian_context
+        )
+        return NewsPublicDetailOutDto(
+            **public_dto.model_dump(), content=news_item.content
         )

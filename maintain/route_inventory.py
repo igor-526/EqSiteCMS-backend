@@ -203,6 +203,27 @@ def classify(method: str, path: str) -> AccessRule:
             validation,
             tests,
         )
+    if method == "GET" and path in {
+        "/api/news", "/api/news/by-slug/{slug}", "/api/news/{news_id}"
+    }:
+        return AccessRule(
+            "public read", "all", "X-Equestrian-Service-Key (required even with cookie)",
+            "tenant scoped; published and not deleted", "200/404; missing/invalid selector 401",
+            "same public contract; no privileged bypass", "404 detail; excluded from list",
+            "422 structural", "tests/unit/api/test_news_access.py",
+        )
+    if path == "/api/news-cms" or (
+        method in {"POST", "PATCH", "DELETE"}
+        and path in {"/api/news", "/api/news/{news_id}"}
+    ):
+        success = {"GET": "200", "POST": "201", "PATCH": "200", "DELETE": "204"}[method]
+        return AccessRule(
+            "protected GET exception" if method == "GET" else "protected write",
+            "SUPERUSER or ADMIN or DEVELOPER", "CMS cookie tenant", "tenant scoped",
+            "401", success + "; no scope 403; invalid context 401",
+            "400 missing/foreign write; excluded from CMS list",
+            "400 business; 422 structural", "tests/unit/api/test_news_access.py",
+        )
     if method == "GET" and path.startswith(PROTECTED_GET_PREFIXES):
         return AccessRule(
             "protected GET exception",

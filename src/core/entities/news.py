@@ -27,6 +27,8 @@ class NewsSortField(str, Enum):
 class News(Entity, TimeStampMixin, SoftDeleteMixin):
     equestrian_id: UUID = Field(default=...)
     name: str = Field(default=...)
+    # Empty only for an unsaved entity; the create service assigns its slug.
+    slug: str = Field(default="", max_length=160)
     snippet: str | None = Field(default=None)
     content: str = Field(default="")
     published_at: datetime = Field(default=...)

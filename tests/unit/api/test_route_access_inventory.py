@@ -14,7 +14,7 @@ def test_every_registered_api_route_has_exactly_one_access_classification() -> N
     )
     rows = inventory(app)
 
-    assert registered == 108
+    assert registered == 109
     assert len(rows) == registered
     assert len({(method, path) for method, path, _ in rows}) == registered
     assert all(rule.access_class and rule.tests for _, _, rule in rows)
@@ -70,3 +70,23 @@ def test_email_and_policy_exceptions_are_explicitly_classified() -> None:
         rules[("PATCH", "/api/service/callback_requests/{id}/status")].access_class
         == "service API"
     )
+
+
+def test_news_access_matrix_is_explicitly_classified() -> None:
+    rules = {(method, path): rule for method, path, rule in inventory(app)}
+    for path in ("/api/news", "/api/news/by-slug/{slug}", "/api/news/{news_id}"):
+        rule = rules[("GET", path)]
+        assert rule.access_class == "public read"
+        assert "required even with cookie" in rule.tenant_selector
+        assert "missing/invalid selector 401" in rule.without_auth
+        assert "no privileged bypass" in rule.with_auth
+    for method, path in (
+        ("GET", "/api/news-cms"),
+        ("POST", "/api/news"),
+        ("PATCH", "/api/news/{news_id}"),
+        ("DELETE", "/api/news/{news_id}"),
+    ):
+        rule = rules[(method, path)]
+        assert rule.roles == "SUPERUSER or ADMIN or DEVELOPER"
+        assert "no scope 403" in rule.with_auth
+        assert "400 missing/foreign" in rule.foreign

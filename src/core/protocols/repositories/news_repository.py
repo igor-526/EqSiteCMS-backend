@@ -35,6 +35,10 @@ class NewsRepositoryProtocol(TenantBaseRepositoryProtocol[News], Protocol):
         self, id: UUID, *, equestrian_id: UUID
     ) -> News | None: ...
 
+    async def get_public_by_slug(
+        self, slug: str, *, equestrian_id: UUID
+    ) -> News | None: ...
+
     async def get_news_photos(
         self, news_id: UUID, *, equestrian_id: UUID
     ) -> list[NewsPhoto]: ...
