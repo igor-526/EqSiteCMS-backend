@@ -414,3 +414,85 @@ class TestUserManagementAPI:
 
         # Assert
         assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        ("get", "/api/user-management/users", None),
+        ("get", f"/api/user-management/users/{TEST_USER_ID}", None),
+        (
+            "post",
+            "/api/user-management/users",
+            {
+                "equestrian_id": str(TEST_EQUESTRIAN_ID),
+                "username": "newuser",
+                "password": "SecurePass123",
+                "confirm_password": "SecurePass123",
+            },
+        ),
+        ("patch", f"/api/user-management/users/{TEST_USER_ID}", {"first_name": "New"}),
+        ("delete", f"/api/user-management/users/{TEST_USER_ID}", None),
+        ("patch", f"/api/user-management/users/{TEST_USER_ID}/block", None),
+        ("patch", f"/api/user-management/users/{TEST_USER_ID}/unblock", None),
+        (
+            "patch",
+            f"/api/user-management/users/{TEST_USER_ID}/password",
+            {
+                "new_password": "NewSecurePass123",
+                "confirm_password": "NewSecurePass123",
+            },
+        ),
+        ("get", "/api/user-management/roles", None),
+    ],
+)
+def test_all_user_management_routes_reject_anonymous(method, path, json_body):
+    app.dependency_overrides.clear()
+    client = TestClient(app)
+    response = client.request(method, path, json=json_body)
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "json_body"),
+    [
+        ("get", "/api/user-management/users", None),
+        ("get", f"/api/user-management/users/{TEST_USER_ID}", None),
+        (
+            "post",
+            "/api/user-management/users",
+            {
+                "equestrian_id": str(TEST_EQUESTRIAN_ID),
+                "username": "newuser",
+                "password": "SecurePass123",
+                "confirm_password": "SecurePass123",
+            },
+        ),
+        ("patch", f"/api/user-management/users/{TEST_USER_ID}", {"first_name": "New"}),
+        ("delete", f"/api/user-management/users/{TEST_USER_ID}", None),
+        ("patch", f"/api/user-management/users/{TEST_USER_ID}/block", None),
+        ("patch", f"/api/user-management/users/{TEST_USER_ID}/unblock", None),
+        (
+            "patch",
+            f"/api/user-management/users/{TEST_USER_ID}/password",
+            {
+                "new_password": "NewSecurePass123",
+                "confirm_password": "NewSecurePass123",
+            },
+        ),
+        ("get", "/api/user-management/roles", None),
+    ],
+)
+def test_all_user_management_routes_reject_insufficient_role(method, path, json_body):
+    from depends.services import get_current_user
+
+    app.dependency_overrides.clear()
+    app.dependency_overrides[get_current_user] = lambda: create_test_user_dto(
+        scopes=[ADMIN_SCOPE]
+    )
+    try:
+        client = TestClient(app)
+        response = client.request(method, path, json=json_body)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403

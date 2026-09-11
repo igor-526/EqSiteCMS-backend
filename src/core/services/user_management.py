@@ -41,6 +41,7 @@ class UserManagementService:
     ) -> dict:
         """Получить список пользователей с фильтрацией."""
         users, total = await self.repository.get_users_with_filters(
+            equestrian_id=current_user.equestrian_id,
             username=filters.username,
             first_name=filters.first_name,
             last_name=filters.last_name,
@@ -55,7 +56,10 @@ class UserManagementService:
         # Получаем роли для каждого пользователя
         user_dtos = []
         for user in users:
-            scopes = await self.repository.get_user_scopes(user.id)
+            scopes = await self.repository.get_user_scopes(
+                user.id,
+                equestrian_id=current_user.equestrian_id,
+            )
             user_dto = UserManagementOutDto(
                 id=user.id,
                 equestrian_id=user.equestrian_id,
@@ -80,11 +84,17 @@ class UserManagementService:
         user_id: UUID,
     ) -> UserManagementOutDto:
         """Получить пользователя по ID."""
-        user = await self.repository.get_user_by_id(user_id)
+        user = await self.repository.get_user_by_id(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if user is None:
             raise NotFoundError("Пользователь не найден")
 
-        scopes = await self.repository.get_user_scopes(user.id)
+        scopes = await self.repository.get_user_scopes(
+            user.id,
+            equestrian_id=current_user.equestrian_id,
+        )
         return UserManagementOutDto(
             id=user.id,
             equestrian_id=user.equestrian_id,
@@ -106,6 +116,9 @@ class UserManagementService:
         data: CreateUserIn,
     ) -> UserManagementOutDto:
         """Создать нового пользователя."""
+        if data.equestrian_id != current_user.equestrian_id:
+            raise ForbiddenError("Нельзя создать пользователя в другой конюшне")
+
         current_scopes = [s.scope_name for s in current_user.scopes]
         is_um = USER_MANAGER_SCOPE in current_scopes
 
@@ -116,7 +129,10 @@ class UserManagementService:
                 raise ForbiddenError("USER_MANAGER не может назначать роль SUPERUSER")
 
         # Проверяем уникальность username
-        existing_user = await self.repository.get_by_username(data.username)
+        existing_user = await self.repository.get_by_username(
+            data.username,
+            equestrian_id=current_user.equestrian_id,
+        )
         if existing_user:
             raise ClientError(
                 f"Пользователь с username '{data.username}' уже существует"
@@ -135,10 +151,17 @@ class UserManagementService:
             middle_name=data.middle_name,
         )
 
-        created_user = await self.repository.create_user(user, data.scope_ids)
+        created_user = await self.repository.create_user(
+            user,
+            equestrian_id=current_user.equestrian_id,
+            scope_ids=data.scope_ids,
+        )
 
         # Получаем роли
-        scopes = await self.repository.get_user_scopes(created_user.id)
+        scopes = await self.repository.get_user_scopes(
+            created_user.id,
+            equestrian_id=current_user.equestrian_id,
+        )
 
         return UserManagementOutDto(
             id=created_user.id,
@@ -167,12 +190,19 @@ class UserManagementService:
         is_su = SUPERUSER_SCOPE in current_scopes
 
         # Получаем целевого пользователя
-        target_user = await self.repository.get_user_by_id(user_id)
+        target_user = await self.repository.get_user_by_id(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if target_user is None:
             raise NotFoundError("Пользователь не найден")
 
         target_scopes = [
-            s.scope_name for s in await self.repository.get_user_scopes(user_id)
+            s.scope_name
+            for s in await self.repository.get_user_scopes(
+                user_id,
+                equestrian_id=current_user.equestrian_id,
+            )
         ]
 
         # UM не может действовать с SUPERUSER
@@ -199,7 +229,10 @@ class UserManagementService:
 
         # Проверяем уникальность username при изменении
         if data.username is not None and data.username != target_user.username:
-            existing = await self.repository.get_by_username(data.username)
+            existing = await self.repository.get_by_username(
+                data.username,
+                equestrian_id=current_user.equestrian_id,
+            )
             if existing and existing.id != user_id:
                 raise ClientError(
                     f"Пользователь с username '{data.username}' уже существует"
@@ -215,10 +248,19 @@ class UserManagementService:
         if data.middle_name is not None:
             target_user.middle_name = data.middle_name
 
-        updated_user = await self.repository.update_user(target_user, data.scope_ids)
+        updated_user = await self.repository.update_user(
+            target_user,
+            equestrian_id=current_user.equestrian_id,
+            scope_ids=data.scope_ids,
+        )
+        if updated_user is None:
+            raise NotFoundError("Пользователь не найден")
 
         # Получаем обновлённые роли
-        scopes = await self.repository.get_user_scopes(updated_user.id)
+        scopes = await self.repository.get_user_scopes(
+            updated_user.id,
+            equestrian_id=current_user.equestrian_id,
+        )
 
         return UserManagementOutDto(
             id=updated_user.id,
@@ -250,21 +292,31 @@ class UserManagementService:
             raise ForbiddenError("Нельзя удалить самого себя")
 
         # Получаем целевого пользователя
-        target_user = await self.repository.get_user_by_id(user_id)
+        target_user = await self.repository.get_user_by_id(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if target_user is None:
             raise NotFoundError("Пользователь не найден")
 
         target_scopes = [
-            s.scope_name for s in await self.repository.get_user_scopes(user_id)
+            s.scope_name
+            for s in await self.repository.get_user_scopes(
+                user_id,
+                equestrian_id=current_user.equestrian_id,
+            )
         ]
 
         # UM не может удалить SUPERUSER
         if is_um and not is_su and SUPERUSER_SCOPE in target_scopes:
             raise ForbiddenError("USER_MANAGER не может удалить SUPERUSER")
 
-        success = await self.repository.soft_delete_user(user_id)
+        success = await self.repository.soft_delete_user(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if not success:
-            raise ClientError("Не удалось удалить пользователя")
+            raise NotFoundError("Пользователь не найден")
 
     async def block_user(
         self,
@@ -281,21 +333,31 @@ class UserManagementService:
             raise ForbiddenError("Нельзя заблокировать самого себя")
 
         # Получаем целевого пользователя
-        target_user = await self.repository.get_user_by_id(user_id)
+        target_user = await self.repository.get_user_by_id(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if target_user is None:
             raise NotFoundError("Пользователь не найден")
 
         target_scopes = [
-            s.scope_name for s in await self.repository.get_user_scopes(user_id)
+            s.scope_name
+            for s in await self.repository.get_user_scopes(
+                user_id,
+                equestrian_id=current_user.equestrian_id,
+            )
         ]
 
         # UM не может заблокировать SUPERUSER
         if is_um and not is_su and SUPERUSER_SCOPE in target_scopes:
             raise ForbiddenError("USER_MANAGER не может заблокировать SUPERUSER")
 
-        success = await self.repository.block_user(user_id)
+        success = await self.repository.block_user(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if not success:
-            raise ClientError("Не удалось заблокировать пользователя")
+            raise NotFoundError("Пользователь не найден")
 
         return {"is_blocked": True}
 
@@ -310,21 +372,31 @@ class UserManagementService:
         is_su = SUPERUSER_SCOPE in current_scopes
 
         # Получаем целевого пользователя
-        target_user = await self.repository.get_user_by_id(user_id)
+        target_user = await self.repository.get_user_by_id(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if target_user is None:
             raise NotFoundError("Пользователь не найден")
 
         target_scopes = [
-            s.scope_name for s in await self.repository.get_user_scopes(user_id)
+            s.scope_name
+            for s in await self.repository.get_user_scopes(
+                user_id,
+                equestrian_id=current_user.equestrian_id,
+            )
         ]
 
         # UM не может разблокировать SUPERUSER
         if is_um and not is_su and SUPERUSER_SCOPE in target_scopes:
             raise ForbiddenError("USER_MANAGER не может разблокировать SUPERUSER")
 
-        success = await self.repository.unblock_user(user_id)
+        success = await self.repository.unblock_user(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if not success:
-            raise ClientError("Не удалось разблокировать пользователя")
+            raise NotFoundError("Пользователь не найден")
 
         return {"is_blocked": False}
 
@@ -340,12 +412,19 @@ class UserManagementService:
         is_su = SUPERUSER_SCOPE in current_scopes
 
         # Получаем целевого пользователя
-        target_user = await self.repository.get_user_by_id(user_id)
+        target_user = await self.repository.get_user_by_id(
+            user_id,
+            equestrian_id=current_user.equestrian_id,
+        )
         if target_user is None:
             raise NotFoundError("Пользователь не найден")
 
         target_scopes = [
-            s.scope_name for s in await self.repository.get_user_scopes(user_id)
+            s.scope_name
+            for s in await self.repository.get_user_scopes(
+                user_id,
+                equestrian_id=current_user.equestrian_id,
+            )
         ]
 
         # UM не может менять пароль SUPERUSER
@@ -355,9 +434,13 @@ class UserManagementService:
         # Хешируем новый пароль
         hashed_password = self.security.hash_password(data.new_password)
 
-        success = await self.repository.change_password(user_id, hashed_password)
+        success = await self.repository.change_password(
+            user_id,
+            hashed_password,
+            equestrian_id=current_user.equestrian_id,
+        )
         if not success:
-            raise ClientError("Не удалось изменить пароль")
+            raise NotFoundError("Пользователь не найден")
 
     async def get_all_roles(
         self,

@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from core.entities.base import _generate_slug
 from core.entities.equestrian import EquestrianContext
 from core.entities.prices import Price, PriceGroup
-from core.exceptions.base import ClientError
+from core.exceptions.base import ClientError, NotFoundError
 from core.protocols.media import PhotoUrlBuilderProtocol
 from core.protocols.repositories.photo_repository import PhotoRepositoryProtocol
 from core.protocols.repositories.price_repository import (
@@ -565,7 +565,7 @@ class PriceService:
             parsed, equestrian_id=equestrian_context.id
         )
         if price is None:
-            raise ClientError("Цена не найдена")
+            raise NotFoundError("Цена не найдена")
         return price
 
     async def delete(

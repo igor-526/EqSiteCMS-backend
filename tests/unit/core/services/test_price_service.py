@@ -8,7 +8,7 @@ from tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.photos import Photo
 from core.entities.prices import Price, PriceGroup, PriceGroupsRelation, PricePhotos
-from core.exceptions.base import ClientError
+from core.exceptions.base import ClientError, NotFoundError
 from core.schemas.prices import (
     PriceCreateDto,
     PriceOutWithTablesDto,
@@ -270,7 +270,7 @@ async def test_get_by_slug_or_id_uc12_uc13_passes_uuid_object_and_not_found() ->
     )
     assert isinstance(price_repo.calls[-1][1], UUID)
 
-    with pytest.raises(ClientError):
+    with pytest.raises(NotFoundError):
         await service.get_by_slug_or_id(
             "missing", equestrian_context=TEST_EQUESTRIAN_CONTEXT
         )

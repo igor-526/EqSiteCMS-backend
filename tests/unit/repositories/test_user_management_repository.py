@@ -12,6 +12,13 @@ from repositories.user_management_repository import UserManagementRepository
 
 TEST_USER_ID = uuid4()
 TEST_EQUESTRIAN_ID = uuid4()
+FOREIGN_EQUESTRIAN_ID = uuid4()
+
+
+def assert_tenant_predicate(statement, equestrian_id=TEST_EQUESTRIAN_ID):
+    compiled = statement.compile()
+    assert "users.equestrian_id" in str(compiled)
+    assert equestrian_id in compiled.params.values()
 
 
 def create_test_user(
@@ -64,11 +71,15 @@ class TestUserManagementRepository:
         mock_session.execute.side_effect = [count_result, select_result]
 
         # Act
-        users, total = await repository.get_users_with_filters()
+        users, total = await repository.get_users_with_filters(
+            equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
         # Assert
         assert total == 0
         assert users == []
+        assert_tenant_predicate(mock_session.execute.await_args_list[0].args[0])
+        assert_tenant_predicate(mock_session.execute.await_args_list[1].args[0])
 
     async def test_get_users_with_username_filter(self, repository, mock_session):
         """Repository filters by username with regex."""
@@ -93,12 +104,16 @@ class TestUserManagementRepository:
         mock_session.execute.side_effect = [count_result, select_result]
 
         # Act
-        users, total = await repository.get_users_with_filters(username="admin")
+        users, total = await repository.get_users_with_filters(
+            equestrian_id=TEST_EQUESTRIAN_ID, username="admin"
+        )
 
         # Assert
         assert total == 1
         assert len(users) == 1
         assert users[0].username == "admin"
+        assert_tenant_predicate(mock_session.execute.await_args_list[0].args[0])
+        assert_tenant_predicate(mock_session.execute.await_args_list[1].args[0])
 
     async def test_get_users_with_search_filter(self, repository, mock_session):
         """Repository searches across first_name, last_name, middle_name."""
@@ -108,7 +123,9 @@ class TestUserManagementRepository:
         mock_session.execute.side_effect = [count_result, select_result]
 
         # Act
-        users, total = await repository.get_users_with_filters(search="Иван")
+        users, total = await repository.get_users_with_filters(
+            equestrian_id=TEST_EQUESTRIAN_ID, search="Иван"
+        )
 
         # Assert
         assert total == 0
@@ -121,7 +138,9 @@ class TestUserManagementRepository:
         mock_session.execute.side_effect = [count_result, select_result]
 
         # Act
-        users, total = await repository.get_users_with_filters(is_blocked=True)
+        users, total = await repository.get_users_with_filters(
+            equestrian_id=TEST_EQUESTRIAN_ID, is_blocked=True
+        )
 
         # Assert
         assert total == 0
@@ -134,10 +153,13 @@ class TestUserManagementRepository:
         mock_session.execute.return_value = mock_result
 
         # Act
-        result = await repository.soft_delete_user(TEST_USER_ID)
+        result = await repository.soft_delete_user(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
         # Assert
         assert result is True
+        assert_tenant_predicate(mock_session.execute.await_args.args[0])
 
     async def test_block_user(self, repository, mock_session):
         """Repository blocks user by setting is_blocked=True."""
@@ -147,10 +169,13 @@ class TestUserManagementRepository:
         mock_session.execute.return_value = mock_result
 
         # Act
-        result = await repository.block_user(TEST_USER_ID)
+        result = await repository.block_user(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
         # Assert
         assert result is True
+        assert_tenant_predicate(mock_session.execute.await_args.args[0])
 
     async def test_unblock_user(self, repository, mock_session):
         """Repository unblocks user by setting is_blocked=False."""
@@ -160,10 +185,13 @@ class TestUserManagementRepository:
         mock_session.execute.return_value = mock_result
 
         # Act
-        result = await repository.unblock_user(TEST_USER_ID)
+        result = await repository.unblock_user(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
         # Assert
         assert result is True
+        assert_tenant_predicate(mock_session.execute.await_args.args[0])
 
     async def test_change_password(self, repository, mock_session):
         """Repository changes user password."""
@@ -173,10 +201,13 @@ class TestUserManagementRepository:
         mock_session.execute.return_value = mock_result
 
         # Act
-        result = await repository.change_password(TEST_USER_ID, "$2b$12$new_hash")
+        result = await repository.change_password(
+            TEST_USER_ID, "$2b$12$new_hash", equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
         # Assert
         assert result is True
+        assert_tenant_predicate(mock_session.execute.await_args.args[0])
 
     async def test_get_user_scopes(self, repository, mock_session):
         """Repository retrieves user scopes."""
@@ -198,11 +229,56 @@ class TestUserManagementRepository:
         mock_session.execute.return_value = mock_result
 
         # Act
-        scopes = await repository.get_user_scopes(TEST_USER_ID)
+        scopes = await repository.get_user_scopes(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
         # Assert
         assert len(scopes) == 1
         assert scopes[0].scope_name == "ADMIN"
+        assert_tenant_predicate(mock_session.execute.await_args.args[0])
+
+    @pytest.mark.parametrize(
+        "method_name,args",
+        [
+            ("soft_delete_user", (TEST_USER_ID,)),
+            ("block_user", (TEST_USER_ID,)),
+            ("unblock_user", (TEST_USER_ID,)),
+            ("change_password", (TEST_USER_ID, "$2b$12$new_hash")),
+        ],
+    )
+    async def test_atomic_mutation_rejects_foreign_tenant(
+        self, repository, mock_session, method_name, args
+    ):
+        mock_result = MagicMock(rowcount=0)
+        mock_session.execute.return_value = mock_result
+
+        result = await getattr(repository, method_name)(
+            *args, equestrian_id=FOREIGN_EQUESTRIAN_ID
+        )
+
+        assert result is False
+        assert_tenant_predicate(
+            mock_session.execute.await_args.args[0], FOREIGN_EQUESTRIAN_ID
+        )
+
+    async def test_atomic_update_rejects_foreign_tenant_before_scope_changes(
+        self, repository, mock_session
+    ):
+        mock_result = MagicMock(rowcount=0)
+        mock_session.execute.return_value = mock_result
+
+        result = await repository.update_user(
+            create_test_user(user_id=TEST_USER_ID),
+            equestrian_id=FOREIGN_EQUESTRIAN_ID,
+            scope_ids=[uuid4()],
+        )
+
+        assert result is None
+        assert mock_session.execute.await_count == 1
+        assert_tenant_predicate(
+            mock_session.execute.await_args.args[0], FOREIGN_EQUESTRIAN_ID
+        )
 
     async def test_get_all_roles(self, repository, mock_session):
         """Repository retrieves all roles."""

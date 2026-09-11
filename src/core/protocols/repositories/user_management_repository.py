@@ -12,6 +12,7 @@ class UserManagementRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
     async def get_users_with_filters(
         self,
         *,
+        equestrian_id: UUID,
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -25,13 +26,20 @@ class UserManagementRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
         """Получить пользователей с фильтрацией, пагинацией и сортировкой."""
         ...
 
-    async def get_user_by_id(self, user_id: UUID) -> User | None:
+    async def get_user_by_id(
+        self,
+        user_id: UUID,
+        *,
+        equestrian_id: UUID,
+    ) -> User | None:
         """Получить пользователя по ID (исключая удалённых)."""
         ...
 
     async def create_user(
         self,
         user: User,
+        *,
+        equestrian_id: UUID,
         scope_ids: list[UUID] | None = None,
     ) -> User:
         """Создать пользователя с указанными ролями."""
@@ -40,28 +48,41 @@ class UserManagementRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
     async def update_user(
         self,
         user: User,
+        *,
+        equestrian_id: UUID,
         scope_ids: list[UUID] | None = None,
-    ) -> User:
+    ) -> User | None:
         """Обновить пользователя и его роли."""
         ...
 
-    async def soft_delete_user(self, user_id: UUID) -> bool:
+    async def soft_delete_user(self, user_id: UUID, *, equestrian_id: UUID) -> bool:
         """Пометить пользователя как удалённого (soft-delete)."""
         ...
 
-    async def block_user(self, user_id: UUID) -> bool:
+    async def block_user(self, user_id: UUID, *, equestrian_id: UUID) -> bool:
         """Заблокировать пользователя."""
         ...
 
-    async def unblock_user(self, user_id: UUID) -> bool:
+    async def unblock_user(self, user_id: UUID, *, equestrian_id: UUID) -> bool:
         """Разблокировать пользователя."""
         ...
 
-    async def change_password(self, user_id: UUID, hashed_password: str) -> bool:
+    async def change_password(
+        self,
+        user_id: UUID,
+        hashed_password: str,
+        *,
+        equestrian_id: UUID,
+    ) -> bool:
         """Изменить пароль пользователя."""
         ...
 
-    async def get_user_scopes(self, user_id: UUID) -> list[UserScope]:
+    async def get_user_scopes(
+        self,
+        user_id: UUID,
+        *,
+        equestrian_id: UUID,
+    ) -> list[UserScope]:
         """Получить роли пользователя."""
         ...
 
@@ -73,6 +94,11 @@ class UserManagementRepositoryProtocol(BaseRepositoryProtocol[User], Protocol):
         """Получить все роли с фильтрацией по scope_name (regex)."""
         ...
 
-    async def get_by_username(self, username: str) -> User | None:
+    async def get_by_username(
+        self,
+        username: str,
+        *,
+        equestrian_id: UUID,
+    ) -> User | None:
         """Получить пользователя по точному username."""
         ...

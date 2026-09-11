@@ -19,6 +19,7 @@ class UserManagementRepository(AbstractRepository[User]):
     async def get_users_with_filters(
         self,
         *,
+        equestrian_id: UUID,
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -32,7 +33,10 @@ class UserManagementRepository(AbstractRepository[User]):
         """Получить пользователей с фильтрацией, пагинацией и сортировкой."""
 
         # Базовые условия: исключаем удалённых
-        conditions: list[ColumnElement[bool]] = [self.table.c.is_deleted.is_(False)]
+        conditions: list[ColumnElement[bool]] = [
+            self.table.c.equestrian_id == equestrian_id,
+            self.table.c.is_deleted.is_(False),
+        ]
 
         # Фильтр по username (регистронезависимый regex)
         if username:
@@ -113,11 +117,17 @@ class UserManagementRepository(AbstractRepository[User]):
 
         return user_list, total
 
-    async def get_user_by_id(self, user_id: UUID) -> User | None:
+    async def get_user_by_id(
+        self,
+        user_id: UUID,
+        *,
+        equestrian_id: UUID,
+    ) -> User | None:
         """Получить пользователя по ID (исключая удалённых)."""
         stmt = select(self.table).where(
             and_(
                 self.table.c.id == user_id,
+                self.table.c.equestrian_id == equestrian_id,
                 self.table.c.is_deleted.is_(False),
             )
         )
@@ -130,10 +140,15 @@ class UserManagementRepository(AbstractRepository[User]):
     async def create_user(
         self,
         user: User,
+        *,
+        equestrian_id: UUID,
         scope_ids: list[UUID] | None = None,
     ) -> User:
         """Создать пользователя с указанными ролями."""
         # Создаём пользователя
+        if user.equestrian_id != equestrian_id:
+            raise ValueError("User tenant does not match repository tenant boundary")
+
         created_user = await self.create(user)
 
         # Добавляем роли
@@ -145,11 +160,32 @@ class UserManagementRepository(AbstractRepository[User]):
     async def update_user(
         self,
         user: User,
+        *,
+        equestrian_id: UUID,
         scope_ids: list[UUID] | None = None,
-    ) -> User:
+    ) -> User | None:
         """Обновить пользователя и его роли."""
         # Обновляем пользователя
-        updated_user = await self.update(user)
+        now = datetime.now(timezone.utc)
+        data = user.model_dump()
+        data["updated_at"] = now
+        stmt = (
+            self.table.update()
+            .where(
+                and_(
+                    self.table.c.id == user.id,
+                    self.table.c.equestrian_id == equestrian_id,
+                    self.table.c.is_deleted.is_(False),
+                )
+            )
+            .values(**data)
+        )
+        result = await self.session.execute(stmt)
+        if result.rowcount == 0:
+            return None
+        await self.session.flush()
+        user.updated_at = now
+        updated_user = user
 
         # Обновляем роли, если переданы
         if scope_ids is not None:
@@ -157,7 +193,7 @@ class UserManagementRepository(AbstractRepository[User]):
 
         return updated_user
 
-    async def soft_delete_user(self, user_id: UUID) -> bool:
+    async def soft_delete_user(self, user_id: UUID, *, equestrian_id: UUID) -> bool:
         """Пометить пользователя как удалённого (soft-delete)."""
         now = datetime.now(timezone.utc)
         stmt = (
@@ -165,6 +201,7 @@ class UserManagementRepository(AbstractRepository[User]):
             .where(
                 and_(
                     self.table.c.id == user_id,
+                    self.table.c.equestrian_id == equestrian_id,
                     self.table.c.is_deleted.is_(False),
                 )
             )
@@ -178,7 +215,7 @@ class UserManagementRepository(AbstractRepository[User]):
         await self.session.flush()
         return result.rowcount > 0
 
-    async def block_user(self, user_id: UUID) -> bool:
+    async def block_user(self, user_id: UUID, *, equestrian_id: UUID) -> bool:
         """Заблокировать пользователя."""
         now = datetime.now(timezone.utc)
         stmt = (
@@ -186,6 +223,7 @@ class UserManagementRepository(AbstractRepository[User]):
             .where(
                 and_(
                     self.table.c.id == user_id,
+                    self.table.c.equestrian_id == equestrian_id,
                     self.table.c.is_deleted.is_(False),
                 )
             )
@@ -198,7 +236,7 @@ class UserManagementRepository(AbstractRepository[User]):
         await self.session.flush()
         return result.rowcount > 0
 
-    async def unblock_user(self, user_id: UUID) -> bool:
+    async def unblock_user(self, user_id: UUID, *, equestrian_id: UUID) -> bool:
         """Разблокировать пользователя."""
         now = datetime.now(timezone.utc)
         stmt = (
@@ -206,6 +244,7 @@ class UserManagementRepository(AbstractRepository[User]):
             .where(
                 and_(
                     self.table.c.id == user_id,
+                    self.table.c.equestrian_id == equestrian_id,
                     self.table.c.is_deleted.is_(False),
                 )
             )
@@ -218,7 +257,13 @@ class UserManagementRepository(AbstractRepository[User]):
         await self.session.flush()
         return result.rowcount > 0
 
-    async def change_password(self, user_id: UUID, hashed_password: str) -> bool:
+    async def change_password(
+        self,
+        user_id: UUID,
+        hashed_password: str,
+        *,
+        equestrian_id: UUID,
+    ) -> bool:
         """Изменить пароль пользователя."""
         now = datetime.now(timezone.utc)
         stmt = (
@@ -226,6 +271,7 @@ class UserManagementRepository(AbstractRepository[User]):
             .where(
                 and_(
                     self.table.c.id == user_id,
+                    self.table.c.equestrian_id == equestrian_id,
                     self.table.c.is_deleted.is_(False),
                 )
             )
@@ -238,7 +284,12 @@ class UserManagementRepository(AbstractRepository[User]):
         await self.session.flush()
         return result.rowcount > 0
 
-    async def get_user_scopes(self, user_id: UUID) -> list[UserScope]:
+    async def get_user_scopes(
+        self,
+        user_id: UUID,
+        *,
+        equestrian_id: UUID,
+    ) -> list[UserScope]:
         """Получить роли пользователя."""
         stmt = (
             select(user_scopes)
@@ -247,6 +298,15 @@ class UserManagementRepository(AbstractRepository[User]):
                 user_scopes.c.id == user_scopes_relations.c.scope_id,
             )
             .where(user_scopes_relations.c.user_id == user_id)
+            .where(
+                select(users.c.id)
+                .where(
+                    users.c.id == user_id,
+                    users.c.equestrian_id == equestrian_id,
+                    users.c.is_deleted.is_(False),
+                )
+                .exists()
+            )
         )
         rows = await self.session.execute(stmt)
         return [UserScope.model_validate(dict(row)) for row in rows.mappings().all()]
@@ -289,11 +349,17 @@ class UserManagementRepository(AbstractRepository[User]):
 
         await self.session.flush()
 
-    async def get_by_username(self, username: str) -> User | None:
+    async def get_by_username(
+        self,
+        username: str,
+        *,
+        equestrian_id: UUID,
+    ) -> User | None:
         """Get user by username."""
         stmt = select(self.table).where(
             and_(
                 self.table.c.username == username,
+                self.table.c.equestrian_id == equestrian_id,
                 self.table.c.is_deleted.is_(False),
             )
         )

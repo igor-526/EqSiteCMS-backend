@@ -7,7 +7,11 @@ from uuid import UUID, uuid4
 import pytest
 
 from core.entities.user import User, UserScope
+from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError, NotFoundError
+from core.protocols.repositories.user_management_repository import (
+    UserManagementRepositoryProtocol,
+)
 from core.protocols.security import SecurityProtocol
 from core.schemas.user_management import (
     ChangePasswordByAdminIn,
@@ -23,6 +27,7 @@ TEST_USER_ID = uuid4()
 TEST_SUPERUSER_ID = uuid4()
 TEST_UM_ID = uuid4()
 TEST_EQUESTRIAN_ID = uuid4()
+FOREIGN_EQUESTRIAN_ID = uuid4()
 
 SUPERUSER_SCOPE = UserScope(
     id=uuid4(),
@@ -48,11 +53,12 @@ def create_user_dto(
     scopes: list[UserScope] | None = None,
     is_blocked: bool = False,
     is_deleted: bool = False,
+    equestrian_id: UUID = TEST_EQUESTRIAN_ID,
 ) -> UserOutDto:
     """Create a test UserOutDto."""
     return UserOutDto(
         id=user_id or uuid4(),
-        equestrian_id=TEST_EQUESTRIAN_ID,
+        equestrian_id=equestrian_id,
         username="testuser",
         first_name="Test",
         last_name="User",
@@ -67,12 +73,14 @@ def create_user_entity(
     user_id: UUID | None = None,
     is_blocked: bool = False,
     is_deleted: bool = False,
+    equestrian_id: UUID = TEST_EQUESTRIAN_ID,
+    username: str = "testuser",
 ) -> User:
     """Create a test User entity."""
     return User(
         id=user_id or uuid4(),
-        equestrian_id=TEST_EQUESTRIAN_ID,
-        username="testuser",
+        equestrian_id=equestrian_id,
+        username=username,
         password="$2b$12$hashed_password",
         first_name="Test",
         last_name="User",
@@ -87,7 +95,7 @@ class TestUserManagementService:
     @pytest.fixture
     def mock_repository(self):
         """Mock repository."""
-        return AsyncMock()
+        return AsyncMock(spec=UserManagementRepositoryProtocol)
 
     @pytest.fixture
     def mock_security(self):
@@ -267,7 +275,9 @@ class TestUserManagementService:
         await service.soft_delete_user(su_user, TEST_USER_ID)
 
         # Assert
-        mock_repository.soft_delete_user.assert_called_once_with(TEST_USER_ID)
+        mock_repository.soft_delete_user.assert_called_once_with(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
 
     async def test_um_cannot_change_superuser_password(self, service, mock_repository):
         """UM не может менять пароль SUPERUSER."""
@@ -310,6 +320,18 @@ class TestUserManagementService:
         # Assert
         assert result["total"] == 0
         assert result["items"] == []
+        mock_repository.get_users_with_filters.assert_awaited_once_with(
+            equestrian_id=TEST_EQUESTRIAN_ID,
+            username=None,
+            first_name=None,
+            last_name=None,
+            middle_name=None,
+            scope_ids=None,
+            search=None,
+            is_blocked=None,
+            limit=100,
+            offset=0,
+        )
 
     async def test_create_user_hashes_password(
         self, service, mock_repository, mock_security
@@ -377,3 +399,126 @@ class TestUserManagementService:
         # Act & Assert
         with pytest.raises(NotFoundError, match="Пользователь не найден"):
             await service.get_user_by_id(um_user, uuid4())
+
+    async def test_get_users_returns_only_repository_tenant_response(
+        self, service, mock_repository
+    ):
+        own_user = create_user_entity(username="own")
+        mock_repository.get_users_with_filters.return_value = ([own_user], 1)
+        mock_repository.get_user_scopes.return_value = [ADMIN_SCOPE]
+
+        result = await service.get_users(
+            create_user_dto(scopes=[USER_MANAGER_SCOPE]), UserManagementFilters()
+        )
+
+        assert result["total"] == 1
+        assert [item.username for item in result["items"]] == ["own"]
+        assert all(item.equestrian_id == TEST_EQUESTRIAN_ID for item in result["items"])
+
+    async def test_get_own_tenant_user_passes_trusted_tenant(
+        self, service, mock_repository
+    ):
+        target = create_user_entity(user_id=TEST_USER_ID)
+        mock_repository.get_user_by_id.return_value = target
+        mock_repository.get_user_scopes.return_value = [ADMIN_SCOPE]
+
+        result = await service.get_user_by_id(
+            create_user_dto(scopes=[SUPERUSER_SCOPE]), TEST_USER_ID
+        )
+
+        assert result.id == TEST_USER_ID
+        mock_repository.get_user_by_id.assert_awaited_once_with(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
+
+    async def test_foreign_lookup_is_indistinguishable_from_missing(
+        self, service, mock_repository
+    ):
+        mock_repository.get_user_by_id.return_value = None
+
+        with pytest.raises(NotFoundError, match="Пользователь не найден"):
+            await service.get_user_by_id(
+                create_user_dto(scopes=[SUPERUSER_SCOPE]), TEST_USER_ID
+            )
+
+        mock_repository.get_user_scopes.assert_not_awaited()
+
+    async def test_create_user_uses_trusted_tenant(self, service, mock_repository):
+        created_user = create_user_entity(username="newuser")
+        mock_repository.get_by_username.return_value = None
+        mock_repository.create_user.return_value = created_user
+        mock_repository.get_user_scopes.return_value = []
+        data = CreateUserIn(
+            equestrian_id=TEST_EQUESTRIAN_ID,
+            username="newuser",
+            password="SecurePass123",
+            confirm_password="SecurePass123",
+        )
+
+        result = await service.create_user(
+            create_user_dto(scopes=[SUPERUSER_SCOPE]), data
+        )
+
+        assert result.equestrian_id == TEST_EQUESTRIAN_ID
+        mock_repository.get_by_username.assert_awaited_once_with(
+            "newuser", equestrian_id=TEST_EQUESTRIAN_ID
+        )
+        assert mock_repository.create_user.await_args.kwargs["equestrian_id"] == (
+            TEST_EQUESTRIAN_ID
+        )
+
+    async def test_cross_tenant_create_rejected_before_side_effects(
+        self, service, mock_repository, mock_security
+    ):
+        data = CreateUserIn(
+            equestrian_id=FOREIGN_EQUESTRIAN_ID,
+            username="foreign",
+            password="SecurePass123",
+            confirm_password="SecurePass123",
+        )
+
+        with pytest.raises(ForbiddenError, match="другой конюшне"):
+            await service.create_user(create_user_dto(scopes=[SUPERUSER_SCOPE]), data)
+
+        mock_repository.get_by_username.assert_not_awaited()
+        mock_repository.create_user.assert_not_awaited()
+        mock_security.hash_password.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("method_name", "data", "side_effects"),
+        [
+            ("update_user", UpdateUserIn(first_name="Leaked"), ("update_user",)),
+            ("soft_delete_user", None, ("soft_delete_user",)),
+            ("block_user", None, ("block_user",)),
+            ("unblock_user", None, ("unblock_user",)),
+            (
+                "change_password",
+                ChangePasswordByAdminIn(
+                    new_password="NewPass123", confirm_password="NewPass123"
+                ),
+                ("change_password",),
+            ),
+        ],
+    )
+    async def test_foreign_mutations_return_404_without_side_effects(
+        self, service, mock_repository, mock_security, method_name, data, side_effects
+    ):
+        current_user = create_user_dto(scopes=[SUPERUSER_SCOPE])
+        mock_repository.get_user_by_id.return_value = None
+
+        args = (
+            (current_user, TEST_USER_ID)
+            if data is None
+            else (current_user, TEST_USER_ID, data)
+        )
+        with pytest.raises(NotFoundError, match="Пользователь не найден"):
+            await getattr(service, method_name)(*args)
+
+        mock_repository.get_user_by_id.assert_awaited_once_with(
+            TEST_USER_ID, equestrian_id=TEST_EQUESTRIAN_ID
+        )
+        mock_repository.get_user_scopes.assert_not_awaited()
+        for side_effect in side_effects:
+            getattr(mock_repository, side_effect).assert_not_awaited()
+        if method_name == "change_password":
+            mock_security.hash_password.assert_not_called()
