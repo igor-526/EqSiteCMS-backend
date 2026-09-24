@@ -52,7 +52,6 @@ async def get_site_settings(
     ),
     name: str | None = Query(None, description="Фильтр по названию (вхождение)"),
     value: str | None = Query(None, description="Фильтр по значению (вхождение)"),
-    description: str | None = Query(None, description="Фильтр по описанию (вхождение)"),
     type: (
         list[
             Literal[
@@ -83,7 +82,6 @@ async def get_site_settings(
         key=key,
         name=name,
         value=value,
-        description=description,
         type=type,
         sort=sort,
         limit=limit if full else None,  # Без full=true игнорируем пагинацию

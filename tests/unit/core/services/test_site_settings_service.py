@@ -88,7 +88,6 @@ def make_setting(**overrides: Any) -> SiteSetting:
         "key": "site_name",
         "value": "EqSiteCMS",
         "name": "Название сайта",
-        "description": "Описание",
         "type": "string",
     }
     data.update(overrides)
@@ -420,7 +419,6 @@ async def test_get_filtered_passes_all_filters_sorting_and_pagination_to_reposit
         key=["k1", "k2"],
         name="name",
         value="val",
-        description="desc",
         type=["string", "boolean"],
         sort=["-name", "key"],
         limit=20,
@@ -435,7 +433,6 @@ async def test_get_filtered_passes_all_filters_sorting_and_pagination_to_reposit
         "key": ["k1", "k2"],
         "name": "name",
         "value": "val",
-        "description": "desc",
         "type": ["string", "boolean"],
         "sort": ["-name", "key"],
         "limit": 20,
@@ -482,3 +479,47 @@ async def test_create_and_update_bubble_repository_failures() -> None:
             SiteSettingUpdateDto(name="renamed"),
             equestrian_context=TEST_EQUESTRIAN_CONTEXT,
         )
+
+
+async def test_create_dto_silently_ignores_unexpected_description_field() -> None:
+    data = SiteSettingCreateDto.model_validate(
+        {
+            "key": "with_extra",
+            "value": "v",
+            "name": "n",
+            "type": "string",
+            "description": "should be ignored",
+        }
+    )
+
+    assert not hasattr(data, "description")
+    assert "description" not in data.model_dump()
+
+
+async def test_update_dto_silently_ignores_unexpected_description_field() -> None:
+    data = SiteSettingUpdateDto.model_validate(
+        {"name": "renamed", "description": "should be ignored"}
+    )
+
+    assert not hasattr(data, "description")
+    assert "description" not in data.model_dump()
+
+
+async def test_create_ignores_extra_description_and_creates_setting_without_it() -> (
+    None
+):
+    service, repository = make_service()
+    data = SiteSettingCreateDto.model_validate(
+        {
+            "key": "with_extra",
+            "value": "v",
+            "name": "n",
+            "type": "string",
+            "description": "should be ignored",
+        }
+    )
+
+    created = await service.create(data, equestrian_context=TEST_EQUESTRIAN_CONTEXT)
+
+    assert not hasattr(created, "description")
+    assert "description" not in created.model_dump()

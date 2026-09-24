@@ -24,7 +24,6 @@ class SiteSettingsRepositoryProtocol(
         key: list[str] | None = None,
         name: str | None = None,
         value: str | None = None,
-        description: str | None = None,
         type: (
             list[
                 Literal[

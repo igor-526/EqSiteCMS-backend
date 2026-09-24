@@ -16,7 +16,6 @@ site_settings = Table(
     Column("key", String(63), nullable=False, index=True),
     Column("value", Text(), nullable=False),
     Column("name", String(63), nullable=False, index=True),
-    Column("description", String(511), nullable=True),
     Column("type", String(10), nullable=False),
     UniqueConstraint("equestrian_id", "key", name="uq_site_settings_equestrian_key"),
     UniqueConstraint("equestrian_id", "name", name="uq_site_settings_equestrian_name"),

@@ -38,11 +38,6 @@ class SiteSetting(Entity, TimeStampMixin):
         description="Человекочитаемое настройки",
         examples=["Название сайта"],
     )
-    description: str | None = Field(
-        default=None,
-        description="Описание настройки",
-        examples=["Основное название сайта"],
-    )
     type: str = Field(
         default=...,
         description="Тип настройки (хранится как строка)",
