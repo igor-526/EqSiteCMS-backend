@@ -16,7 +16,6 @@ class SiteSettingOutDto(BaseSchema):
     key: str
     value: str
     name: str
-    description: str | None
     type: str
     created_at: datetime
     updated_at: datetime | None
@@ -48,7 +47,6 @@ class SiteSettingCreateDto(BaseSchema):
     key: str = Field(..., description="Ключ настройки")
     value: str = Field(..., description="Значение настройки (всегда строка)")
     name: str = Field(..., description="Человекочитаемое название настройки")
-    description: str | None = Field(None, description="Описание настройки")
     type: SiteSettingType = Field(..., description="Тип настройки")
 
 
@@ -58,5 +56,4 @@ class SiteSettingUpdateDto(BaseSchema):
     key: str | None = Field(None, description="Ключ настройки")
     value: str | None = Field(None, description="Значение настройки (всегда строка)")
     name: str | None = Field(None, description="Человекочитаемое название настройки")
-    description: str | None = Field(None, description="Описание настройки")
     type: SiteSettingType | None = Field(None, description="Тип настройки")

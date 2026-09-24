@@ -20,7 +20,6 @@ class SiteSettingsRepository(TenantScopedRepository[SiteSetting]):
         key: list[str] | None = None,
         name: str | None = None,
         value: str | None = None,
-        description: str | None = None,
         type: (
             list[
                 Literal[
@@ -57,8 +56,6 @@ class SiteSettingsRepository(TenantScopedRepository[SiteSetting]):
             conditions.append(self.table.c.name.ilike(f"%{name}%"))
         if value:
             conditions.append(self.table.c.value.ilike(f"%{value}%"))
-        if description:
-            conditions.append(self.table.c.description.ilike(f"%{description}%"))
         if type:
             conditions.append(self.table.c.type.in_(type))
 

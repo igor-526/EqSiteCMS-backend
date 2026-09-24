@@ -108,7 +108,6 @@ class SiteSettingsService:
             key=data.key,
             value=validated_value,
             name=data.name,
-            description=data.description,
             type=str(data.type),
         )
 
@@ -197,7 +196,6 @@ class SiteSettingsService:
         key: list[str] | None = None,
         name: str | None = None,
         value: str | None = None,
-        description: str | None = None,
         type: (
             list[
                 Literal[
@@ -225,7 +223,6 @@ class SiteSettingsService:
             key=key,
             name=name,
             value=value,
-            description=description,
             type=type,
             sort=sort,
             limit=limit,
