@@ -8,11 +8,24 @@ from sqlalchemy.pool import NullPool
 
 from settings import settings
 
-async_engine = create_async_engine(
-    settings.database_url,
-    future=True,
-    poolclass=NullPool if settings.debug else None,
-)
+# Create async engine with pool configuration
+# NullPool is used in debug mode to avoid connection pooling issues during development
+if settings.debug:
+    async_engine = create_async_engine(
+        settings.database_url,
+        future=True,
+        poolclass=NullPool,
+    )
+else:
+    async_engine = create_async_engine(
+        settings.database_url,
+        future=True,
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_max_overflow,
+        pool_timeout=settings.db_pool_timeout,
+        pool_pre_ping=True,
+        pool_recycle=settings.db_pool_recycle,
+    )
 
 AsyncSessionLocal = async_sessionmaker(
     async_engine,
