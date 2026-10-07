@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     db_name: str = Field(default="eqsitecmsdev", alias="POSTGRES_NAME")
     db_port: int = Field(default=5432, alias="POSTGRES_PORT")
 
+    # Database connection pool configuration
+    db_pool_size: int = Field(default=20, alias="DB_POOL_SIZE", ge=1)
+    db_max_overflow: int = Field(default=10, alias="DB_MAX_OVERFLOW", ge=0)
+    db_pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT", ge=1)
+    db_pool_recycle: int = Field(default=3600, alias="DB_POOL_RECYCLE", ge=1)
+
     # S3 / Minio
     s3_endpoint_url: str = Field(default="http://minio:9000", alias="S3_ENDPOINT_URL")
     s3_access_key: str = Field(default="eqsitecmsminio", alias="S3_ACCESS_KEY")
