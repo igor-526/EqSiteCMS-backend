@@ -80,3 +80,24 @@ class PhotoBatchDeleteDto(BaseSchema):
     """DTO для массового удаления фотографий."""
 
     ids: list[UUID] = Field(..., description="Список UUID фотографий для удаления")
+
+
+class PhotoBatchUploadErrorDto(BaseSchema):
+    """DTO для ошибки одного файла при batch upload."""
+
+    index: int = Field(..., description="Индекс файла в массиве files[]")
+    message: str = Field(..., description="Сообщение об ошибке")
+
+
+class PhotoBatchUploadResponseDto(BaseSchema):
+    """DTO для ответа batch upload+attach endpoints.
+    
+    Поддерживает partial success: успешные фото в photos[], ошибки в errors[].
+    """
+
+    photos: list[PhotoOutShortDto] = Field(
+        ..., description="Массив успешно загруженных фотографий"
+    )
+    errors: list[PhotoBatchUploadErrorDto] | None = Field(
+        None, description="Массив ошибок для неудачных файлов (отсутствует при полном успехе)"
+    )

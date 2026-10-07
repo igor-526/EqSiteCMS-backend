@@ -142,3 +142,26 @@ class PriceGroupReorderDto(BaseSchema):
     changes: list[PriceGroupReorderItemDto] = Field(
         ..., min_length=1, description="Список изменений позиций"
     )
+
+
+class PricePhotosUploadDto(BaseSchema):
+    """DTO для batch upload+attach фотографий к услуге.
+    
+    Используется для endpoint POST /prices/{id}/photos/upload.
+    Принимает multipart/form-data с files[], names[], descriptions[].
+    """
+
+    files: list[bytes] = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="Массив файлов (минимум 1, максимум 20)",
+    )
+    names: list[str] | None = Field(
+        None,
+        description="Опциональные названия фото (по индексу соответствуют files[])",
+    )
+    descriptions: list[str] | None = Field(
+        None,
+        description="Опциональные описания фото (по индексу соответствуют files[])",
+    )

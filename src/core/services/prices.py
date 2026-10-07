@@ -1,7 +1,10 @@
-from typing import Literal, Sequence
+from typing import TYPE_CHECKING, Literal, Sequence
 from uuid import UUID
 
 from pydantic import ValidationError
+
+if TYPE_CHECKING:
+    from core.services.photos import PhotoService
 
 from core.entities.base import _generate_slug
 from core.entities.equestrian import EquestrianContext
@@ -13,7 +16,13 @@ from core.protocols.repositories.price_repository import (
     PriceGroupRepositoryProtocol,
     PriceRepositoryProtocol,
 )
-from core.schemas.photos import PhotoOutShortDto
+from core.schemas.photos import (
+    PhotoBatchUploadErrorDto,
+    PhotoBatchUploadResponseDto,
+    PhotoCreateDto,
+    PhotoOutShortDto,
+    PhotoUploadDto,
+)
 from core.schemas.prices import (
     PriceCreateDto,
     PriceGroupCreateDto,
@@ -24,6 +33,7 @@ from core.schemas.prices import (
     PriceOutWithPageDataDto,
     PriceOutWithTablesDto,
     PricePhotosUpdateDto,
+    PricePhotosUploadDto,
     PriceUpdateDto,
 )
 from core.schemas.users import UserOutDto
@@ -279,11 +289,13 @@ class PriceService:
         price_group_repository: PriceGroupRepositoryProtocol,
         photo_repository: PhotoRepositoryProtocol,
         photo_url_builder: PhotoUrlBuilderProtocol,
+        photo_service: "PhotoService | None" = None,
     ):
         self.price_repository = price_repository
         self.price_group_repository = price_group_repository
         self.photo_repository = photo_repository
         self.photo_url_builder = photo_url_builder
+        self.photo_service = photo_service
 
     def _parse_slug_or_id(self, slug_or_id: str) -> str | UUID:
         """Попытаться преобразовать строку в UUID, иначе вернуть как есть."""
@@ -674,6 +686,107 @@ class PriceService:
             photo_ids=unique_photo_ids,
             main_photo_id=main_photo_id,
             equestrian_id=equestrian_context.id,
+        )
+
+    async def upload_and_attach_photos(
+        self,
+        slug_or_id: str,
+        data: PricePhotosUploadDto,
+        filenames: list[str],
+        *,
+        equestrian_context: EquestrianContext,
+    ) -> PhotoBatchUploadResponseDto:
+        """Batch upload фотографий и автоматическое присоединение к услуге.
+
+        Partial success mode: успешные файлы коммитятся, ошибочные в errors[].
+        """
+        if self.photo_service is None:
+            raise ClientError("PhotoService не инициализирован")
+
+        # Проверяем что price существует
+        parsed = self._parse_slug_or_id(slug_or_id)
+        price = await self.price_repository.get_by_slug_or_id(
+            parsed, equestrian_id=equestrian_context.id
+        )
+        if price is None:
+            raise ClientError("Цена не найдена")
+
+        # Получаем текущий список фото
+        current_relations = await self.price_repository.get_price_photos(
+            price.id, equestrian_id=equestrian_context.id
+        )
+        current_photo_ids = [relation.photo_id for relation in current_relations]
+
+        photos: list[PhotoOutShortDto] = []
+        errors: list[PhotoBatchUploadErrorDto] = []
+
+        # Обрабатываем каждый файл отдельно (partial success)
+        for index, file_content in enumerate(data.files):
+            try:
+                # Извлекаем метаданные по индексу
+                filename = (
+                    filenames[index] if index < len(filenames) else f"file_{index}"
+                )
+                name = (
+                    data.names[index]
+                    if data.names and index < len(data.names)
+                    else None
+                )
+                description = (
+                    data.descriptions[index]
+                    if data.descriptions and index < len(data.descriptions)
+                    else None
+                )
+
+                # Создаём DTO для создания фото
+                photo_create_dto = PhotoCreateDto(
+                    name=name,
+                    description=description,
+                )
+                photo_upload_dto = PhotoUploadDto(
+                    filename=filename,
+                    content=file_content,
+                )
+
+                # Создаём Photo через PhotoService
+                photo = await self.photo_service.create(
+                    photo_create_dto,
+                    photo_upload_dto,
+                    equestrian_context=equestrian_context,
+                )
+
+                # Добавляем photo_id в список
+                current_photo_ids.append(photo.id)
+
+                # Обновляем price.photo_ids
+                await self.price_repository.set_price_photos(
+                    price.id,
+                    photo_ids=current_photo_ids,
+                    main_photo_id=None,  # не меняем main
+                    equestrian_id=equestrian_context.id,
+                )
+
+                # Добавляем в успешные
+                photos.append(
+                    PhotoOutShortDto(
+                        id=photo.id,
+                        is_main=False,
+                        url=self.photo_url_builder.build(photo.path),
+                    )
+                )
+
+            except Exception as e:
+                # Ошибка для конкретного файла
+                errors.append(
+                    PhotoBatchUploadErrorDto(
+                        index=index,
+                        message=str(e),
+                    )
+                )
+
+        return PhotoBatchUploadResponseDto(
+            photos=photos,
+            errors=errors if errors else None,
         )
 
     async def build_out_dto(

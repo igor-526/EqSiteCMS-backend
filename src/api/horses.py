@@ -2,7 +2,7 @@ from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from core.entities import (
     _HORSE_AVAILABLE_SORT_FIELDS,
@@ -15,11 +15,13 @@ from core.schemas import (
     HorseCreateInDto,
     HorseOutDto,
     HorsePhotosUpdateInDto,
+    HorsePhotosUploadDto,
     HorseSetPedigreeInDto,
     HorseUpdateInDto,
     HorseWithPedigreeOutDto,
     UserOutDto,
 )
+from core.schemas.photos import PhotoBatchUploadResponseDto
 from core.services.horse import HorseService
 from depends.services import (
     get_current_user,
@@ -246,6 +248,69 @@ async def update_horse_photos(
     return await horse_service.update_horse_photos(
         horse_id=horse_id,
         data=data,
+        user=current_user,
+        equestrian_context=equestrian_context,
+    )
+
+
+@router.post(
+    "/{horse_id}/photos/upload",
+    response_model=PhotoBatchUploadResponseDto,
+    description="Batch upload фотографий и автоматическое присоединение к лошади (Protected Write: 401 без auth, 403 не owner, 200 OK owner)",
+)
+async def upload_and_attach_photos_to_horse(
+    horse_id: UUID,
+    horse_service: Annotated[HorseService, Depends(get_horse_service)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
+    files: list[UploadFile] = File(
+        ...,
+        description="Массив файлов (минимум 1, максимум 20)",
+        min_length=1,
+        max_length=20,
+    ),
+    names: list[str] | None = Form(
+        None,
+        description="Опциональные названия фото (по индексу соответствуют files[])",
+    ),
+    descriptions: list[str] | None = Form(
+        None,
+        description="Опциональные описания фото (по индексу соответствуют files[])",
+    ),
+) -> PhotoBatchUploadResponseDto:
+    """Batch upload+attach endpoint для лошадей.
+
+    Multipart/form-data с полями:
+    - files[] — массив файлов (обязательно, 1-20 файлов)
+    - names[] — опциональные названия (по индексу)
+    - descriptions[] — опциональные описания (по индексу)
+
+    Возвращает PhotoBatchUploadResponseDto с photos[] и errors[] (partial success).
+
+    Access control: Protected Write (требует авторизацию и проверку owner).
+    """
+    # Читаем содержимое файлов
+    file_contents = []
+    filenames: list[str] = []
+    for file in files:
+        content = await file.read()
+        file_contents.append(content)
+        filenames.append(file.filename or f"file_{len(filenames)}")
+
+    # Создаём DTO для service layer
+    data = HorsePhotosUploadDto(
+        files=file_contents,
+        names=names,
+        descriptions=descriptions,
+    )
+
+    # Вызываем service method
+    return await horse_service.upload_and_attach_photos(
+        horse_id,
+        data,
+        filenames,
         user=current_user,
         equestrian_context=equestrian_context,
     )

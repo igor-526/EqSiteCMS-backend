@@ -1,8 +1,11 @@
 from datetime import date
-from typing import Awaitable, Callable, Literal, Mapping, cast
+from typing import TYPE_CHECKING, Awaitable, Callable, Literal, Mapping, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
+
+if TYPE_CHECKING:
+    from core.services.photos import PhotoService
 
 from core.entities import (
     _HORSE_AVAILABLE_SORT_FIELDS,
@@ -19,14 +22,17 @@ from core.entities import (
 from core.entities.equestrian import EquestrianContext
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError, NotFoundError
+from core.protocols.media import PhotoUrlBuilderProtocol
 from core.protocols.repositories import (
     BreedRepositoryProtocol,
     CoatColorRepositoryProtocol,
     HorseOwnerRepositoryProtocol,
     HorseRepositoryProtocol,
 )
-from core.protocols.repositories.horse_repository import HorseChildrenRepositoryProtocol
-from core.protocols.repositories.horse_repository import HorseSlugConflictError
+from core.protocols.repositories.horse_repository import (
+    HorseChildrenRepositoryProtocol,
+    HorseSlugConflictError,
+)
 from core.protocols.repositories.photo_repository import PhotoRepositoryProtocol
 from core.schemas import (
     BreedOutDto,
@@ -36,11 +42,16 @@ from core.schemas import (
     HorseOutDto,
     HorseOwnerOutDto,
     HorsePhotosUpdateInDto,
+    HorsePhotosUploadDto,
     HorseServiceOutDto,
     HorseSetPedigreeInDto,
     HorseUpdateInDto,
     HorseWithPedigreeOutDto,
+    PhotoBatchUploadErrorDto,
+    PhotoBatchUploadResponseDto,
+    PhotoCreateDto,
     PhotoOutShortDto,
+    PhotoUploadDto,
     UserOutDto,
 )
 
@@ -84,6 +95,8 @@ class HorseService:
         coat_color_repository: CoatColorRepositoryProtocol,
         horse_owner_repository: HorseOwnerRepositoryProtocol,
         photo_repository: PhotoRepositoryProtocol | None = None,
+        photo_url_builder: "PhotoUrlBuilderProtocol | None" = None,
+        photo_service: "PhotoService | None" = None,
     ):
         self.horse_repository = horse_repository
         self.horse_children_repository = horse_children_repository
@@ -91,6 +104,8 @@ class HorseService:
         self.coat_color_repository = coat_color_repository
         self.horse_owner_repository = horse_owner_repository
         self.photo_repository = photo_repository
+        self.photo_url_builder = photo_url_builder
+        self.photo_service = photo_service
 
     async def _check_admin_permission(
         self, *, user: UserOutDto | None, raise_exception: bool = False
@@ -867,6 +882,110 @@ class HorseService:
         if updated is None:
             raise ClientError("Лошадь не найдена")
         return HorseOutDto.model_validate(updated)
+
+    async def upload_and_attach_photos(
+        self,
+        horse_id: UUID,
+        data: HorsePhotosUploadDto,
+        filenames: list[str],
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto | None = None,
+    ) -> PhotoBatchUploadResponseDto:
+        """Batch upload фотографий и автоматическое присоединение к лошади.
+
+        Partial success mode: успешные файлы коммитятся, ошибочные в errors[].
+        """
+        await self._check_admin_permission(user=user, raise_exception=True)
+
+        if self.photo_service is None:
+            raise ClientError("PhotoService не инициализирован")
+        if self.photo_url_builder is None:
+            raise ClientError("PhotoUrlBuilder не инициализирован")
+        if self.photo_repository is None:
+            raise ClientError("PhotoRepository не инициализирован")
+
+        # Проверяем что horse существует и получаем текущий список фото
+        horse_info = await self.horse_repository.get_horse_full_info_by_id(
+            horse_id=horse_id, equestrian_id=equestrian_context.id
+        )
+        if horse_info is None:
+            raise ClientError("Лошадь не найдена")
+
+        # Получаем текущий список фото
+        current_photo_ids = [photo.id for photo in horse_info.photos]
+
+        photos: list[PhotoOutShortDto] = []
+        errors: list[PhotoBatchUploadErrorDto] = []
+
+        # Обрабатываем каждый файл отдельно (partial success)
+        for index, file_content in enumerate(data.files):
+            try:
+                # Извлекаем метаданные по индексу
+                filename = (
+                    filenames[index] if index < len(filenames) else f"file_{index}"
+                )
+                name = (
+                    data.names[index]
+                    if data.names and index < len(data.names)
+                    else None
+                )
+                description = (
+                    data.descriptions[index]
+                    if data.descriptions and index < len(data.descriptions)
+                    else None
+                )
+
+                # Создаём DTO для создания фото
+                photo_create_dto = PhotoCreateDto(
+                    name=name,
+                    description=description,
+                )
+                photo_upload_dto = PhotoUploadDto(
+                    filename=filename,
+                    content=file_content,
+                )
+
+                # Создаём Photo через PhotoService
+                photo = await self.photo_service.create(
+                    photo_create_dto,
+                    photo_upload_dto,
+                    equestrian_context=equestrian_context,
+                )
+
+                # Добавляем photo_id в список
+                current_photo_ids.append(photo.id)
+
+                # Обновляем horse.photo_ids
+                await self.horse_repository.set_horse_photos(
+                    horse_id,
+                    current_photo_ids,
+                    main_photo_id=None,  # не меняем main
+                    equestrian_id=equestrian_context.id,
+                )
+
+                # Добавляем в успешные
+                photos.append(
+                    PhotoOutShortDto(
+                        id=photo.id,
+                        is_main=False,
+                        url=self.photo_url_builder.build(photo.path),
+                    )
+                )
+
+            except Exception as e:
+                # Ошибка для конкретного файла
+                errors.append(
+                    PhotoBatchUploadErrorDto(
+                        index=index,
+                        message=str(e),
+                    )
+                )
+
+        return PhotoBatchUploadResponseDto(
+            photos=photos,
+            errors=errors if errors else None,
+        )
 
     async def add_horse_service(self):
         """Добавить услугу к лошади."""

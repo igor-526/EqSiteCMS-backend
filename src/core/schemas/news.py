@@ -77,3 +77,26 @@ class NewsUpdateDto(BaseSchema):
 class NewsPhotosUpdateDto(BaseSchema):
     photo_ids: list[UUID] | None = Field(None, description="Список UUID фотографий")
     main: UUID | None = Field(None, description="UUID главной фотографии")
+
+
+class NewsPhotosUploadDto(BaseSchema):
+    """DTO для batch upload+attach фотографий к новости.
+    
+    Используется для endpoint POST /news/{id}/photos/upload.
+    Принимает multipart/form-data с files[], names[], descriptions[].
+    """
+
+    files: list[bytes] = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="Массив файлов (минимум 1, максимум 20)",
+    )
+    names: list[str] | None = Field(
+        None,
+        description="Опциональные названия фото (по индексу соответствуют files[])",
+    )
+    descriptions: list[str] | None = Field(
+        None,
+        description="Опциональные описания фото (по индексу соответствуют files[])",
+    )

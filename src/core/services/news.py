@@ -1,7 +1,10 @@
 import re
 from datetime import datetime, timezone
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from core.services.photos import PhotoService
 
 from core.entities.equestrian import EquestrianContext
 from core.entities.news import News, NewsStatus
@@ -14,11 +17,18 @@ from core.schemas.news import (
     NewsCreateDto,
     NewsOutDto,
     NewsPhotosUpdateDto,
+    NewsPhotosUploadDto,
     NewsPublicDetailOutDto,
     NewsPublicOutDto,
     NewsUpdateDto,
 )
-from core.schemas.photos import PhotoOutShortDto
+from core.schemas.photos import (
+    PhotoBatchUploadErrorDto,
+    PhotoBatchUploadResponseDto,
+    PhotoCreateDto,
+    PhotoOutShortDto,
+    PhotoUploadDto,
+)
 from core.schemas.users import UserOutDto
 from core.utils.html_security import validate_no_js_in_html
 from core.utils.news_slug import generate_news_slug
@@ -35,10 +45,12 @@ class NewsService:
         news_repository: NewsRepositoryProtocol,
         photo_repository: PhotoRepositoryProtocol,
         photo_url_builder: PhotoUrlBuilderProtocol,
+        photo_service: "PhotoService | None" = None,
     ):
         self.news_repository = news_repository
         self.photo_repository = photo_repository
         self.photo_url_builder = photo_url_builder
+        self.photo_service = photo_service
 
     async def _check_admin_permission(self, *, user: UserOutDto) -> None:
         has_scope = any(
@@ -255,6 +267,109 @@ class NewsService:
             photo_ids=unique_photo_ids,
             main_photo_id=main_photo_id,
             equestrian_id=equestrian_context.id,
+        )
+
+    async def upload_and_attach_photos(
+        self,
+        news_id: UUID,
+        data: NewsPhotosUploadDto,
+        filenames: list[str],
+        *,
+        equestrian_context: EquestrianContext,
+        user: UserOutDto,
+    ) -> PhotoBatchUploadResponseDto:
+        """Batch upload фотографий и автоматическое присоединение к новости.
+
+        Partial success mode: успешные файлы коммитятся, ошибочные в errors[].
+        """
+        await self._check_admin_permission(user=user)
+
+        if self.photo_service is None:
+            raise ClientError("PhotoService не инициализирован")
+
+        # Проверяем что news существует
+        news = await self.news_repository.get_by_id(
+            news_id, equestrian_id=equestrian_context.id
+        )
+        if news is None:
+            raise ClientError("Новость не найдена")
+
+        # Получаем текущий список фото
+        current_relations = await self.news_repository.get_news_photos(
+            news.id, equestrian_id=equestrian_context.id
+        )
+        current_photo_ids = [relation.photo_id for relation in current_relations]
+
+        photos: list[PhotoOutShortDto] = []
+        errors: list[PhotoBatchUploadErrorDto] = []
+
+        # Обрабатываем каждый файл отдельно (partial success)
+        for index, file_content in enumerate(data.files):
+            try:
+                # Извлекаем метаданные по индексу
+                filename = (
+                    filenames[index] if index < len(filenames) else f"file_{index}"
+                )
+                name = (
+                    data.names[index]
+                    if data.names and index < len(data.names)
+                    else None
+                )
+                description = (
+                    data.descriptions[index]
+                    if data.descriptions and index < len(data.descriptions)
+                    else None
+                )
+
+                # Создаём DTO для создания фото
+                photo_create_dto = PhotoCreateDto(
+                    name=name,
+                    description=description,
+                )
+                photo_upload_dto = PhotoUploadDto(
+                    filename=filename,
+                    content=file_content,
+                )
+
+                # Создаём Photo через PhotoService
+                photo = await self.photo_service.create(
+                    photo_create_dto,
+                    photo_upload_dto,
+                    equestrian_context=equestrian_context,
+                )
+
+                # Добавляем photo_id в список
+                current_photo_ids.append(photo.id)
+
+                # Обновляем news.photo_ids
+                await self.news_repository.set_news_photos(
+                    news.id,
+                    photo_ids=current_photo_ids,
+                    main_photo_id=None,  # не меняем main
+                    equestrian_id=equestrian_context.id,
+                )
+
+                # Добавляем в успешные
+                photos.append(
+                    PhotoOutShortDto(
+                        id=photo.id,
+                        is_main=False,
+                        url=self.photo_url_builder.build(photo.path),
+                    )
+                )
+
+            except Exception as e:
+                # Ошибка для конкретного файла
+                errors.append(
+                    PhotoBatchUploadErrorDto(
+                        index=index,
+                        message=str(e),
+                    )
+                )
+
+        return PhotoBatchUploadResponseDto(
+            photos=photos,
+            errors=errors if errors else None,
         )
 
     async def get_cms_list(

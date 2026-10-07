@@ -1,10 +1,11 @@
 from typing import Annotated, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
+from core.schemas.photos import PhotoBatchUploadResponseDto
 from core.schemas.prices import (
     PriceCreateDto,
     PriceGroupCreateDto,
@@ -14,6 +15,7 @@ from core.schemas.prices import (
     PriceOutDto,
     PriceOutWithTablesDto,
     PricePhotosUpdateDto,
+    PricePhotosUploadDto,
     PriceUpdateDto,
 )
 from core.schemas.users import UserOutDto
@@ -300,4 +302,64 @@ async def update_price_photos(
 ) -> None:
     await price_service.update_price_photos(
         slug_or_id, data, equestrian_context=equestrian_context
+    )
+
+
+@router.post(
+    "/prices/{slug_or_id}/photos/upload",
+    response_model=PhotoBatchUploadResponseDto,
+    tags=["Price"],
+    description="Batch upload фотографий и автоматическое присоединение к услуге (Protected Write: 401 без auth, 403 не owner, 200 OK owner)",
+)
+async def upload_and_attach_photos_to_price(
+    slug_or_id: str,
+    price_service: Annotated[PriceService, Depends(get_price_service)],
+    _: Annotated[object, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
+    files: list[UploadFile] = File(
+        ...,
+        description="Массив файлов (минимум 1, максимум 20)",
+        min_length=1,
+        max_length=20,
+    ),
+    names: list[str] | None = Form(
+        None,
+        description="Опциональные названия фото (по индексу соответствуют files[])",
+    ),
+    descriptions: list[str] | None = Form(
+        None,
+        description="Опциональные описания фото (по индексу соответствуют files[])",
+    ),
+) -> PhotoBatchUploadResponseDto:
+    """Batch upload+attach endpoint для услуг.
+
+    Multipart/form-data с полями:
+    - files[] — массив файлов (обязательно, 1-20 файлов)
+    - names[] — опциональные названия (по индексу)
+    - descriptions[] — опциональные описания (по индексу)
+
+    Возвращает PhotoBatchUploadResponseDto с photos[] и errors[] (partial success).
+
+    Access control: Protected Write (требует авторизацию и проверку owner).
+    """
+    # Читаем содержимое файлов
+    file_contents = []
+    filenames: list[str] = []
+    for file in files:
+        content = await file.read()
+        file_contents.append(content)
+        filenames.append(file.filename or f"file_{len(filenames)}")
+
+    # Создаём DTO для service layer
+    data = PricePhotosUploadDto(
+        files=file_contents,
+        names=names,
+        descriptions=descriptions,
+    )
+
+    # Вызываем service method
+    return await price_service.upload_and_attach_photos(
+        slug_or_id, data, filenames, equestrian_context=equestrian_context
     )

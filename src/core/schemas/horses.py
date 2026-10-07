@@ -396,3 +396,26 @@ class SetPedigreeEntities(BaseSchema):
                             "Дата рождения ребёнка не может быть позже даты смерти матери (целевой лошади)"
                         )
         return self
+
+
+class HorsePhotosUploadDto(BaseSchema):
+    """DTO для batch upload+attach фотографий к лошади.
+    
+    Используется для endpoint POST /horses/{id}/photos/upload.
+    Принимает multipart/form-data с files[], names[], descriptions[].
+    """
+
+    files: list[bytes] = Field(
+        ...,
+        min_length=1,
+        max_length=20,
+        description="Массив файлов (минимум 1, максимум 20)",
+    )
+    names: list[str] | None = Field(
+        None,
+        description="Опциональные названия фото (по индексу соответствуют files[])",
+    )
+    descriptions: list[str] | None = Field(
+        None,
+        description="Опциональные описания фото (по индексу соответствуют files[])",
+    )

@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 
 from core.entities.base import PaginatedEntities
 from core.entities.equestrian import EquestrianContext
@@ -11,10 +11,12 @@ from core.schemas.news import (
     NewsCreateDto,
     NewsOutDto,
     NewsPhotosUpdateDto,
+    NewsPhotosUploadDto,
     NewsPublicDetailOutDto,
     NewsPublicOutDto,
     NewsUpdateDto,
 )
+from core.schemas.photos import PhotoBatchUploadResponseDto
 from core.schemas.users import UserOutDto
 from core.services.news import NewsService
 from depends.services import (
@@ -223,4 +225,68 @@ async def update_news_photos(
 ) -> None:
     await news_service.update_photos(
         news_id, data, equestrian_context=equestrian_context
+    )
+
+
+@router.post(
+    "/news/{news_id}/photos/upload",
+    response_model=PhotoBatchUploadResponseDto,
+    tags=["News"],
+    description="Batch upload фотографий и автоматическое присоединение к новости (Protected Write: 401 без auth, 403 не owner, 200 OK owner)",
+)
+async def upload_and_attach_photos_to_news(
+    news_id: UUID,
+    news_service: Annotated[NewsService, Depends(get_news_service)],
+    current_user: Annotated[UserOutDto, Depends(get_current_user)],
+    equestrian_context: Annotated[
+        EquestrianContext, Depends(get_protected_equestrian_context)
+    ],
+    files: list[UploadFile] = File(
+        ...,
+        description="Массив файлов (минимум 1, максимум 20)",
+        min_length=1,
+        max_length=20,
+    ),
+    names: list[str] | None = Form(
+        None,
+        description="Опциональные названия фото (по индексу соответствуют files[])",
+    ),
+    descriptions: list[str] | None = Form(
+        None,
+        description="Опциональные описания фото (по индексу соответствуют files[])",
+    ),
+) -> PhotoBatchUploadResponseDto:
+    """Batch upload+attach endpoint для новостей.
+
+    Multipart/form-data с полями:
+    - files[] — массив файлов (обязательно, 1-20 файлов)
+    - names[] — опциональные названия (по индексу)
+    - descriptions[] — опциональные описания (по индексу)
+
+    Возвращает PhotoBatchUploadResponseDto с photos[] и errors[] (partial success).
+
+    Access control: Protected Write (требует авторизацию и проверку owner).
+    """
+    # Читаем содержимое файлов
+    file_contents = []
+    filenames: list[str] = []
+    for file in files:
+        content = await file.read()
+        file_contents.append(content)
+        filenames.append(file.filename or f"file_{len(filenames)}")
+
+    # Создаём DTO для service layer
+    data = NewsPhotosUploadDto(
+        files=file_contents,
+        names=names,
+        descriptions=descriptions,
+    )
+
+    # Вызываем service method
+    return await news_service.upload_and_attach_photos(
+        news_id,
+        data,
+        filenames,
+        user=current_user,
+        equestrian_context=equestrian_context,
     )

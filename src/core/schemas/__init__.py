@@ -20,6 +20,7 @@ from .horses import (
     HorseOutDto,
     HorsePedigree,
     HorsePhotosUpdateInDto,
+    HorsePhotosUploadDto,
     HorseSetPedigreeInDto,
     HorseUpdateInDto,
     HorseWithPedigreeOutDto,
@@ -28,6 +29,8 @@ from .horses import (
 from .messaging import CallbackRequestedData, MessagingBaseEventData, MessagingEvent
 from .photos import (
     PhotoBatchDeleteDto,
+    PhotoBatchUploadErrorDto,
+    PhotoBatchUploadResponseDto,
     PhotoCreateDto,
     PhotoOutDto,
     PhotoOutShortDto,
@@ -80,6 +83,7 @@ __all__ = [
     "HorseCreateInDto",
     "HorseUpdateInDto",
     "HorsePhotosUpdateInDto",
+    "HorsePhotosUploadDto",
     "HorseSetPedigreeInDto",
     "SetPedigreeEntities",
     "HorseOwnerOutDto",
@@ -95,6 +99,8 @@ __all__ = [
     "PhotoUploadDto",
     "PhotoOutShortDto",
     "PhotoBatchDeleteDto",
+    "PhotoBatchUploadErrorDto",
+    "PhotoBatchUploadResponseDto",
     "BreedOutDto",
     "BreedCreateDto",
     "BreedUpdateDto",
