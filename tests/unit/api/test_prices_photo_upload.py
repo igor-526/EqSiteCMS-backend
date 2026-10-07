@@ -9,14 +9,12 @@ from core.entities.equestrian import EquestrianContext
 from core.entities.prices import Price
 from core.exceptions.base import ClientError
 from core.schemas.photos import (
-    PhotoBatchUploadErrorDto,
     PhotoBatchUploadResponseDto,
     PhotoOutShortDto,
 )
 from core.schemas.prices import PricePhotosUploadDto
 from core.services.prices import PriceService
 from tests.unit.conftest import (
-    TEST_ADMIN_USER,
     TEST_EQUESTRIAN_CONTEXT,
     TEST_EQUESTRIAN_ID,
 )

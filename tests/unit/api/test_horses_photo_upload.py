@@ -10,7 +10,6 @@ from core.entities.horse import Horse
 from core.exceptions.base import ClientError
 from core.schemas.horses import HorsePhotosUploadDto
 from core.schemas.photos import (
-    PhotoBatchUploadErrorDto,
     PhotoBatchUploadResponseDto,
     PhotoOutShortDto,
 )
@@ -282,7 +281,6 @@ async def test_upload_and_attach_photos_without_admin_permission(
     # Arrange
     from datetime import datetime, timezone
 
-    from core.entities.user import UserScope
     from core.schemas.users import UserOutDto
 
     non_admin_user = UserOutDto(

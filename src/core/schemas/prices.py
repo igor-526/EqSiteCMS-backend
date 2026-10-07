@@ -146,7 +146,7 @@ class PriceGroupReorderDto(BaseSchema):
 
 class PricePhotosUploadDto(BaseSchema):
     """DTO для batch upload+attach фотографий к услуге.
-    
+
     Используется для endpoint POST /prices/{id}/photos/upload.
     Принимает multipart/form-data с files[], names[], descriptions[].
     """

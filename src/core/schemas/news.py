@@ -81,7 +81,7 @@ class NewsPhotosUpdateDto(BaseSchema):
 
 class NewsPhotosUploadDto(BaseSchema):
     """DTO для batch upload+attach фотографий к новости.
-    
+
     Используется для endpoint POST /news/{id}/photos/upload.
     Принимает multipart/form-data с files[], names[], descriptions[].
     """

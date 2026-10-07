@@ -400,7 +400,7 @@ class SetPedigreeEntities(BaseSchema):
 
 class HorsePhotosUploadDto(BaseSchema):
     """DTO для batch upload+attach фотографий к лошади.
-    
+
     Используется для endpoint POST /horses/{id}/photos/upload.
     Принимает multipart/form-data с files[], names[], descriptions[].
     """

@@ -91,7 +91,7 @@ class PhotoBatchUploadErrorDto(BaseSchema):
 
 class PhotoBatchUploadResponseDto(BaseSchema):
     """DTO для ответа batch upload+attach endpoints.
-    
+
     Поддерживает partial success: успешные фото в photos[], ошибки в errors[].
     """
 
@@ -99,5 +99,6 @@ class PhotoBatchUploadResponseDto(BaseSchema):
         ..., description="Массив успешно загруженных фотографий"
     )
     errors: list[PhotoBatchUploadErrorDto] | None = Field(
-        None, description="Массив ошибок для неудачных файлов (отсутствует при полном успехе)"
+        None,
+        description="Массив ошибок для неудачных файлов (отсутствует при полном успехе)",
     )
