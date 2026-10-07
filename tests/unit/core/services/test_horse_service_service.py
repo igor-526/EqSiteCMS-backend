@@ -5,7 +5,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.horse_service import HorseServiceEntity
 from core.entities.price import PriceFormatter

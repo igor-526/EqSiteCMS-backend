@@ -6,7 +6,7 @@ from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 import pytest
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.horse_owner import HorseOwner, HorseOwnerType
 from core.exceptions.base import ClientError

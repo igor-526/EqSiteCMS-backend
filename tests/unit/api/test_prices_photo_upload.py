@@ -1,5 +1,6 @@
 """Unit tests for PriceService.upload_and_attach_photos (BE-4)."""
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -122,8 +123,8 @@ def price_service(
     photo_url_builder.build.side_effect = lambda path: f"https://example.com/{path}"
 
     service = PriceService(
-        price_repository=fake_price_repository,
-        price_group_repository=fake_price_group_repository,
+        price_repository=cast(Any, fake_price_repository),
+        price_group_repository=cast(Any, fake_price_group_repository),
         photo_repository=MagicMock(),
         photo_url_builder=photo_url_builder,
         photo_service=mock_photo_service,
@@ -218,7 +219,8 @@ async def test_upload_and_attach_photos_partial_success(
             created_at=datetime.now(timezone.utc),
         )
 
-    price_service.photo_service.create.side_effect = create_with_error
+    assert price_service.photo_service is not None
+    cast(AsyncMock, price_service.photo_service.create).side_effect = create_with_error
 
     # Act
     result = await price_service.upload_and_attach_photos(
@@ -409,7 +411,10 @@ async def test_upload_and_attach_photos_different_errors(
             created_at=datetime.now(timezone.utc),
         )
 
-    price_service.photo_service.create.side_effect = create_with_varied_errors
+    assert price_service.photo_service is not None
+    cast(
+        AsyncMock, price_service.photo_service.create
+    ).side_effect = create_with_varied_errors
 
     # Act
     result = await price_service.upload_and_attach_photos(
@@ -477,8 +482,8 @@ async def test_upload_and_attach_photos_photo_service_not_initialized(
     """Тест ошибки: PhotoService не инициализирован."""
     # Arrange
     service = PriceService(
-        price_repository=fake_price_repository,
-        price_group_repository=fake_price_group_repository,
+        price_repository=cast(Any, fake_price_repository),
+        price_group_repository=cast(Any, fake_price_group_repository),
         photo_repository=MagicMock(),
         photo_url_builder=MagicMock(),
         photo_service=None,  # Явно устанавливаем None

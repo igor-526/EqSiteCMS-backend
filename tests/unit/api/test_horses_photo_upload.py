@@ -1,5 +1,6 @@
 """Unit tests for HorseService.upload_and_attach_photos (BE-4)."""
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -133,7 +134,7 @@ def horse_service(
     photo_url_builder.build.side_effect = lambda path: f"https://example.com/{path}"
 
     service = HorseService(
-        horse_repository=fake_horse_repository,
+        horse_repository=cast(Any, fake_horse_repository),
         horse_children_repository=MagicMock(),
         breed_repository=MagicMock(),
         coat_color_repository=MagicMock(),
@@ -227,7 +228,8 @@ async def test_upload_and_attach_photos_partial_success(
             created_at=datetime.now(timezone.utc),
         )
 
-    horse_service.photo_service.create.side_effect = create_with_error
+    assert horse_service.photo_service is not None
+    cast(AsyncMock, horse_service.photo_service.create).side_effect = create_with_error
 
     # Act
     result = await horse_service.upload_and_attach_photos(
@@ -389,7 +391,7 @@ async def test_upload_and_attach_photos_photo_service_not_initialized(
     """Тест ошибки: PhotoService не инициализирован."""
     # Arrange
     service = HorseService(
-        horse_repository=fake_horse_repository,
+        horse_repository=cast(Any, fake_horse_repository),
         horse_children_repository=MagicMock(),
         breed_repository=MagicMock(),
         coat_color_repository=MagicMock(),

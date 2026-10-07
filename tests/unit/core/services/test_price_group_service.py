@@ -4,7 +4,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.prices import PriceGroup
 from core.exceptions.base import ClientError

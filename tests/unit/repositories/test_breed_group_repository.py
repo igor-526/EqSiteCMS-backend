@@ -2,7 +2,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
-from test_breed_repository import FakeAsyncSession, compile_sql
+from .test_breed_repository import FakeAsyncSession, compile_sql
 
 from repositories.breed_group_repository import BreedGroupRepository
 

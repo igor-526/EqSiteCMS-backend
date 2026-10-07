@@ -309,7 +309,10 @@ async def update_price_photos(
     "/prices/{slug_or_id}/photos/upload",
     response_model=PhotoBatchUploadResponseDto,
     tags=["Price"],
-    description="Batch upload фотографий и автоматическое присоединение к услуге (Protected Write: 401 без auth, 403 не owner, 200 OK owner)",
+    description=(
+        "Batch upload фотографий и автоматическое присоединение к услуге "
+        "(Protected Write: 401 без auth, 403 не owner, 200 OK owner)"
+    ),
 )
 async def upload_and_attach_photos_to_price(
     slug_or_id: str,

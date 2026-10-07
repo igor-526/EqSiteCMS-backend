@@ -1,5 +1,6 @@
 """Unit tests for NewsService.upload_and_attach_photos (BE-4)."""
 
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
@@ -100,7 +101,7 @@ def news_service(
     photo_url_builder.build.side_effect = lambda path: f"https://example.com/{path}"
 
     service = NewsService(
-        news_repository=fake_news_repository,
+        news_repository=cast(Any, fake_news_repository),
         photo_repository=MagicMock(),
         photo_url_builder=photo_url_builder,
         photo_service=mock_photo_service,
@@ -219,7 +220,8 @@ async def test_upload_and_attach_photos_partial_success(
             created_at=datetime.now(timezone.utc),
         )
 
-    news_service.photo_service.create.side_effect = create_with_error
+    assert news_service.photo_service is not None
+    cast(AsyncMock, news_service.photo_service.create).side_effect = create_with_error
 
     # Act
     result = await news_service.upload_and_attach_photos(
@@ -386,7 +388,7 @@ async def test_upload_and_attach_photos_photo_service_not_initialized(
     """Тест ошибки: PhotoService не инициализирован."""
     # Arrange
     service = NewsService(
-        news_repository=fake_news_repository,
+        news_repository=cast(Any, fake_news_repository),
         photo_repository=MagicMock(),
         photo_url_builder=MagicMock(),
         photo_service=None,

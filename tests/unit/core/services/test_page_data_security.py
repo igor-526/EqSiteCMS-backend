@@ -11,7 +11,7 @@ from typing import Any, cast
 from uuid import UUID
 
 import pytest
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.breeds import Breed
 from core.entities.coat_color import CoatColor

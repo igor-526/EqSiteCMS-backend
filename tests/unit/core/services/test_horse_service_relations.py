@@ -4,7 +4,7 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
-from tenant_context import TEST_ADMIN_USER, TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_ADMIN_USER, TEST_EQUESTRIAN_CONTEXT
 
 from core.entities.horse import Horse
 from core.entities.horse_service import HorseServiceEntity, HorseServiceRelations

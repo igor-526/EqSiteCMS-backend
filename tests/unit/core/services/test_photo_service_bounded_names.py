@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.exceptions.base import ClientError, ConflictError
 from core.photo_names import (

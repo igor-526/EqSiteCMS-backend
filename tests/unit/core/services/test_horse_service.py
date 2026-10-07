@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import Column, MetaData, String
 from sqlalchemy import Table as SATable
 from sqlalchemy.dialects import postgresql
-from tenant_context import TEST_EQUESTRIAN_CONTEXT
+from .tenant_context import TEST_EQUESTRIAN_CONTEXT
 
 from core.entities import (
     Breed,

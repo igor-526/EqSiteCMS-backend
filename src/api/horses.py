@@ -256,7 +256,10 @@ async def update_horse_photos(
 @router.post(
     "/{horse_id}/photos/upload",
     response_model=PhotoBatchUploadResponseDto,
-    description="Batch upload фотографий и автоматическое присоединение к лошади (Protected Write: 401 без auth, 403 не owner, 200 OK owner)",
+    description=(
+        "Batch upload фотографий и автоматическое присоединение к лошади "
+        "(Protected Write: 401 без auth, 403 не owner, 200 OK owner)"
+    ),
 )
 async def upload_and_attach_photos_to_horse(
     horse_id: UUID,

@@ -232,7 +232,10 @@ async def update_news_photos(
     "/news/{news_id}/photos/upload",
     response_model=PhotoBatchUploadResponseDto,
     tags=["News"],
-    description="Batch upload фотографий и автоматическое присоединение к новости (Protected Write: 401 без auth, 403 не owner, 200 OK owner)",
+    description=(
+        "Batch upload фотографий и автоматическое присоединение к новости "
+        "(Protected Write: 401 без auth, 403 не owner, 200 OK owner)"
+    ),
 )
 async def upload_and_attach_photos_to_news(
     news_id: UUID,
