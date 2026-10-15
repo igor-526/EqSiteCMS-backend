@@ -1,5 +1,6 @@
 # Base python image
 FROM python:3.13
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # Dependencies install
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
