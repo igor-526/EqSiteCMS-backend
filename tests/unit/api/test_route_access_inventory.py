@@ -14,7 +14,7 @@ def test_every_registered_api_route_has_exactly_one_access_classification() -> N
     )
     rows = inventory(app)
 
-    assert registered == 112
+    assert registered == 120
     assert len(rows) == registered
     assert len({(method, path) for method, path, _ in rows}) == registered
     assert all(rule.access_class and rule.tests for _, _, rule in rows)
@@ -69,6 +69,88 @@ def test_email_and_policy_exceptions_are_explicitly_classified() -> None:
     assert (
         rules[("PATCH", "/api/service/callback_requests/{id}/status")].access_class
         == "service API"
+    )
+
+
+def test_ut_yx23_yandex_access_matrix_is_explicitly_classified() -> None:
+    rows = [
+        (method, path, rule)
+        for method, path, rule in inventory(app)
+        if path.startswith("/api/yandex/")
+    ]
+    assert {(method, path) for method, path, _ in rows} == {
+        ("GET", "/api/yandex/auth/link"),
+        ("POST", "/api/yandex/auth/code"),
+        ("GET", "/api/yandex/accounts"),
+        ("DELETE", "/api/yandex/accounts/{account_id}"),
+        ("GET", "/api/yandex/metrica/counters"),
+        ("GET", "/api/yandex/metrica/connection"),
+        ("POST", "/api/yandex/metrica/connection"),
+        ("DELETE", "/api/yandex/metrica/connection"),
+    }
+    for method, _, rule in rows:
+        assert rule.access_class == (
+            "protected GET exception" if method == "GET" else "protected write"
+        )
+        assert rule.roles == "ADMIN only; no SUPERUSER/DEVELOPER override"
+        assert rule.without_auth == "401"
+        assert "403 before downstream" in rule.with_auth
+        assert "from session" in rule.tenant_selector
+        assert rule.tests == "tests/unit/api/test_yandex_proxy_api.py"
+
+
+def test_yandex_inventory_outcomes_are_route_specific() -> None:
+    rules = {(method, path): rule for method, path, rule in inventory(app)}
+    account_routes = {
+        ("DELETE", "/api/yandex/accounts/{account_id}"),
+        ("GET", "/api/yandex/metrica/counters"),
+        ("POST", "/api/yandex/metrica/connection"),
+    }
+    for key, rule in rules.items():
+        if not key[1].startswith("/api/yandex/"):
+            continue
+        assert ("404 foreign/missing account" in rule.foreign) == (
+            key in account_routes
+        )
+        assert ("state mismatch" in rule.foreign) == (
+            key == ("POST", "/api/yandex/auth/code")
+        )
+        assert "peer 400; 502 unavailable downstream" in rule.validation
+    expected_validation = {
+        ("GET", "/api/yandex/auth/link"): "peer 400; 502 unavailable downstream",
+        (
+            "POST",
+            "/api/yandex/auth/code",
+        ): "400 missing/blank code/state or malformed body",
+        (
+            "GET",
+            "/api/yandex/accounts",
+        ): "400 nonnumeric limit/offset; limit/offset clamped",
+        ("DELETE", "/api/yandex/accounts/{account_id}"): "400 malformed account_id",
+        (
+            "GET",
+            "/api/yandex/metrica/counters",
+        ): "400 missing/malformed account_id or nonnumeric limit/offset; limit/offset clamped",
+        (
+            "GET",
+            "/api/yandex/metrica/connection",
+        ): "peer 400; 502 unavailable downstream",
+        (
+            "POST",
+            "/api/yandex/metrica/connection",
+        ): "400 missing/malformed body/account UUID; counter_id must be 1..31 ASCII digits (number coerced to string)",
+        (
+            "DELETE",
+            "/api/yandex/metrica/connection",
+        ): "peer 400; 502 unavailable downstream",
+    }
+    for key, expected in expected_validation.items():
+        assert rules[key].validation.startswith(expected)
+    assert rules[("GET", "/api/yandex/metrica/connection")].with_auth.startswith(
+        "200 counter or null;"
+    )
+    assert rules[("DELETE", "/api/yandex/metrica/connection")].with_auth.startswith(
+        "204 idempotent;"
     )
 
 

@@ -71,6 +71,62 @@ def classify(method: str, path: str) -> AccessRule:
             "N/A",
             "tests/unit/api/test_route_order.py",
         )
+    if path.startswith("/api/yandex/"):
+        outcomes = {
+            ("GET", "/api/yandex/auth/link"): (
+                "200",
+                "not addressable",
+                "N/A",
+            ),
+            ("POST", "/api/yandex/auth/code"): (
+                "200",
+                "403 state mismatch (including non-UUID)",
+                "400 missing/blank code/state or malformed body",
+            ),
+            ("GET", "/api/yandex/accounts"): (
+                "200",
+                "tenant-scoped list; foreign tenant not addressable",
+                "400 nonnumeric limit/offset; limit/offset clamped",
+            ),
+            ("DELETE", "/api/yandex/accounts/{account_id}"): (
+                "204",
+                "404 foreign/missing account before target downstream",
+                "400 malformed account_id",
+            ),
+            ("GET", "/api/yandex/metrica/counters"): (
+                "200",
+                "404 foreign/missing account before target downstream",
+                "400 missing/malformed account_id or nonnumeric limit/offset; limit/offset clamped",
+            ),
+            ("GET", "/api/yandex/metrica/connection"): (
+                "200 counter or null",
+                "connection not addressable",
+                "N/A",
+            ),
+            ("POST", "/api/yandex/metrica/connection"): (
+                "200",
+                "404 foreign/missing account before target downstream",
+                "400 missing/malformed body/account UUID; counter_id must be 1..31 ASCII digits (number coerced to string)",
+            ),
+            ("DELETE", "/api/yandex/metrica/connection"): (
+                "204 idempotent",
+                "connection not addressable",
+                "N/A",
+            ),
+        }
+        success, foreign, validation = outcomes[key]
+        return AccessRule(
+            "protected GET exception" if method == "GET" else "protected write",
+            "ADMIN only; no SUPERUSER/DEVELOPER override",
+            "actor cookie; equestrian_id from session",
+            "tenant scoped; PII/OAuth data is not public read",
+            "401",
+            success + "; without ADMIN 403 before downstream",
+            foreign,
+            (validation + "; " if validation != "N/A" else "")
+            + "peer 400; 502 unavailable downstream",
+            "tests/unit/api/test_yandex_proxy_api.py",
+        )
     if key == ("GET", "/api/callback_requests/statuses"):
         return AccessRule("public read", "all", "N/A", "N/A", "200", "200", "N/A", "N/A", "tests/unit/api/test_callback_requests_api.py")
     if method == "GET" and path.startswith("/api/callback_requests"):

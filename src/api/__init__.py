@@ -16,6 +16,7 @@ from .prices import router as prices_router
 from .service_users import router as service_users_router
 from .site_settings import router as site_settings_router
 from .users import router as users_router
+from .yandex import router as yandex_router
 
 __all__ = [
     "user_management_router",
@@ -38,6 +39,7 @@ __all__ = [
     "service_users_router",
     "site_settings_router",
     "users_router",
+    "yandex_router",
 ]
 from .user_management import router as user_management_router
 from .vks import router as vks_router

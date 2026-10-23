@@ -63,6 +63,10 @@ class Settings(BaseSettings):
         default="http://eqsitecms-vk-service:8000", alias="VK_SERVICE_URL"
     )
 
+    yandex_service_url: str = Field(
+        default="http://eqsitecms-yandex-service:8000", alias="YANDEX_SERVICE_URL"
+    )
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         if self.environment.lower() != "production":

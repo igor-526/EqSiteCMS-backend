@@ -59,6 +59,14 @@ make lint
 make test
 ```
 
+## Интеграция Яндекса
+
+`YANDEX_SERVICE_URL` — базовый URL приватного `yandex-service`, по умолчанию
+`http://eqsitecms-yandex-service:8000` (см. `.env.example`). Peer credential не
+передаётся; production требует сетевой изоляции peer. Backend обращается к
+Метрике только через этот сервис. Tenant определяется сессией пользователя;
+новые browser-маршруты интеграции предназначены только для роли `ADMIN`.
+
 ## API
 
 | Метод | Путь | Назначение | Доступ |

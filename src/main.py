@@ -27,6 +27,7 @@ from api import (
     site_settings_router,
     user_management_router,
     users_router,
+    yandex_router,
 )
 from containers import container
 from core.exceptions.auth import ForbiddenError, InvalidCredentials, InvalidServiceKey
@@ -93,6 +94,7 @@ router.include_router(prices_router)
 router.include_router(site_settings_router)
 router.include_router(users_router, prefix="/users", tags=["Users"])
 router.include_router(vks_router)
+router.include_router(yandex_router)
 router.include_router(
     callback_request_router, prefix="/callback_requests", tags=["Callback Requests"]
 )
