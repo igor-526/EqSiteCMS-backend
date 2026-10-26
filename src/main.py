@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import ValidationError
 from uvicorn import run
 
@@ -11,7 +12,6 @@ from api import (
     breed_groups_router,
     breeds_router,
     callback_request_router,
-    service_callback_request_router,
     coat_color_router,
     emails_router,
     horse_owner_router,
@@ -20,13 +20,15 @@ from api import (
     horses_router,
     news_router,
     notification_settings_router,
-    vks_router,
     photos_router,
     prices_router,
+    seo_router,
+    service_callback_request_router,
     service_users_router,
     site_settings_router,
     user_management_router,
     users_router,
+    vks_router,
     yandex_router,
 )
 from containers import container
@@ -41,10 +43,9 @@ from core.exceptions.tenant import TenantNotFound
 from core.middleware.cors import SplitCORSMiddleware
 from settings import settings
 from utils.configure_logger import configure_logger
-from utils.seeding.init_registry import init_registry
 from utils.configure_sentry import configure_sentry
 from utils.observability import start_metrics_runtime
-from prometheus_fastapi_instrumentator import Instrumentator
+from utils.seeding.init_registry import init_registry
 
 configure_logger(logger_root_name=__name__, logger_prefix_output="EqSiteCMS Backend")
 configure_sentry()
@@ -95,6 +96,7 @@ router.include_router(site_settings_router)
 router.include_router(users_router, prefix="/users", tags=["Users"])
 router.include_router(vks_router)
 router.include_router(yandex_router)
+router.include_router(seo_router)
 router.include_router(
     callback_request_router, prefix="/callback_requests", tags=["Callback Requests"]
 )
@@ -206,6 +208,8 @@ def validation_error_handler(
         )
         else 400
     )
+    if request.url.path.startswith("/api/seo/"):
+        status_code = 400
     if errors:
         # Берем первую ошибку для сообщения
         error = errors[0]

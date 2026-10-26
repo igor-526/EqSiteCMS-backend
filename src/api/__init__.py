@@ -13,6 +13,7 @@ from .news import router as news_router
 from .notification_settings import router as notification_settings_router
 from .photos import router as photos_router
 from .prices import router as prices_router
+from .seo import router as seo_router
 from .service_users import router as service_users_router
 from .site_settings import router as site_settings_router
 from .users import router as users_router
@@ -36,6 +37,7 @@ __all__ = [
     "vks_router",
     "photos_router",
     "prices_router",
+    "seo_router",
     "service_users_router",
     "site_settings_router",
     "users_router",

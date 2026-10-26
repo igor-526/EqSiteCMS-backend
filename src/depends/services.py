@@ -4,6 +4,7 @@ from fastapi import Cookie, Depends, Header
 
 from clients.email_service.client import EmailServiceClient
 from clients.notification_service.client import NotificationServiceClient
+from clients.seo_service.client import SeoServiceClient
 from clients.vk_service.client import VkServiceClient
 from clients.yandex_service.client import YandexServiceClient
 from core.entities.equestrian import EquestrianContext
@@ -38,6 +39,7 @@ from core.protocols.repositories import (
 )
 from core.protocols.repositories.horse_repository import HorseChildrenRepositoryProtocol
 from core.protocols.security import SecurityProtocol
+from core.protocols.seo_service import SeoServiceClientProtocol
 from core.protocols.vk_service import VkServiceClientProtocol
 from core.protocols.yandex_service import YandexServiceClientProtocol
 from core.schemas.users import UserOutDto
@@ -55,6 +57,7 @@ from core.services.news import NewsService
 from core.services.notification_settings import NotificationSettingsService
 from core.services.photos import PhotoService
 from core.services.prices import PriceGroupService, PriceService
+from core.services.seo_proxy import SeoProxyService
 from core.services.site_settings import SiteSettingsService
 from core.services.user_management import UserManagementService
 from core.services.users import UserService
@@ -157,6 +160,16 @@ async def get_yandex_proxy_service(
     client: Annotated[YandexServiceClientProtocol, Depends(get_yandex_service_client)],
 ) -> YandexProxyService:
     return YandexProxyService(client)
+
+
+async def get_seo_service_client() -> SeoServiceClientProtocol:
+    return SeoServiceClient(base_url=settings.seo_service_url)
+
+
+async def get_seo_proxy_service(
+    client: Annotated[SeoServiceClientProtocol, Depends(get_seo_service_client)],
+) -> SeoProxyService:
+    return SeoProxyService(client)
 
 
 async def get_notification_service_client() -> NotificationServiceClientProtocol:

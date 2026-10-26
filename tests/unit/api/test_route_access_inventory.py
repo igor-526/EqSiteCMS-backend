@@ -14,7 +14,7 @@ def test_every_registered_api_route_has_exactly_one_access_classification() -> N
     )
     rows = inventory(app)
 
-    assert registered == 120
+    assert registered == 130
     assert len(rows) == registered
     assert len({(method, path) for method, path, _ in rows}) == registered
     assert all(rule.access_class and rule.tests for _, _, rule in rows)
@@ -152,6 +152,46 @@ def test_yandex_inventory_outcomes_are_route_specific() -> None:
     assert rules[("DELETE", "/api/yandex/metrica/connection")].with_auth.startswith(
         "204 idempotent;"
     )
+
+
+def test_ut_seop11_seo_access_matrix_is_explicitly_classified() -> None:
+    rows = [row for row in inventory(app) if row[1].startswith("/api/seo/")]
+    expected = {("GET", "/api/seo/search-queries"), ("GET", "/api/seo/pages")}
+    for suffix in ("blacklisted-query-params", "blacklisted-hashes"):
+        path = "/api/seo/page-normalization/" + suffix
+        expected.update(
+            {
+                ("GET", path),
+                ("POST", path),
+                ("PATCH", path + "/{item_id}"),
+                ("DELETE", path + "/{item_id}"),
+            }
+        )
+    assert len(rows) == 10
+    assert {(method, path) for method, path, _ in rows} == expected
+    for method, path, rule in rows:
+        assert rule.access_class == (
+            "protected GET exception" if method == "GET" else "protected write"
+        )
+        assert rule.roles == "ADMIN only; no SUPERUSER/DEVELOPER override"
+        assert rule.without_auth == "401"
+        assert "403 before downstream" in rule.with_auth
+        assert "from session" in rule.tenant_selector
+        assert "client selector ignored" in rule.tenant_selector
+        assert rule.tests == "tests/unit/api/test_seo_proxy_api.py"
+        assert rule.with_auth.startswith(
+            "201;" if method == "POST" else "204;" if method == "DELETE" else "200;"
+        )
+        assert "502" in rule.validation
+        assert ("404 foreign/missing item" in rule.foreign) == ("{item_id}" in path)
+        assert ("409 duplicate" in rule.validation) == (method in {"POST", "PATCH"})
+        assert ("400 malformed item_id" in rule.validation) == ("{item_id}" in path)
+        assert ("400 malformed body/value" in rule.validation) == (
+            method in {"POST", "PATCH"}
+        )
+        assert ("nonnumeric limit/offset" in rule.validation) == (
+            path in {"/api/seo/search-queries", "/api/seo/pages"}
+        )
 
 
 def test_news_access_matrix_is_explicitly_classified() -> None:

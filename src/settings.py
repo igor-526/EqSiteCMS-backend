@@ -67,6 +67,10 @@ class Settings(BaseSettings):
         default="http://eqsitecms-yandex-service:8000", alias="YANDEX_SERVICE_URL"
     )
 
+    seo_service_url: str = Field(
+        default="http://eqsitecms-seo-service:8000", alias="SEO_SERVICE_URL"
+    )
+
     @model_validator(mode="after")
     def validate_production_secrets(self) -> "Settings":
         if self.environment.lower() != "production":
