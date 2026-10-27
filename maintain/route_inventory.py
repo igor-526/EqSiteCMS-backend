@@ -73,6 +73,18 @@ def classify(method: str, path: str) -> AccessRule:
         )
     if path.startswith("/api/seo/"):
         success = "201" if method == "POST" else "204" if method == "DELETE" else "200"
+        if path == "/api/seo/parse-jobs":
+            return AccessRule(
+                "protected write",
+                "ADMIN only; no SUPERUSER/DEVELOPER override",
+                "actor cookie; equestrian_id from session; client selector ignored",
+                "tenant scoped; internal SEO administration data is not public read",
+                "401",
+                "202; without ADMIN 403 before downstream; 401/403 before body",
+                "foreign tenant not addressable; body equestrian_id forbidden",
+                "400 malformed body/provider or missing binding; 502 unavailable/invalid downstream; 503 queue unavailable",
+                "tests/unit/api/test_seo_proxy_api.py",
+            )
         seo_validation = []
         if path in {"/api/seo/search-queries", "/api/seo/pages"}:
             seo_validation.append(

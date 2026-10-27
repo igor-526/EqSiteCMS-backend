@@ -551,3 +551,185 @@ def test_ut_gw01_02_real_client_boundary(boundary, kind):
             "detail": "Безопасный отказ" if kind == "400" else "SEO service unavailable"
         }
     assert "private-peer-secret" not in response.text
+
+
+@pytest.mark.parametrize(
+    "scopes,status", [(None, 401), ((), 403), (("SUPERUSER", "DEVELOPER"), 403)]
+)
+@pytest.mark.parametrize("body", [b"{broken", b"{}", b'{"provider":"ya_metrica"}'])
+def test_ut_bk01_access_before_body(boundary, scopes, status, body, monkeypatch):
+    from starlette.requests import Request
+
+    async def unread_body(self):
+        pytest.fail("body read before access check")
+
+    monkeypatch.setattr(Request, "body", unread_body)
+    if scopes is None:
+        del app.dependency_overrides[get_current_user]
+    else:
+        app.dependency_overrides[get_current_user] = lambda: actor(*scopes)
+    response = boundary[0].post(
+        "/api/seo/parse-jobs",
+        content=body,
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == status
+    assert not boundary[1].mock_calls
+
+
+@pytest.mark.parametrize("provider", ["ya_metrica", "demo", "a_", "a" * 32])
+def test_ut_bk02_admin_tenant_and_response(boundary, provider):
+    from clients.seo_service.schemas import SeoParseJobInDto
+
+    payload = {"job_id": str(uuid4()), "provider": provider, "status": "accepted"}
+    boundary[1].start_parse_job.return_value = payload
+    response = boundary[0].post(
+        "/api/seo/parse-jobs",
+        json={"provider": provider},
+        params={"equestrian_id": str(uuid4())},
+        headers={
+            "X-Equestrian-Id": str(uuid4()),
+            "Authorization": "Bearer private",
+            "Cookie": "private",
+        },
+    )
+    assert response.status_code == 202
+    assert response.json() == payload
+    boundary[1].start_parse_job.assert_awaited_once_with(
+        equestrian_id=boundary[2].equestrian_id,
+        data=SeoParseJobInDto(provider=provider),
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        None,
+        [],
+        {},
+        {"provider": None},
+        {"provider": 1},
+        *[{"provider": code} for code in ["", "a", "A_demo", "bad-code", "a" * 33]],
+        {"provider": "ya_metrica", "equestrian_id": str(uuid4())},
+        {"provider": "ya_metrica", "private-extra": "secret"},
+    ],
+)
+def test_ut_bk03_invalid_body(boundary, body):
+    response = boundary[0].post("/api/seo/parse-jobs", json=body)
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Некорректное тело запроса парсинга"}
+    assert not boundary[1].mock_calls
+
+
+def test_ut_bk03_malformed_json(boundary):
+    response = boundary[0].post(
+        "/api/seo/parse-jobs",
+        content="{broken",
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 400
+    assert not boundary[1].mock_calls
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "success",
+        "400",
+        "400-long",
+        "502",
+        "503",
+        "404",
+        "409",
+        "200",
+        "302",
+        "timeout",
+        "connect",
+        "json",
+        "schema",
+        "status",
+        "provider",
+    ],
+)
+def test_ut_bk04_real_client_errors_and_credentials(boundary, kind, caplog):
+    import json
+    import httpx
+    from clients.seo_service.client import REJECTED_DETAIL, SeoServiceClient
+
+    payload = {"job_id": str(uuid4()), "provider": "ya_metrica", "status": "accepted"}
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        assert req.method == "POST" and req.url.path == "/api/parse-jobs"
+        assert not req.url.params
+        assert json.loads(req.content) == {"provider": "ya_metrica"}
+        assert req.headers["X-Equestrian-Id"] == str(boundary[2].equestrian_id)
+        for header in (
+            "Cookie",
+            "Authorization",
+            "X-Service-Key",
+            "X-Equestrian-Service-Key",
+        ):
+            assert header not in req.headers
+        if kind in {"timeout", "connect"}:
+            raise (httpx.ReadTimeout if kind == "timeout" else httpx.ConnectError)(
+                "private-peer-secret", request=req
+            )
+        if kind.isdigit() or kind == "400-long":
+            return httpx.Response(
+                int(kind[:3]),
+                json={
+                    "detail": "x" * 301
+                    if kind == "400-long"
+                    else "Безопасный отказ"
+                    if kind == "400"
+                    else "private-peer-secret"
+                },
+            )
+        if kind == "json":
+            return httpx.Response(202, content=b"private-peer-secret")
+        if kind == "schema":
+            return httpx.Response(202, json={"job_id": "private-peer-secret"})
+        if kind in {"status", "provider"}:
+            return httpx.Response(202, json={**payload, kind: "invalid!"})
+        return httpx.Response(202, json=payload)
+
+    client = SeoServiceClient(
+        base_url="http://peer.invalid", transport=httpx.MockTransport(handler)
+    )
+    app.dependency_overrides[get_seo_proxy_service] = lambda: SeoProxyService(client)
+    response = boundary[0].post(
+        "/api/seo/parse-jobs",
+        json={"provider": "ya_metrica"},
+        headers={
+            "Cookie": "private-browser",
+            "Authorization": "Bearer private-browser",
+            "X-Equestrian-Id": str(uuid4()),
+        },
+    )
+    assert len(calls) == 1
+    expected_status = (
+        202
+        if kind == "success"
+        else 400
+        if kind.startswith("400")
+        else 503
+        if kind == "503"
+        else 502
+    )
+    assert response.status_code == expected_status
+    assert response.json() == (
+        payload
+        if kind == "success"
+        else {
+            "detail": "Безопасный отказ"
+            if kind == "400"
+            else REJECTED_DETAIL
+            if kind == "400-long"
+            else "SEO parse queue unavailable"
+            if kind == "503"
+            else "SEO service unavailable"
+        }
+    )
+    assert "private-peer-secret" not in response.text + caplog.text

@@ -8,6 +8,8 @@ from clients.seo_service.schemas import (
     PagesOutDto,
     PaginatedEntities,
     SearchQueriesOutDto,
+    SeoParseJobInDto,
+    SeoParseJobOutDto,
 )
 
 from core.schemas.metrics_table import MetricsMetric, MetricsMode
@@ -20,7 +22,18 @@ class SeoServiceUnavailableError(Exception):
         super().__init__("SEO service unavailable")
 
 
+class SeoQueueUnavailableError(Exception):
+    """Очередь недоступна; детали peer не раскрываются."""
+
+    def __init__(self) -> None:
+        super().__init__("SEO parse queue unavailable")
+
+
 class SeoServiceClientProtocol(Protocol):
+    async def start_parse_job(
+        self, *, equestrian_id: UUID, data: SeoParseJobInDto
+    ) -> SeoParseJobOutDto: ...
+
     async def list_search_queries(
         self,
         *,

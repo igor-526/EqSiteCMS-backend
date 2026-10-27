@@ -40,6 +40,7 @@ from core.exceptions.base import (
     UnprocessableEntityError,
 )
 from core.exceptions.tenant import TenantNotFound
+from core.protocols.seo_service import SeoQueueUnavailableError
 from core.middleware.cors import SplitCORSMiddleware
 from settings import settings
 from utils.configure_logger import configure_logger
@@ -125,6 +126,11 @@ app.add_middleware(
     SplitCORSMiddleware,
     cms_origins=settings.cms_cors_origins,
 )
+
+
+@app.exception_handler(SeoQueueUnavailableError)
+def seo_queue_error_handler(_: Request, exc: SeoQueueUnavailableError) -> JSONResponse:
+    return JSONResponse({"detail": "SEO parse queue unavailable"}, status_code=503)
 
 
 @app.exception_handler(ForbiddenError)

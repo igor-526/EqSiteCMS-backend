@@ -3,7 +3,7 @@ from collections.abc import Awaitable
 from typing import Annotated, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from clients.seo_service.schemas import (
     BlacklistItemInDto,
@@ -11,6 +11,8 @@ from clients.seo_service.schemas import (
     PagesOutDto,
     PaginatedEntities,
     SearchQueriesOutDto,
+    SeoParseJobInDto,
+    SeoParseJobOutDto,
 )
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
@@ -201,3 +203,32 @@ async def delete_blacklisted_hashes(
     await _proxy(
         service.delete_blacklisted_hashes(actor=actor, item_id=_item_uuid(item_id))
     )
+
+
+async def parse_job_body(request: Request, actor: Actor) -> SeoParseJobInDto:
+    # Отложенный разбор: даже битый JSON не опережает 401/403.
+    try:
+        return SeoParseJobInDto.model_validate(await request.json())
+    except ValueError:
+        raise ClientError("Некорректное тело запроса парсинга") from None
+
+
+@router.post(
+    "/parse-jobs",
+    status_code=202,
+    response_model=SeoParseJobOutDto,
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": SeoParseJobInDto.model_json_schema()}
+            },
+        }
+    },
+)
+async def start_parse_job(
+    actor: Actor,
+    data: Annotated[SeoParseJobInDto, Depends(parse_job_body)],
+    service: Service,
+) -> SeoParseJobOutDto:
+    return await _proxy(service.start_parse_job(actor=actor, data=data))

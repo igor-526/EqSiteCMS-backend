@@ -16,6 +16,7 @@ from clients.seo_service.schemas import (
     PageOutDto,
     PaginatedEntities,
     SearchQueryOutDto,
+    SeoParseJobInDto,
 )
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.protocols.seo_service import SeoServiceUnavailableError
@@ -59,6 +60,16 @@ CASES: list[
         str, dict[str, Any], str, str, dict[str, str], dict[str, str] | None, int, Any
     ]
 ] = [
+    (
+        "start_parse_job",
+        {"data": SeoParseJobInDto(provider="ya_metrica")},
+        "POST",
+        "/api/parse-jobs",
+        {},
+        {"provider": "ya_metrica"},
+        202,
+        {"job_id": str(ITEM), "provider": "ya_metrica", "status": "accepted"},
+    ),
     (
         "list_search_queries",
         {"search": "лошадь", "ordering": "-query", "limit": 3, "offset": 2},

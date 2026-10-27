@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Generic, Literal, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,3 +44,15 @@ class PagesOutDto(PaginatedEntities[PageOutDto]):
 
 class SearchQueriesOutDto(PaginatedEntities[SearchQueryOutDto]):
     metrics_table: MetricsTableOutDto
+
+
+class SeoParseJobInDto(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = Field(pattern=r"^[a-z][a-z0-9_]{1,31}$")
+
+
+class SeoParseJobOutDto(BaseModel):
+    job_id: UUID
+    provider: str = Field(pattern=r"^[a-z][a-z0-9_]{1,31}$")
+    status: Literal["accepted"]

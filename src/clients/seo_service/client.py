@@ -13,10 +13,15 @@ from clients.seo_service.schemas import (
     PagesOutDto,
     PaginatedEntities,
     SearchQueriesOutDto,
+    SeoParseJobInDto,
+    SeoParseJobOutDto,
 )
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.schemas.metrics_table import MetricsMetric, MetricsMode
-from core.protocols.seo_service import SeoServiceUnavailableError
+from core.protocols.seo_service import (
+    SeoServiceUnavailableError,
+    SeoQueueUnavailableError,
+)
 
 ResponseDto = TypeVar("ResponseDto", bound=BaseModel)
 REJECTED_DETAIL = "Запрос к SEO-сервису отклонён"
@@ -52,6 +57,7 @@ class SeoServiceClient:
         body: dict[str, str] | None = None,
         expected_status: int = 200,
         semantic_errors: bool = True,
+        queue_errors: bool = False,
     ) -> httpx.Response:
         token = _seo_request_active.set(True)
         try:
@@ -69,6 +75,8 @@ class SeoServiceClient:
             raise SeoServiceUnavailableError() from None
         finally:
             _seo_request_active.reset(token)
+        if queue_errors and response.status_code == 503:
+            raise SeoQueueUnavailableError()
         if response.status_code == 400:
             try:
                 payload = response.json()
@@ -92,6 +100,20 @@ class SeoServiceClient:
             return schema.model_validate(response.json())
         except (ValueError, ValidationError):
             raise SeoServiceUnavailableError() from None
+
+    async def start_parse_job(
+        self, *, equestrian_id: UUID, data: SeoParseJobInDto
+    ) -> SeoParseJobOutDto:
+        response = await self._request(
+            "POST",
+            "/api/parse-jobs",
+            equestrian_id=equestrian_id,
+            body=data.model_dump(),
+            expected_status=202,
+            semantic_errors=False,
+            queue_errors=True,
+        )
+        return self._parse(response, SeoParseJobOutDto)
 
     async def list_search_queries(
         self,

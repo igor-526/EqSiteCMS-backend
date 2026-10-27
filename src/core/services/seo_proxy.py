@@ -8,6 +8,8 @@ from clients.seo_service.schemas import (
     PagesOutDto,
     PaginatedEntities,
     SearchQueriesOutDto,
+    SeoParseJobInDto,
+    SeoParseJobOutDto,
 )
 from core.exceptions.base import ClientError
 from core.protocols.seo_service import SeoServiceClientProtocol
@@ -20,6 +22,13 @@ class SeoProxyService:
 
     def __init__(self, client: SeoServiceClientProtocol) -> None:
         self._client = client
+
+    async def start_parse_job(
+        self, *, actor: UserOutDto, data: SeoParseJobInDto
+    ) -> SeoParseJobOutDto:
+        return await self._client.start_parse_job(
+            equestrian_id=actor.equestrian_id, data=data
+        )
 
     @staticmethod
     def _query_date(value: str | None) -> date | None:
