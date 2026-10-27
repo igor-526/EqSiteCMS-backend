@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -20,10 +21,44 @@ from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.protocols.seo_service import SeoServiceUnavailableError
 from settings import Settings
 
+METRICS_TABLE = {
+    "version": 1,
+    "row_key": "id",
+    "period": {
+        "mode": "week",
+        "date_from": "2026-10-19",
+        "date_to": "2026-10-26",
+        "requested_date_from": None,
+        "requested_date_to": None,
+        "defaulted": True,
+        "adjusted": False,
+        "clamped": False,
+        "today": "2026-10-26",
+    },
+    "metric": {"key": "visits", "title": "Визиты", "value_type": "integer"},
+    "ordering": None,
+    "columns": [
+        {
+            "key": "metric:2026-10-19",
+            "title": "19–25 окт",
+            "hint": None,
+            "sortable": True,
+            "value_type": "integer",
+            "align": "right",
+            "empty_text": "—",
+            "values": {},
+        }
+    ],
+}
+
 TENANT, ITEM = uuid4(), uuid4()
 BASE = {"id": str(ITEM), "created_at": "2026-06-01T12:00:00Z"}
 BLACKLIST = {**BASE, "value": "utm_source"}
-CASES = [
+CASES: list[
+    tuple[
+        str, dict[str, Any], str, str, dict[str, str], dict[str, str] | None, int, Any
+    ]
+] = [
     (
         "list_search_queries",
         {"search": "лошадь", "ordering": "-query", "limit": 3, "offset": 2},
@@ -42,7 +77,11 @@ CASES = [
         {"search": "/site", "ordering": "page", "limit": "4", "offset": "1"},
         None,
         200,
-        {"items": [{**BASE, "page": "/site"}], "total": 5},
+        {
+            "items": [{**BASE, "page": "/site"}],
+            "total": 5,
+            "metrics_table": METRICS_TABLE,
+        },
     ),
 ]
 for name, path in [
@@ -55,7 +94,7 @@ for name, path in [
         ("update", "PATCH", 200),
         ("delete", "DELETE", 204),
     ]:
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if action in ("update", "delete"):
             kwargs["item_id"] = ITEM
         body = None
@@ -125,7 +164,14 @@ async def test_ut_seop_01_all_operations(
 async def test_ut_seop_01_optional_query_defaults(method):
     def handler(request):
         assert dict(request.url.params) == {"limit": "20", "offset": "0"}
-        return httpx.Response(200, json={"items": [], "total": 0})
+        return httpx.Response(
+            200,
+            json={
+                "items": [],
+                "total": 0,
+                **({"metrics_table": METRICS_TABLE} if method == "list_pages" else {}),
+            },
+        )
 
     await getattr(
         SeoServiceClient(
@@ -182,6 +228,7 @@ async def test_ut_seop_02_semantic_errors(status, error, caplog):
     [
         "401",
         "500",
+        "502",
         "418",
         "201",
         "204",
@@ -231,7 +278,9 @@ async def test_ut_seop_02_04_unavailable(kind, caplog):
 async def test_ut_seop_04_httpx_logging_is_task_local(caplog):
     caplog.set_level(logging.INFO, logger="httpx")
     transport = httpx.MockTransport(
-        lambda request: httpx.Response(200, json={"items": [], "total": 0})
+        lambda request: httpx.Response(
+            200, json={"items": [], "total": 0, "metrics_table": METRICS_TABLE}
+        )
     )
     client = SeoServiceClient(base_url="http://peer.invalid", transport=transport)
     await client.list_pages(equestrian_id=TENANT, search="private-search")
@@ -286,3 +335,64 @@ def test_ut_seop_04_settings_default_and_env(monkeypatch):
     assert Settings().seo_service_url == "http://eqsitecms-seo-service:8000"
     monkeypatch.setenv("SEO_SERVICE_URL", "http://override.invalid:8123")
     assert Settings().seo_service_url == "http://override.invalid:8123"
+
+
+@pytest.mark.parametrize("invalid", ["missing_table", "missing_key"])
+async def test_ut_bp05_invalid_metrics_payload(invalid):
+    from copy import deepcopy
+
+    payload = {"items": [], "total": 0, "metrics_table": deepcopy(METRICS_TABLE)}
+    if invalid == "missing_table":
+        del payload["metrics_table"]
+    else:
+        del payload["metrics_table"]["columns"][0]["key"]
+    client = SeoServiceClient(
+        base_url="http://peer.invalid",
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)),
+    )
+    with pytest.raises(SeoServiceUnavailableError):
+        await client.list_pages(equestrian_id=TENANT)
+
+
+async def test_ut_bp03_06_metrics_wire_and_extensions():
+    from copy import deepcopy
+    from datetime import date
+    from core.schemas.metrics_table import MetricsMode, MetricsMetric
+
+    table = deepcopy(METRICS_TABLE)
+    table["future_table"] = {"nested": [1, 2]}
+    table["period"]["future_period"] = True
+    table["metric"]["future_metric"] = "new"
+    column = table["columns"][0]
+    column["future_column"] = "new"
+    column["value_type"] = "future_type"
+    column["values"][str(ITEM)] = {"text": "12", "value": 12, "tone": "positive"}
+    payload = {"items": [{**BASE, "page": "/"}], "total": 1, "metrics_table": table}
+
+    def handler(request):
+        assert dict(request.url.params) == {
+            "limit": "20",
+            "offset": "0",
+            "mode": "week",
+            "metric": "bounce_rate",
+            "date_from": "2026-09-01",
+            "date_to": "2026-10-26",
+            "ordering": "-metric:2026-10-19",
+        }
+        assert request.headers["X-Equestrian-Id"] == str(TENANT)
+        assert "Cookie" not in request.headers
+        assert "Authorization" not in request.headers
+        return httpx.Response(200, json=payload)
+
+    client = SeoServiceClient(
+        base_url="http://peer.invalid", transport=httpx.MockTransport(handler)
+    )
+    result = await client.list_pages(
+        equestrian_id=TENANT,
+        mode=MetricsMode.WEEK,
+        metric=MetricsMetric.BOUNCE_RATE,
+        date_from=date(2026, 9, 1),
+        date_to=date(2026, 10, 26),
+        ordering="-metric:2026-10-19",
+    )
+    assert result.model_dump(mode="json", exclude_unset=True) == payload

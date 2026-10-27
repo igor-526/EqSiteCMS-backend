@@ -1,3 +1,4 @@
+from datetime import date
 import logging
 from contextvars import ContextVar
 from typing import TypeVar
@@ -9,11 +10,12 @@ from pydantic import BaseModel, ValidationError
 from clients.seo_service.schemas import (
     BlacklistItemInDto,
     BlacklistItemOutDto,
-    PageOutDto,
+    PagesOutDto,
     PaginatedEntities,
     SearchQueryOutDto,
 )
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
+from core.schemas.metrics_table import MetricsMetric, MetricsMode
 from core.protocols.seo_service import SeoServiceUnavailableError
 
 ResponseDto = TypeVar("ResponseDto", bound=BaseModel)
@@ -117,16 +119,26 @@ class SeoServiceClient:
         ordering: str | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedEntities[PageOutDto]:
+        mode: MetricsMode | None = None,
+        metric: MetricsMetric | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> PagesOutDto:
         params: dict[str, str | int] = {"limit": limit, "offset": offset}
         if search is not None:
             params["search"] = search
         if ordering is not None:
             params["ordering"] = ordering
+        for key, enum_value in (("mode", mode), ("metric", metric)):
+            if enum_value is not None:
+                params[key] = enum_value.value
+        for key, date_value in (("date_from", date_from), ("date_to", date_to)):
+            if date_value is not None:
+                params[key] = date_value.isoformat()
         response = await self._request(
             "GET", "/api/pages", equestrian_id=equestrian_id, params=params
         )
-        return self._parse(response, PaginatedEntities[PageOutDto])
+        return self._parse(response, PagesOutDto)
 
     async def list_blacklisted_query_params(
         self, *, equestrian_id: UUID

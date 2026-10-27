@@ -212,3 +212,15 @@ def test_news_access_matrix_is_explicitly_classified() -> None:
         assert rule.roles == "SUPERUSER or ADMIN or DEVELOPER"
         assert "no scope 403" in rule.with_auth
         assert "400 missing/foreign" in rule.foreign
+
+
+def test_ut_bp07_pages_metrics_validation_is_route_specific() -> None:
+    rules = {(method, path): rule for method, path, rule in inventory(app)}
+    metrics_validation = (
+        "400 unknown mode/metric, malformed date, unpaired dates or "
+        "date_from > date_to before downstream"
+    )
+    for path in ("/api/seo/pages", "/api/seo/search-queries"):
+        rule = rules[("GET", path)]
+        assert (metrics_validation in rule.validation) == (path == "/api/seo/pages")
+        assert (metrics_validation in rule.with_auth) == (path == "/api/seo/pages")

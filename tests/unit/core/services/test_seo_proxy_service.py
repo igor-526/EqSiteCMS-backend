@@ -55,6 +55,11 @@ async def test_ut_seop_03_lists(
         ordering="-unknown",
         limit=expected_limit,
         offset=expected_offset,
+        **(
+            dict(mode=None, metric=None, date_from=None, date_to=None)
+            if method == "list_pages"
+            else {}
+        ),
     )
     assert result is downstream.return_value
 
@@ -68,6 +73,11 @@ async def test_ut_seop_03_default_lists(actor, client, method):
         ordering=None,
         limit=20,
         offset=0,
+        **(
+            dict(mode=None, metric=None, date_from=None, date_to=None)
+            if method == "list_pages"
+            else {}
+        ),
     )
 
 
@@ -112,3 +122,17 @@ async def test_dependency_wiring(monkeypatch):
     assert isinstance(client, SeoServiceClient)
     assert client._base_url == "http://configured.invalid"
     assert isinstance(await get_seo_proxy_service(client), SeoProxyService)
+
+
+async def test_ut_bp08_search_queries_contract_is_unchanged(actor, client):
+    await SeoProxyService(client).list_search_queries(
+        actor=actor, search="лошадь", ordering="-query", limit=5, offset=10
+    )
+    client.list_search_queries.assert_awaited_once_with(
+        equestrian_id=actor.equestrian_id,
+        search="лошадь",
+        ordering="-query",
+        limit=5,
+        offset=10,
+    )
+    client.list_pages.assert_not_awaited()

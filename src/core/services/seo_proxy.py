@@ -1,13 +1,16 @@
+from datetime import date
 from uuid import UUID
 
 from clients.seo_service.schemas import (
     BlacklistItemInDto,
     BlacklistItemOutDto,
-    PageOutDto,
+    PagesOutDto,
     PaginatedEntities,
     SearchQueryOutDto,
 )
+from core.exceptions.base import ClientError
 from core.protocols.seo_service import SeoServiceClientProtocol
+from core.schemas.metrics_table import MetricsMetric, MetricsMode
 from core.schemas.users import UserOutDto
 
 
@@ -42,13 +45,25 @@ class SeoProxyService:
         ordering: str | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedEntities[PageOutDto]:
+        mode: MetricsMode | None = None,
+        metric: MetricsMetric | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> PagesOutDto:
+        if (date_from is None) != (date_to is None):
+            raise ClientError("Нужно указать обе даты")
+        if date_from is not None and date_to is not None and date_from > date_to:
+            raise ClientError("Начало периода позже окончания")
         return await self._client.list_pages(
             equestrian_id=actor.equestrian_id,
             search=search,
             ordering=ordering,
             limit=max(1, min(100, limit)),
             offset=max(0, offset),
+            mode=mode,
+            metric=metric,
+            date_from=date_from,
+            date_to=date_to,
         )
 
     async def list_blacklisted_query_params(

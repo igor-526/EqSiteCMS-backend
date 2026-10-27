@@ -1,3 +1,4 @@
+from datetime import date
 from collections.abc import Awaitable
 from typing import Annotated, TypeVar
 from uuid import UUID
@@ -7,13 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from clients.seo_service.schemas import (
     BlacklistItemInDto,
     BlacklistItemOutDto,
-    PageOutDto,
+    PagesOutDto,
     PaginatedEntities,
     SearchQueryOutDto,
 )
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
 from core.protocols.seo_service import SeoServiceUnavailableError
+from core.schemas.metrics_table import MetricsMetric, MetricsMode
 from core.schemas.users import UserOutDto
 from core.services.seo_proxy import SeoProxyService
 from depends.services import get_current_user, get_seo_proxy_service
@@ -65,7 +67,7 @@ async def list_search_queries(
     )
 
 
-@router.get("/pages", response_model=PaginatedEntities[PageOutDto])
+@router.get("/pages", response_model=PagesOutDto, response_model_exclude_unset=True)
 async def list_pages(
     actor: Actor,
     service: Service,
@@ -73,10 +75,22 @@ async def list_pages(
     ordering: str | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> PaginatedEntities[PageOutDto]:
+    mode: MetricsMode | None = None,
+    metric: MetricsMetric | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> PagesOutDto:
     return await _proxy(
         service.list_pages(
-            actor=actor, search=search, ordering=ordering, limit=limit, offset=offset
+            actor=actor,
+            search=search,
+            ordering=ordering,
+            limit=limit,
+            offset=offset,
+            mode=mode,
+            metric=metric,
+            date_from=date_from,
+            date_to=date_to,
         )
     )
 

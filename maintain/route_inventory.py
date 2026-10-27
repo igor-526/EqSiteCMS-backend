@@ -78,6 +78,10 @@ def classify(method: str, path: str) -> AccessRule:
             validation.append(
                 "400 nonnumeric limit/offset or unknown ordering; limit/offset clamped"
             )
+        if path == "/api/seo/pages":
+            validation.append(
+                "400 unknown mode/metric, malformed date, unpaired dates or date_from > date_to before downstream"
+            )
         if "{item_id}" in path:
             validation.append("400 malformed item_id; 404 foreign/missing item")
         if method in {"POST", "PATCH"}:

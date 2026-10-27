@@ -1,13 +1,16 @@
+from datetime import date
 from typing import Protocol
 from uuid import UUID
 
 from clients.seo_service.schemas import (
     BlacklistItemInDto,
     BlacklistItemOutDto,
-    PageOutDto,
+    PagesOutDto,
     PaginatedEntities,
     SearchQueryOutDto,
 )
+
+from core.schemas.metrics_table import MetricsMetric, MetricsMode
 
 
 class SeoServiceUnavailableError(Exception):
@@ -36,7 +39,11 @@ class SeoServiceClientProtocol(Protocol):
         ordering: str | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedEntities[PageOutDto]: ...
+        mode: MetricsMode | None = None,
+        metric: MetricsMetric | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> PagesOutDto: ...
 
     async def list_blacklisted_query_params(
         self, *, equestrian_id: UUID

@@ -19,6 +19,36 @@ from core.services.seo_proxy import SeoProxyService
 from depends.services import get_current_user, get_seo_proxy_service
 from main import app
 
+METRICS_TABLE = {
+    "version": 1,
+    "row_key": "id",
+    "period": {
+        "mode": "week",
+        "date_from": "2026-10-19",
+        "date_to": "2026-10-26",
+        "requested_date_from": None,
+        "requested_date_to": None,
+        "defaulted": True,
+        "adjusted": False,
+        "clamped": False,
+        "today": "2026-10-26",
+    },
+    "metric": {"key": "visits", "title": "Визиты", "value_type": "integer"},
+    "ordering": None,
+    "columns": [
+        {
+            "key": "metric:2026-10-19",
+            "title": "19–25 окт",
+            "hint": None,
+            "sortable": True,
+            "value_type": "integer",
+            "align": "right",
+            "empty_text": "—",
+            "values": {},
+        }
+    ],
+}
+
 ITEM_ID = uuid4()
 SETTINGS = ["blacklisted-query-params", "blacklisted-hashes"]
 ROUTES = [
@@ -83,6 +113,8 @@ def boundary():
             }
         else:
             payload = item
+        if path == "/pages":
+            payload["metrics_table"] = METRICS_TABLE
         getattr(peer, operation).return_value = payload
     app.dependency_overrides[get_current_user] = lambda: user
     app.dependency_overrides[get_seo_proxy_service] = lambda: SeoProxyService(peer)
@@ -127,6 +159,8 @@ def test_ut07_admin_success(boundary, method, path, operation):
     expected = {"equestrian_id": boundary[2].equestrian_id}
     if path in {"/search-queries", "/pages"}:
         expected.update(search=None, ordering=None, limit=20, offset=0)
+    if path == "/pages":
+        expected.update(mode=None, metric=None, date_from=None, date_to=None)
     if method in {"PATCH", "DELETE"}:
         expected["item_id"] = ITEM_ID
     if method in {"POST", "PATCH"}:
@@ -213,6 +247,11 @@ def test_ut08_list_parameters(boundary, path, operation, params, expected):
             ordering="-created_at",
             limit=expected[0],
             offset=expected[1],
+            **(
+                dict(mode=None, metric=None, date_from=None, date_to=None)
+                if path == "/pages"
+                else {}
+            ),
         )
 
 
@@ -286,3 +325,73 @@ def test_ut08_unknown_ordering_is_forwarded_and_rejected(boundary, path, operati
         == 400
     )
     assert getattr(boundary[1], operation).await_args.kwargs["ordering"] == "unknown"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"mode": "quarter"},
+        {"metric": "x"},
+        {"date_from": "abc"},
+        {"date_from": "2026-10-01"},
+        {"date_to": "2026-10-01"},
+        {"date_from": "2026-10-02", "date_to": "2026-10-01"},
+    ],
+)
+def test_ut_bp04_invalid_metrics_before_peer(boundary, params):
+    assert request(boundary, "GET", "/pages", params=params).status_code == 400
+    assert not boundary[1].mock_calls
+
+
+@pytest.mark.parametrize(
+    "scopes,status", [(None, 401), (("SUPERUSER", "DEVELOPER"), 403)]
+)
+def test_ut_bp01_02_metrics_access(boundary, scopes, status):
+    if scopes is None:
+        del app.dependency_overrides[get_current_user]
+    else:
+        app.dependency_overrides[get_current_user] = lambda: actor(*scopes)
+    assert (
+        request(boundary, "GET", "/pages", params={"mode": "month"}).status_code
+        == status
+    )
+    assert not boundary[1].mock_calls
+
+
+def test_ut_bp03_metrics_forwarded_without_calendar_rules(boundary):
+    from datetime import date
+
+    params = dict(
+        mode="week",
+        metric="bounce_rate",
+        date_from="2090-01-01",
+        date_to="2099-10-26",
+        ordering="-metric:2090-01-01",
+    )
+    response = request(boundary, "GET", "/pages", params=params)
+    assert response.status_code == 200
+    assert response.json()["metrics_table"] == METRICS_TABLE
+    kwargs = boundary[1].list_pages.await_args.kwargs
+    assert kwargs == {
+        **params,
+        "date_from": date(2090, 1, 1),
+        "date_to": date(2099, 10, 26),
+        "equestrian_id": boundary[2].equestrian_id,
+        "search": None,
+        "limit": 20,
+        "offset": 0,
+    }
+
+
+def test_ut_bp06_extensions_survive_api_serialization(boundary):
+    from copy import deepcopy
+    from clients.seo_service.schemas import PagesOutDto
+
+    table = deepcopy(METRICS_TABLE)
+    table["future_table"] = {"nested": True}
+    column = table["columns"][0]
+    column["future_column"] = [1, 2]
+    column["values"][str(ITEM_ID)] = {"text": "12", "value": 12, "tone": "positive"}
+    payload = {"items": [], "total": 0, "metrics_table": table}
+    boundary[1].list_pages.return_value = PagesOutDto.model_validate(payload)
+    assert request(boundary, "GET", "/pages").json() == payload

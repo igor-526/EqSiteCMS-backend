@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.schemas.metrics_table import MetricsTableOutDto
+
 EntityDto = TypeVar("EntityDto")
 
 
@@ -34,3 +36,7 @@ class BlacklistItemOutDto(BaseModel):
 class PaginatedEntities(BaseModel, Generic[EntityDto]):
     items: list[EntityDto]
     total: int = Field(ge=0)
+
+
+class PagesOutDto(PaginatedEntities[PageOutDto]):
+    metrics_table: MetricsTableOutDto
