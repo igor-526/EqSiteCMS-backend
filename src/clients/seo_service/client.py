@@ -12,7 +12,7 @@ from clients.seo_service.schemas import (
     BlacklistItemOutDto,
     PagesOutDto,
     PaginatedEntities,
-    SearchQueryOutDto,
+    SearchQueriesOutDto,
 )
 from core.exceptions.base import ClientError, ConflictError, NotFoundError
 from core.schemas.metrics_table import MetricsMetric, MetricsMode
@@ -51,6 +51,7 @@ class SeoServiceClient:
         params: dict[str, str | int] | None = None,
         body: dict[str, str] | None = None,
         expected_status: int = 200,
+        semantic_errors: bool = True,
     ) -> httpx.Response:
         token = _seo_request_active.set(True)
         try:
@@ -77,9 +78,9 @@ class SeoServiceClient:
             if not isinstance(detail, str) or not detail.strip() or len(detail) > 300:
                 detail = REJECTED_DETAIL
             raise ClientError(detail)
-        if response.status_code == 404:
+        if semantic_errors and response.status_code == 404:
             raise NotFoundError("Элемент SEO не найден")
-        if response.status_code == 409:
+        if semantic_errors and response.status_code == 409:
             raise ConflictError("Элемент SEO уже существует")
         if response.status_code != expected_status:
             raise SeoServiceUnavailableError()
@@ -100,16 +101,30 @@ class SeoServiceClient:
         ordering: str | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedEntities[SearchQueryOutDto]:
+        mode: MetricsMode | None = None,
+        metric: MetricsMetric | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> SearchQueriesOutDto:
         params: dict[str, str | int] = {"limit": limit, "offset": offset}
         if search is not None:
             params["search"] = search
         if ordering is not None:
             params["ordering"] = ordering
+        for key, enum_value in (("mode", mode), ("metric", metric)):
+            if enum_value is not None:
+                params[key] = enum_value.value
+        for key, date_value in (("date_from", date_from), ("date_to", date_to)):
+            if date_value is not None:
+                params[key] = date_value.isoformat()
         response = await self._request(
-            "GET", "/api/search-queries", equestrian_id=equestrian_id, params=params
+            "GET",
+            "/api/search-queries",
+            equestrian_id=equestrian_id,
+            params=params,
+            semantic_errors=False,
         )
-        return self._parse(response, PaginatedEntities[SearchQueryOutDto])
+        return self._parse(response, SearchQueriesOutDto)
 
     async def list_pages(
         self,

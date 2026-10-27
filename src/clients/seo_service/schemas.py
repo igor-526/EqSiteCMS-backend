@@ -40,3 +40,7 @@ class PaginatedEntities(BaseModel, Generic[EntityDto]):
 
 class PagesOutDto(PaginatedEntities[PageOutDto]):
     metrics_table: MetricsTableOutDto
+
+
+class SearchQueriesOutDto(PaginatedEntities[SearchQueryOutDto]):
+    metrics_table: MetricsTableOutDto

@@ -1,3 +1,4 @@
+import re
 from datetime import date
 from uuid import UUID
 
@@ -6,7 +7,7 @@ from clients.seo_service.schemas import (
     BlacklistItemOutDto,
     PagesOutDto,
     PaginatedEntities,
-    SearchQueryOutDto,
+    SearchQueriesOutDto,
 )
 from core.exceptions.base import ClientError
 from core.protocols.seo_service import SeoServiceClientProtocol
@@ -20,6 +21,14 @@ class SeoProxyService:
     def __init__(self, client: SeoServiceClientProtocol) -> None:
         self._client = client
 
+    @staticmethod
+    def _query_date(value: str | None) -> date | None:
+        if value is None:
+            return None
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value):
+            raise ValueError
+        return date.fromisoformat(value)
+
     async def list_search_queries(
         self,
         *,
@@ -28,13 +37,46 @@ class SeoProxyService:
         ordering: str | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedEntities[SearchQueryOutDto]:
+        mode: str | None = None,
+        metric: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> SearchQueriesOutDto:
+        try:
+            parsed_mode = MetricsMode(mode) if mode is not None else None
+            parsed_metric = MetricsMetric(metric) if metric is not None else None
+            parsed_from = self._query_date(date_from)
+            parsed_to = self._query_date(date_to)
+            if ordering is not None and ordering not in {
+                "query",
+                "-query",
+                "created_at",
+                "-created_at",
+            }:
+                field = ordering.removeprefix("-")
+                if not field.startswith("metric:"):
+                    raise ValueError
+                self._query_date(field.removeprefix("metric:"))
+        except ValueError:
+            raise ClientError("Некорректные параметры метрик или сортировки") from None
+        if (parsed_from is None) != (parsed_to is None):
+            raise ClientError("Нужно указать обе даты")
+        if (
+            parsed_from is not None
+            and parsed_to is not None
+            and parsed_from > parsed_to
+        ):
+            raise ClientError("Начало периода позже окончания")
         return await self._client.list_search_queries(
             equestrian_id=actor.equestrian_id,
             search=search,
             ordering=ordering,
             limit=max(1, min(100, limit)),
             offset=max(0, offset),
+            mode=parsed_mode,
+            metric=parsed_metric,
+            date_from=parsed_from,
+            date_to=parsed_to,
         )
 
     async def list_pages(

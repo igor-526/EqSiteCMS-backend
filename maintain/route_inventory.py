@@ -73,33 +73,39 @@ def classify(method: str, path: str) -> AccessRule:
         )
     if path.startswith("/api/seo/"):
         success = "201" if method == "POST" else "204" if method == "DELETE" else "200"
-        validation = []
+        seo_validation = []
         if path in {"/api/seo/search-queries", "/api/seo/pages"}:
-            validation.append(
+            seo_validation.append(
                 "400 nonnumeric limit/offset or unknown ordering; limit/offset clamped"
             )
-        if path == "/api/seo/pages":
-            validation.append(
+        if path in {"/api/seo/pages", "/api/seo/search-queries"}:
+            seo_validation.append(
                 "400 unknown mode/metric, malformed date, unpaired dates or date_from > date_to before downstream"
             )
+        if path == "/api/seo/search-queries":
+            seo_validation.append(
+                "ordering syntax checked before downstream; 502 invalid metrics_table; unknown v1 fields retained"
+            )
         if "{item_id}" in path:
-            validation.append("400 malformed item_id; 404 foreign/missing item")
+            seo_validation.append("400 malformed item_id; 404 foreign/missing item")
         if method in {"POST", "PATCH"}:
-            validation.append("400 malformed body/value; 409 duplicate")
-        validation.append("502 unavailable downstream")
+            seo_validation.append("400 malformed body/value; 409 duplicate")
+        seo_validation.append("502 unavailable downstream")
         return AccessRule(
             "protected GET exception" if method == "GET" else "protected write",
             "ADMIN only; no SUPERUSER/DEVELOPER override",
             "actor cookie; equestrian_id from session; client selector ignored",
             "tenant scoped; internal SEO administration data is not public read",
             "401",
-            success + "; without ADMIN 403 before downstream; " + "; ".join(validation),
+            success
+            + "; without ADMIN 403 before downstream; "
+            + "; ".join(seo_validation),
             (
                 "404 foreign/missing item"
                 if "{item_id}" in path
                 else "foreign tenant not addressable"
             ),
-            "; ".join(validation),
+            "; ".join(seo_validation),
             "tests/unit/api/test_seo_proxy_api.py",
         )
     if path.startswith("/api/yandex/"):

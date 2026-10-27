@@ -10,7 +10,7 @@ from clients.seo_service.schemas import (
     BlacklistItemOutDto,
     PagesOutDto,
     PaginatedEntities,
-    SearchQueryOutDto,
+    SearchQueriesOutDto,
 )
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import ClientError
@@ -51,7 +51,11 @@ def _item_uuid(value: str) -> UUID:
         raise ClientError("Некорректный item_id") from exc
 
 
-@router.get("/search-queries", response_model=PaginatedEntities[SearchQueryOutDto])
+@router.get(
+    "/search-queries",
+    response_model=SearchQueriesOutDto,
+    response_model_exclude_unset=True,
+)
 async def list_search_queries(
     actor: Actor,
     service: Service,
@@ -59,10 +63,22 @@ async def list_search_queries(
     ordering: str | None = None,
     limit: int = 20,
     offset: int = 0,
-) -> PaginatedEntities[SearchQueryOutDto]:
+    mode: str | None = None,
+    metric: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> SearchQueriesOutDto:
     return await _proxy(
         service.list_search_queries(
-            actor=actor, search=search, ordering=ordering, limit=limit, offset=offset
+            actor=actor,
+            search=search,
+            ordering=ordering,
+            limit=limit,
+            offset=offset,
+            mode=mode,
+            metric=metric,
+            date_from=date_from,
+            date_to=date_to,
         )
     )
 

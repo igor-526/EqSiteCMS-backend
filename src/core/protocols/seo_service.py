@@ -7,7 +7,7 @@ from clients.seo_service.schemas import (
     BlacklistItemOutDto,
     PagesOutDto,
     PaginatedEntities,
-    SearchQueryOutDto,
+    SearchQueriesOutDto,
 )
 
 from core.schemas.metrics_table import MetricsMetric, MetricsMode
@@ -29,7 +29,11 @@ class SeoServiceClientProtocol(Protocol):
         ordering: str | None = None,
         limit: int = 20,
         offset: int = 0,
-    ) -> PaginatedEntities[SearchQueryOutDto]: ...
+        mode: MetricsMode | None = None,
+        metric: MetricsMetric | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> SearchQueriesOutDto: ...
 
     async def list_pages(
         self,

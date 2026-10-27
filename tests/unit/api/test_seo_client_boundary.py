@@ -67,7 +67,11 @@ CASES: list[
         {"search": "лошадь", "ordering": "-query", "limit": "3", "offset": "2"},
         None,
         200,
-        {"items": [{**BASE, "query": "лошадь"}], "total": 4},
+        {
+            "items": [{**BASE, "query": "лошадь"}],
+            "total": 4,
+            "metrics_table": METRICS_TABLE,
+        },
     ),
     (
         "list_pages",
@@ -169,7 +173,7 @@ async def test_ut_seop_01_optional_query_defaults(method):
             json={
                 "items": [],
                 "total": 0,
-                **({"metrics_table": METRICS_TABLE} if method == "list_pages" else {}),
+                "metrics_table": METRICS_TABLE,
             },
         )
 
@@ -194,7 +198,8 @@ async def test_ut_seop_01_optional_query_defaults(method):
         (None, REJECTED_DETAIL),
     ],
 )
-async def test_ut_seop_02_rejected(payload, expected):
+@pytest.mark.parametrize("method", ["list_pages", "list_search_queries"])
+async def test_ut_seop_02_rejected(payload, expected, method):
     client = SeoServiceClient(
         base_url="http://peer.invalid",
         transport=httpx.MockTransport(
@@ -206,7 +211,7 @@ async def test_ut_seop_02_rejected(payload, expected):
         ),
     )
     with pytest.raises(ClientError) as exc:
-        await client.list_pages(equestrian_id=TENANT)
+        await getattr(client, method)(equestrian_id=TENANT)
     assert str(exc.value) == expected
 
 
@@ -241,7 +246,8 @@ async def test_ut_seop_02_semantic_errors(status, error, caplog):
         "negative_total",
     ],
 )
-async def test_ut_seop_02_04_unavailable(kind, caplog):
+@pytest.mark.parametrize("method", ["list_pages", "list_search_queries"])
+async def test_ut_seop_02_04_unavailable(kind, caplog, method):
     caplog.set_level(logging.DEBUG)
 
     def handler(request):
@@ -267,7 +273,7 @@ async def test_ut_seop_02_04_unavailable(kind, caplog):
         base_url="http://peer.invalid", transport=httpx.MockTransport(handler)
     )
     with pytest.raises(SeoServiceUnavailableError) as exc:
-        await client.list_pages(equestrian_id=TENANT, search="private-search")
+        await getattr(client, method)(equestrian_id=TENANT, search="private-search")
     assert str(exc.value) == "SEO service unavailable"
     assert exc.value.__suppress_context__ or exc.value.__context__ is None
     assert "peer-private-body" not in caplog.text
@@ -338,7 +344,8 @@ def test_ut_seop_04_settings_default_and_env(monkeypatch):
 
 
 @pytest.mark.parametrize("invalid", ["missing_table", "missing_key"])
-async def test_ut_bp05_invalid_metrics_payload(invalid):
+@pytest.mark.parametrize("method", ["list_pages", "list_search_queries"])
+async def test_ut_bp05_invalid_metrics_payload(invalid, method):
     from copy import deepcopy
 
     payload = {"items": [], "total": 0, "metrics_table": deepcopy(METRICS_TABLE)}
@@ -351,10 +358,11 @@ async def test_ut_bp05_invalid_metrics_payload(invalid):
         transport=httpx.MockTransport(lambda _: httpx.Response(200, json=payload)),
     )
     with pytest.raises(SeoServiceUnavailableError):
-        await client.list_pages(equestrian_id=TENANT)
+        await getattr(client, method)(equestrian_id=TENANT)
 
 
-async def test_ut_bp03_06_metrics_wire_and_extensions():
+@pytest.mark.parametrize("method", ["list_pages", "list_search_queries"])
+async def test_ut_bp03_06_metrics_wire_and_extensions(method):
     from copy import deepcopy
     from datetime import date
     from core.schemas.metrics_table import MetricsMode, MetricsMetric
@@ -367,7 +375,11 @@ async def test_ut_bp03_06_metrics_wire_and_extensions():
     column["future_column"] = "new"
     column["value_type"] = "future_type"
     column["values"][str(ITEM)] = {"text": "12", "value": 12, "tone": "positive"}
-    payload = {"items": [{**BASE, "page": "/"}], "total": 1, "metrics_table": table}
+    payload = {
+        "items": [{**BASE, ("page" if method == "list_pages" else "query"): "/"}],
+        "total": 1,
+        "metrics_table": table,
+    }
 
     def handler(request):
         assert dict(request.url.params) == {
@@ -387,7 +399,7 @@ async def test_ut_bp03_06_metrics_wire_and_extensions():
     client = SeoServiceClient(
         base_url="http://peer.invalid", transport=httpx.MockTransport(handler)
     )
-    result = await client.list_pages(
+    result = await getattr(client, method)(
         equestrian_id=TENANT,
         mode=MetricsMode.WEEK,
         metric=MetricsMetric.BOUNCE_RATE,

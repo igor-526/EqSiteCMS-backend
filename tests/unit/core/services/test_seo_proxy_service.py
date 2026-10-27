@@ -46,18 +46,22 @@ async def test_ut_seop_03_lists(
 ):
     service = SeoProxyService(client)
     result = await getattr(service, method)(
-        actor=actor, search=" лошадь ", ordering="-unknown", limit=limit, offset=offset
+        actor=actor,
+        search=" лошадь ",
+        ordering="-created_at",
+        limit=limit,
+        offset=offset,
     )
     downstream = getattr(client, method)
     downstream.assert_awaited_once_with(
         equestrian_id=actor.equestrian_id,
         search=" лошадь ",
-        ordering="-unknown",
+        ordering="-created_at",
         limit=expected_limit,
         offset=expected_offset,
         **(
             dict(mode=None, metric=None, date_from=None, date_to=None)
-            if method == "list_pages"
+            if method in {"list_pages", "list_search_queries"}
             else {}
         ),
     )
@@ -75,7 +79,7 @@ async def test_ut_seop_03_default_lists(actor, client, method):
         offset=0,
         **(
             dict(mode=None, metric=None, date_from=None, date_to=None)
-            if method == "list_pages"
+            if method in {"list_pages", "list_search_queries"}
             else {}
         ),
     )
@@ -124,7 +128,7 @@ async def test_dependency_wiring(monkeypatch):
     assert isinstance(await get_seo_proxy_service(client), SeoProxyService)
 
 
-async def test_ut_bp08_search_queries_contract_is_unchanged(actor, client):
+async def test_ut_gw02_search_queries_extended_contract(actor, client):
     await SeoProxyService(client).list_search_queries(
         actor=actor, search="лошадь", ordering="-query", limit=5, offset=10
     )
@@ -134,5 +138,9 @@ async def test_ut_bp08_search_queries_contract_is_unchanged(actor, client):
         ordering="-query",
         limit=5,
         offset=10,
+        mode=None,
+        metric=None,
+        date_from=None,
+        date_to=None,
     )
     client.list_pages.assert_not_awaited()

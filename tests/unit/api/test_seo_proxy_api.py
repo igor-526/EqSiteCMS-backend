@@ -113,7 +113,7 @@ def boundary():
             }
         else:
             payload = item
-        if path == "/pages":
+        if path in {"/pages", "/search-queries"}:
             payload["metrics_table"] = METRICS_TABLE
         getattr(peer, operation).return_value = payload
     app.dependency_overrides[get_current_user] = lambda: user
@@ -159,7 +159,7 @@ def test_ut07_admin_success(boundary, method, path, operation):
     expected = {"equestrian_id": boundary[2].equestrian_id}
     if path in {"/search-queries", "/pages"}:
         expected.update(search=None, ordering=None, limit=20, offset=0)
-    if path == "/pages":
+    if path in {"/pages", "/search-queries"}:
         expected.update(mode=None, metric=None, date_from=None, date_to=None)
     if method in {"PATCH", "DELETE"}:
         expected["item_id"] = ITEM_ID
@@ -249,7 +249,7 @@ def test_ut08_list_parameters(boundary, path, operation, params, expected):
             offset=expected[1],
             **(
                 dict(mode=None, metric=None, date_from=None, date_to=None)
-                if path == "/pages"
+                if path in {"/pages", "/search-queries"}
                 else {}
             ),
         )
@@ -324,7 +324,12 @@ def test_ut08_unknown_ordering_is_forwarded_and_rejected(boundary, path, operati
         request(boundary, "GET", path, params={"ordering": "unknown"}).status_code
         == 400
     )
-    assert getattr(boundary[1], operation).await_args.kwargs["ordering"] == "unknown"
+    if path == "/search-queries":
+        assert not boundary[1].mock_calls
+    else:
+        assert (
+            getattr(boundary[1], operation).await_args.kwargs["ordering"] == "unknown"
+        )
 
 
 @pytest.mark.parametrize(
@@ -395,3 +400,154 @@ def test_ut_bp06_extensions_survive_api_serialization(boundary):
     payload = {"items": [], "total": 0, "metrics_table": table}
     boundary[1].list_pages.return_value = PagesOutDto.model_validate(payload)
     assert request(boundary, "GET", "/pages").json() == payload
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"mode": "quarter"},
+        {"metric": "secret"},
+        {"date_from": "abc"},
+        {"date_from": "20261001", "date_to": "2026-10-02"},
+        {"date_from": "2026-02-30", "date_to": "2026-03-01"},
+        {"date_from": "2026-10-01"},
+        {"date_to": "2026-10-01"},
+        {"date_from": "2026-10-02", "date_to": "2026-10-01"},
+        *[
+            {"ordering": value}
+            for value in [
+                "",
+                "page",
+                "query,-created_at",
+                "+query",
+                "--query",
+                "metric:",
+                "metric:2026-02-30",
+                "metric:20261001",
+            ]
+        ],
+    ],
+)
+def test_ut_gw02_invalid_before_peer(boundary, params):
+    assert request(boundary, "GET", "/search-queries", params=params).status_code == 400
+    assert not boundary[1].mock_calls
+
+
+@pytest.mark.parametrize(
+    "ordering",
+    [
+        "query",
+        "-query",
+        "created_at",
+        "-created_at",
+        "metric:2000-01-01",
+        "-metric:2099-01-01",
+    ],
+)
+def test_ut_gw02_metrics_forwarded_no_period_resolution(boundary, ordering):
+    from datetime import date
+
+    params = dict(
+        mode="year",
+        metric="page_depth",
+        date_from="2090-01-01",
+        date_to="2099-10-26",
+        ordering=ordering,
+    )
+    assert request(boundary, "GET", "/search-queries", params=params).status_code == 200
+    boundary[1].list_search_queries.assert_awaited_once_with(
+        **{**params, "date_from": date(2090, 1, 1), "date_to": date(2099, 10, 26)},
+        equestrian_id=boundary[2].equestrian_id,
+        search=None,
+        limit=20,
+        offset=0,
+    )
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "missing",
+        "null",
+        "column",
+        "500",
+        "404",
+        "409",
+        "302",
+        "timeout",
+        "connect",
+        "400",
+        "extras",
+    ],
+)
+def test_ut_gw01_02_real_client_boundary(boundary, kind):
+    from copy import deepcopy
+    import httpx
+    from clients.seo_service.client import SeoServiceClient
+
+    payload = {"items": [], "total": 0, "metrics_table": deepcopy(METRICS_TABLE)}
+    if kind == "missing":
+        del payload["metrics_table"]
+    elif kind == "null":
+        payload["metrics_table"] = None
+    elif kind == "column":
+        del payload["metrics_table"]["columns"][0]["key"]
+    elif kind == "extras":
+        table = payload["metrics_table"]
+        for node in [table, table["period"], table["metric"], table["columns"][0]]:
+            node["future"] = {"nested": [True, 12]}
+        table["columns"][0]["values"][str(ITEM_ID)] = {
+            "text": "0",
+            "value": 0,
+            "future": [1],
+        }
+
+    calls = []
+
+    def handler(req):
+        calls.append(req)
+        assert req.headers["X-Equestrian-Id"] == str(boundary[2].equestrian_id)
+        assert "cookie" not in req.headers
+        assert "authorization" not in req.headers
+        assert "equestrian_id" not in req.url.params
+        if kind == "timeout":
+            raise httpx.ReadTimeout("private-peer-secret", request=req)
+        if kind == "connect":
+            raise httpx.ConnectError("private-peer-secret", request=req)
+        if kind.isdigit():
+            return httpx.Response(
+                int(kind),
+                json={
+                    "detail": "Безопасный отказ"
+                    if kind == "400"
+                    else "private-peer-secret"
+                },
+            )
+        return httpx.Response(200, json=payload)
+
+    client = SeoServiceClient(
+        base_url="http://peer.invalid", transport=httpx.MockTransport(handler)
+    )
+    app.dependency_overrides[get_seo_proxy_service] = lambda: SeoProxyService(client)
+    response = request(
+        boundary,
+        "GET",
+        "/search-queries",
+        params={"equestrian_id": str(uuid4()), "mode": "week"},
+        headers={
+            "X-Equestrian-Id": str(uuid4()),
+            "Authorization": "Bearer browser-private",
+            "Cookie": "browser-private",
+        },
+    )
+    assert len(calls) == 1
+    assert response.status_code == (
+        200 if kind == "extras" else 400 if kind == "400" else 502
+    )
+    if kind == "extras":
+        assert response.json() == payload
+    else:
+        assert response.json() == {
+            "detail": "Безопасный отказ" if kind == "400" else "SEO service unavailable"
+        }
+    assert "private-peer-secret" not in response.text
