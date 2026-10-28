@@ -42,7 +42,7 @@ def actor(*scopes):
     return UserOutDto(
         id=uuid4(),
         equestrian_id=uuid4(),
-        username="yandex-admin",
+        username="seo-specialist",
         created_at=datetime.now(UTC),
         scopes=[
             UserScope(scope_name=scope, scope_description="test") for scope in scopes
@@ -52,7 +52,7 @@ def actor(*scopes):
 
 @pytest.fixture
 def boundary():
-    user = actor("ADMIN")
+    user = actor("SEO")
     peer = AsyncMock(spec=YandexServiceClientProtocol)
     account = YandexAccountOutDto(
         id=ACCOUNT_ID,
@@ -120,6 +120,7 @@ def test_ut11_anonymous_denied_before_peer(boundary, method, path, _):
     "scopes",
     [
         (),
+        ("ADMIN",),
         ("SUPERUSER",),
         ("DEVELOPER",),
         ("USER_MANAGER",),
@@ -128,14 +129,18 @@ def test_ut11_anonymous_denied_before_peer(boundary, method, path, _):
     ],
 )
 @pytest.mark.parametrize("method,path,_", ROUTES)
-def test_ut12_non_admin_denied_before_peer(boundary, scopes, method, path, _):
+def test_ut12_without_seo_denied_before_peer(boundary, scopes, method, path, _):
     app.dependency_overrides[get_current_user] = lambda: actor(*scopes)
     assert request(boundary, method, path).status_code == 403
     assert not boundary[1].mock_calls
 
 
 @pytest.mark.parametrize("method,path,operation", ROUTES)
-def test_ut13_admin_success(boundary, method, path, operation):
+@pytest.mark.parametrize("extra_scopes", [(), ("ADMIN",)])
+def test_ut13_seo_success(boundary, method, path, operation, extra_scopes):
+    boundary[2].scopes.extend(
+        UserScope(scope_name=scope, scope_description="test") for scope in extra_scopes
+    )
     response = request(boundary, method, path)
     assert response.status_code == (204 if method == "DELETE" else 200)
     getattr(boundary[1], operation).assert_awaited_once()
@@ -405,3 +410,80 @@ def test_ut22_downstream_errors(boundary, method, path, operation, unavailable):
     }
     assert "http" not in response.text
     assert "eqsitecms-yandex-service" not in response.text
+
+
+@pytest.mark.parametrize("method,path,_", ROUTES)
+@pytest.mark.parametrize(
+    "scopes,status",
+    [
+        (None, 401),
+        ((), 403),
+        (("ADMIN",), 403),
+        (("SUPERUSER",), 403),
+        (("DEVELOPER",), 403),
+        (("USER_MANAGER",), 403),
+        (("ADMIN", "SUPERUSER", "DEVELOPER"), 403),
+    ],
+)
+@pytest.mark.parametrize("body", [b"{broken", b"{}", b"[]"])
+def test_ut_access_denied_before_body_and_peer(
+    boundary, method, path, _, scopes, status, body, monkeypatch
+):
+    from starlette.requests import Request
+
+    async def unread_body(self):
+        pytest.fail("body read before access check")
+
+    monkeypatch.setattr(Request, "body", unread_body)
+    if scopes is None:
+        app.dependency_overrides.pop(get_current_user)
+    else:
+        app.dependency_overrides[get_current_user] = lambda: actor(*scopes)
+    response = boundary[0].request(
+        method,
+        "/api/yandex" + path,
+        content=body,
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == status
+    assert not boundary[1].mock_calls
+
+
+@pytest.mark.parametrize("method,path,_", ROUTES)
+@pytest.mark.parametrize("token", ["invalid-session", "expired"])
+def test_ut_access_invalid_or_expired_cookie(boundary, method, path, _, token):
+    import jwt
+
+    # Synthetic expired JWT: never use or print a real session/signing secret.
+    if token == "expired":
+        token = jwt.encode(
+            {"sub": str(boundary[2].id), "exp": 0}, "unit-test-only", algorithm="HS256"
+        )
+    app.dependency_overrides.pop(get_current_user)
+    response = boundary[0].request(
+        method,
+        "/api/yandex" + path,
+        content=b"{broken",
+        headers={"Content-Type": "application/json", "Cookie": "access_token=" + token},
+    )
+    assert response.status_code == 401
+    assert not boundary[1].mock_calls
+
+
+def test_ut_access_openapi_body_schemas():
+    from fastapi import FastAPI
+    from api.yandex import router
+
+    schema_app = FastAPI()
+    schema_app.include_router(router, prefix="/api")
+    paths = schema_app.openapi()["paths"]
+    for method, path, _ in ROUTES:
+        operation = paths[
+            "/api/yandex" + path.replace(str(ACCOUNT_ID), "{account_id}")
+        ][method.lower()]
+        if method in {"POST", "PATCH"}:
+            body = operation["requestBody"]
+            assert body["required"] is True
+            assert body["content"]["application/json"]["schema"]["type"] == "object"
+        else:
+            assert "requestBody" not in operation

@@ -65,7 +65,48 @@ make test
 `http://eqsitecms-yandex-service:8000` (см. `.env.example`). Peer credential не
 передаётся; production требует сетевой изоляции peer. Backend обращается к
 Метрике только через этот сервис. Tenant определяется сессией пользователя;
-новые browser-маршруты интеграции предназначены только для роли `ADMIN`.
+все восемь `/api/yandex/**`, включая `POST auth/code`, требуют строго `SEO`.
+OAuth exchange не является публичным callback API.
+
+## Доступ SEO и локальный smoke-профиль
+
+Все 11 `/api/seo/**` и 8 `/api/yandex/**` требуют сессию и точную роль
+`SEO`: anonymous/невалидная сессия — `401`, ADMIN/SUPERUSER/DEVELOPER/
+USER_MANAGER без SEO и пустые scopes — `403` до peer и чтения тела.
+SEO-only и SEO+ADMIN допускаются; административного override нет.
+GET — исключения из Public Read: приватная аналитика, настройки и OAuth/PII.
+Tenant берётся только из сессии, selector клиента игнорируется; чужие
+blacklist/account UUID дают `404`, чужой OAuth state — `403`.
+DTO, validation `400`, duplicate `409`, peer `502`, parse queue `503` сохранены.
+Полная матрица: [generated inventory](docs/backend-route-inventory.md).
+
+Peer API остаются Internal Trusted Network без пользовательских ролей и
+credentials. Backend не пересылает cookie/Authorization. Peer и БД должны быть
+изолированы от внешних callers до production; публичные consumer GET не меняются.
+
+Seed SEO применяется штатным startup seeder. Действующим операторам роль
+назначается явно через существующее управление scopes, без массового backfill.
+Backend и CMS разворачиваются согласованно; переходного SEO OR ADMIN нет.
+
+Только для локальной тестовой БД после seed, из `services/backend`:
+
+```bash
+PYTHONPATH=src uv run python -m maintain.provision_seo_smoke_user \
+  --confirm-local-test-db --equestrian-id <UUID-существующей-тестовой-конюшни> \
+  --credentials ../../.agents/skills/api-smoke-test/credentials.json \
+                ../../.claude/skills/api-smoke-test/credentials.json
+```
+
+Команда создаёт active `seo` только с SEO, читает пароль через `password_ref=admin`
+из каждого локального файла в памяти (оба пароля должны совпадать), штатно хеширует
+и использует одну транзакцию с advisory lock. Пароль/DSN не передавать в shell и
+не публиковать. Совместимый повтор — no-op без смены пароля; конфликт
+username/tenant/roles/status — отказ без overwrite. Это не startup provisioning.
+
+Откат: согласованно вернуть предыдущие backend и CMS. Неиспользуемый seed SEO
+можно оставить; реальные назначения/пользователей автоматически не удалять.
+Локальную fixture удаляет оператор только после проверки сохранённых ID
+пользователя, tenant и связей, не по одному username; evidence хранить без секретов.
 
 ## API
 

@@ -92,7 +92,7 @@ def test_ut_yx23_yandex_access_matrix_is_explicitly_classified() -> None:
         assert rule.access_class == (
             "protected GET exception" if method == "GET" else "protected write"
         )
-        assert rule.roles == "ADMIN only; no SUPERUSER/DEVELOPER override"
+        assert rule.roles == "SEO only; no ADMIN/SUPERUSER/DEVELOPER override"
         assert rule.without_auth == "401"
         assert "403 before downstream" in rule.with_auth
         assert "from session" in rule.tenant_selector
@@ -177,7 +177,7 @@ def test_ut_seop11_seo_access_matrix_is_explicitly_classified() -> None:
         assert rule.access_class == (
             "protected GET exception" if method == "GET" else "protected write"
         )
-        assert rule.roles == "ADMIN only; no SUPERUSER/DEVELOPER override"
+        assert rule.roles == "SEO only; no ADMIN/SUPERUSER/DEVELOPER override"
         assert rule.without_auth == "401"
         assert "403 before downstream" in rule.with_auth
         assert "from session" in rule.tenant_selector

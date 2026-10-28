@@ -26,17 +26,25 @@ router = APIRouter(prefix="/seo", tags=["SEO"])
 T = TypeVar("T")
 
 
-async def require_seo_admin(
+async def require_seo_scope(
     current_user: Annotated[UserOutDto, Depends(get_current_user)],
 ) -> UserOutDto:
-    """Только ADMIN, без наследования повышенных ролей."""
-    if not any(scope.scope_name == "ADMIN" for scope in current_user.scopes):
+    """Только SEO, без административного override."""
+    if not any(scope.scope_name == "SEO" for scope in current_user.scopes):
         raise ForbiddenError("Недостаточно прав для выполнения операции")
     return current_user
 
 
-Actor = Annotated[UserOutDto, Depends(require_seo_admin)]
+Actor = Annotated[UserOutDto, Depends(require_seo_scope)]
 Service = Annotated[SeoProxyService, Depends(get_seo_proxy_service)]
+
+
+async def blacklist_body(request: Request, actor: Actor) -> BlacklistItemInDto:
+    """Разбирать тело только после проверки сессии и SEO."""
+    try:
+        return BlacklistItemInDto.model_validate(await request.json())
+    except ValueError:
+        raise ClientError("Некорректное тело запроса") from None
 
 
 async def _proxy(operation: Awaitable[T]) -> T:
@@ -125,21 +133,42 @@ async def list_blacklisted_query_params(
 
 @router.post(
     "/page-normalization/blacklisted-query-params",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": BlacklistItemInDto.model_json_schema()}
+            },
+        }
+    },
     response_model=BlacklistItemOutDto,
     status_code=201,
 )
 async def create_blacklisted_query_params(
-    data: BlacklistItemInDto, actor: Actor, service: Service
+    data: Annotated[BlacklistItemInDto, Depends(blacklist_body)],
+    actor: Actor,
+    service: Service,
 ) -> BlacklistItemOutDto:
     return await _proxy(service.create_blacklisted_query_params(actor=actor, data=data))
 
 
 @router.patch(
     "/page-normalization/blacklisted-query-params/{item_id}",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": BlacklistItemInDto.model_json_schema()}
+            },
+        }
+    },
     response_model=BlacklistItemOutDto,
 )
 async def update_blacklisted_query_params(
-    item_id: str, data: BlacklistItemInDto, actor: Actor, service: Service
+    item_id: str,
+    data: Annotated[BlacklistItemInDto, Depends(blacklist_body)],
+    actor: Actor,
+    service: Service,
 ) -> BlacklistItemOutDto:
     return await _proxy(
         service.update_blacklisted_query_params(
@@ -173,21 +202,42 @@ async def list_blacklisted_hashes(
 
 @router.post(
     "/page-normalization/blacklisted-hashes",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": BlacklistItemInDto.model_json_schema()}
+            },
+        }
+    },
     response_model=BlacklistItemOutDto,
     status_code=201,
 )
 async def create_blacklisted_hashes(
-    data: BlacklistItemInDto, actor: Actor, service: Service
+    data: Annotated[BlacklistItemInDto, Depends(blacklist_body)],
+    actor: Actor,
+    service: Service,
 ) -> BlacklistItemOutDto:
     return await _proxy(service.create_blacklisted_hashes(actor=actor, data=data))
 
 
 @router.patch(
     "/page-normalization/blacklisted-hashes/{item_id}",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": BlacklistItemInDto.model_json_schema()}
+            },
+        }
+    },
     response_model=BlacklistItemOutDto,
 )
 async def update_blacklisted_hashes(
-    item_id: str, data: BlacklistItemInDto, actor: Actor, service: Service
+    item_id: str,
+    data: Annotated[BlacklistItemInDto, Depends(blacklist_body)],
+    actor: Actor,
+    service: Service,
 ) -> BlacklistItemOutDto:
     return await _proxy(
         service.update_blacklisted_hashes(

@@ -2,7 +2,7 @@ from collections.abc import Awaitable
 from typing import Annotated, TypeVar
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from clients.yandex_service.schemas import (
     YandexAccountOutDto,
@@ -25,17 +25,35 @@ router = APIRouter(prefix="/yandex", tags=["Yandex"])
 T = TypeVar("T")
 
 
-async def require_yandex_admin(
+async def require_yandex_scope(
     current_user: Annotated[UserOutDto, Depends(get_current_user)],
 ) -> UserOutDto:
-    """Только ADMIN, без наследования повышенных ролей и новых scopes."""
-    if not any(scope.scope_name == "ADMIN" for scope in current_user.scopes):
+    """Только SEO, без административного override."""
+    if not any(scope.scope_name == "SEO" for scope in current_user.scopes):
         raise ForbiddenError("Недостаточно прав для выполнения операции")
     return current_user
 
 
-Actor = Annotated[UserOutDto, Depends(require_yandex_admin)]
+Actor = Annotated[UserOutDto, Depends(require_yandex_scope)]
 Service = Annotated[YandexProxyService, Depends(get_yandex_proxy_service)]
+
+
+async def auth_code_body(request: Request, actor: Actor) -> YandexAuthCodeInDto:
+    """Разбирать тело только после проверки сессии и SEO."""
+    try:
+        return YandexAuthCodeInDto.model_validate(await request.json())
+    except ValueError:
+        raise ClientError("Некорректное тело запроса") from None
+
+
+async def connection_body(
+    request: Request, actor: Actor
+) -> YandexMetricaSetConnectionInDto:
+    """Разбирать тело только после проверки сессии и SEO."""
+    try:
+        return YandexMetricaSetConnectionInDto.model_validate(await request.json())
+    except ValueError:
+        raise ClientError("Некорректное тело запроса") from None
 
 
 async def _proxy(operation: Awaitable[T]) -> T:
@@ -59,9 +77,22 @@ async def get_auth_link(actor: Actor, service: Service) -> YandexAuthLinkOutDto:
     return await _proxy(service.get_auth_link(actor=actor))
 
 
-@router.post("/auth/code", response_model=YandexAccountOutDto)
+@router.post(
+    "/auth/code",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": YandexAuthCodeInDto.model_json_schema()}
+            },
+        }
+    },
+    response_model=YandexAccountOutDto,
+)
 async def exchange_code(
-    data: YandexAuthCodeInDto, actor: Actor, service: Service
+    data: Annotated[YandexAuthCodeInDto, Depends(auth_code_body)],
+    actor: Actor,
+    service: Service,
 ) -> YandexAccountOutDto:
     return await _proxy(service.exchange_code(actor=actor, data=data))
 
@@ -106,16 +137,34 @@ async def list_counters(
     )
 
 
-@router.get("/metrica/connection", response_model=YandexMetricaConnectedCounterOutDto)
+@router.get(
+    "/metrica/connection",
+    response_model=YandexMetricaConnectedCounterOutDto,
+)
 async def get_connection(
     actor: Actor, service: Service
 ) -> YandexMetricaConnectedCounterOutDto:
     return await _proxy(service.get_connection(actor=actor))
 
 
-@router.post("/metrica/connection", response_model=YandexMetricaConnectionOutDto)
+@router.post(
+    "/metrica/connection",
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": YandexMetricaSetConnectionInDto.model_json_schema()
+                }
+            },
+        }
+    },
+    response_model=YandexMetricaConnectionOutDto,
+)
 async def set_connection(
-    data: YandexMetricaSetConnectionInDto, actor: Actor, service: Service
+    data: Annotated[YandexMetricaSetConnectionInDto, Depends(connection_body)],
+    actor: Actor,
+    service: Service,
 ) -> YandexMetricaConnectionOutDto:
     return await _proxy(service.set_connection(actor=actor, data=data))
 

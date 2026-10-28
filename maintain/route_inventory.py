@@ -76,11 +76,11 @@ def classify(method: str, path: str) -> AccessRule:
         if path == "/api/seo/parse-jobs":
             return AccessRule(
                 "protected write",
-                "ADMIN only; no SUPERUSER/DEVELOPER override",
+                "SEO only; no ADMIN/SUPERUSER/DEVELOPER override",
                 "actor cookie; equestrian_id from session; client selector ignored",
                 "tenant scoped; internal SEO administration data is not public read",
                 "401",
-                "202; without ADMIN 403 before downstream; 401/403 before body",
+                "202; without SEO 403 before downstream; 401/403 before body",
                 "foreign tenant not addressable; body equestrian_id forbidden",
                 "400 malformed body/provider or missing binding; 502 unavailable/invalid downstream; 503 queue unavailable",
                 "tests/unit/api/test_seo_proxy_api.py",
@@ -105,12 +105,12 @@ def classify(method: str, path: str) -> AccessRule:
         seo_validation.append("502 unavailable downstream")
         return AccessRule(
             "protected GET exception" if method == "GET" else "protected write",
-            "ADMIN only; no SUPERUSER/DEVELOPER override",
+            "SEO only; no ADMIN/SUPERUSER/DEVELOPER override",
             "actor cookie; equestrian_id from session; client selector ignored",
             "tenant scoped; internal SEO administration data is not public read",
             "401",
             success
-            + "; without ADMIN 403 before downstream; "
+            + "; without SEO 403 before downstream; "
             + "; ".join(seo_validation),
             (
                 "404 foreign/missing item"
@@ -166,11 +166,11 @@ def classify(method: str, path: str) -> AccessRule:
         success, foreign, validation = outcomes[key]
         return AccessRule(
             "protected GET exception" if method == "GET" else "protected write",
-            "ADMIN only; no SUPERUSER/DEVELOPER override",
+            "SEO only; no ADMIN/SUPERUSER/DEVELOPER override",
             "actor cookie; equestrian_id from session",
             "tenant scoped; PII/OAuth data is not public read",
             "401",
-            success + "; without ADMIN 403 before downstream",
+            success + "; without SEO 403 before downstream",
             foreign,
             (validation + "; " if validation != "N/A" else "")
             + "peer 400; 502 unavailable downstream",
