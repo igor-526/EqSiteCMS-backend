@@ -1,3 +1,6 @@
+from clients.ya_metrica_service.client import YaMetricaServiceClient
+from core.protocols.ya_metrica_service import YaMetricaServiceClientProtocol
+from core.services.metrica_tasks_proxy import MetricaTasksProxyService
 from typing import Annotated
 
 from fastapi import Cookie, Depends, Header
@@ -453,3 +456,15 @@ async def get_callback_request_service(
         callback_request_event_publisher=callback_request_event_publisher,
         repository=repository,
     )
+
+
+async def get_ya_metrica_service_client() -> YaMetricaServiceClientProtocol:
+    return YaMetricaServiceClient(base_url=settings.ya_metrica_service_url)
+
+
+async def get_metrica_tasks_proxy_service(
+    client: Annotated[
+        YaMetricaServiceClientProtocol, Depends(get_ya_metrica_service_client)
+    ],
+) -> MetricaTasksProxyService:
+    return MetricaTasksProxyService(client)

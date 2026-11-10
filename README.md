@@ -64,13 +64,33 @@ make test
 `YANDEX_SERVICE_URL` — базовый URL приватного `yandex-service`, по умолчанию
 `http://eqsitecms-yandex-service:8000` (см. `.env.example`). Peer credential не
 передаётся; production требует сетевой изоляции peer. Backend обращается к
-Метрике только через этот сервис. Tenant определяется сессией пользователя;
+OAuth/привязкам Метрики только через этот сервис. Tenant определяется сессией пользователя;
 все восемь `/api/yandex/**`, включая `POST auth/code`, требуют строго `SEO`.
 OAuth exchange не является публичным callback API.
 
+## История задач Метрики
+
+`GET /api/seo/metrica/tasks` — Protected GET exception, только SEO:
+anonymous `401`, без SEO `403` (включая ADMIN), обе проверки до query/peer.
+`limit` — целое 1..100 (default 20), `offset` — целое ≥0 (default 0);
+неверные параметры — `400` без peer. Selector браузера игнорируется.
+Отдельный клиент обращается напрямую к `GET /api/metrica/tasks` по
+`YA_METRICA_SERVICE_URL` (default `http://eqsitecms-ya-metrica-service:8000`).
+Только actor.equestrian_id в `X-Equestrian-Id`, без Cookie/Authorization.
+Timeout 4s, trust_env=false, без повторов/redirects; transport, любой статус
+кроме 200, invalid JSON/DTO — нейтральный `502`, без тела peer.
+Ответ `{items,total}`: item содержит только строковый `id`, `type`
+(`parsing|merge|delete`), `status` (`queued|running|succeeded|failed|cancelled`),
+`is_active` (boolean), `created_at` (RFC3339). Неизвестные поля отклоняются.
+История всей конюшни, включая прежние привязки, доступна API без текущей
+привязки; общий порядок задаёт peer, backend его не меняет.
+Запуск остаётся через seo-service (`POST /api/seo/parse-jobs`), `202` не
+подтверждает сохранение/исполнение задачи. Production isolation peer/БД —
+отдельный блокирующий release gate; новые внешние порты не требуются.
+
 ## Доступ SEO и локальный smoke-профиль
 
-Все 11 `/api/seo/**` и 8 `/api/yandex/**` требуют сессию и точную роль
+Все 12 `/api/seo/**` и 8 `/api/yandex/**` требуют сессию и точную роль
 `SEO`: anonymous/невалидная сессия — `401`, ADMIN/SUPERUSER/DEVELOPER/
 USER_MANAGER без SEO и пустые scopes — `403` до peer и чтения тела.
 SEO-only и SEO+ADMIN допускаются; административного override нет.

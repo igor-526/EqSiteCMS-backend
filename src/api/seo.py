@@ -1,3 +1,7 @@
+from clients.ya_metrica_service.schemas import MetricaTaskListOutDto
+from core.protocols.ya_metrica_service import YaMetricaServiceUnavailableError
+from core.services.metrica_tasks_proxy import MetricaTasksProxyService
+from depends.services import get_metrica_tasks_proxy_service
 from datetime import date
 from collections.abc import Awaitable
 from typing import Annotated, TypeVar
@@ -282,3 +286,18 @@ async def start_parse_job(
     service: Service,
 ) -> SeoParseJobOutDto:
     return await _proxy(service.start_parse_job(actor=actor, data=data))
+
+
+@router.get("/metrica/tasks", response_model=MetricaTaskListOutDto)
+async def list_metrica_tasks(
+    actor: Actor,
+    service: Annotated[
+        MetricaTasksProxyService, Depends(get_metrica_tasks_proxy_service)
+    ],
+    limit: str = "20",
+    offset: str = "0",
+) -> MetricaTaskListOutDto:
+    try:
+        return await service.list_tasks(actor=actor, limit=limit, offset=offset)
+    except YaMetricaServiceUnavailableError as exc:
+        raise HTTPException(502, "Metrica service unavailable") from exc

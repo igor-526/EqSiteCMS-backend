@@ -2,7 +2,7 @@
 
 Generated from the registered FastAPI router graph. Do not edit manually.
 
-Route entries: **131**
+Route entries: **132**
 
 | method | path | access class | roles | tenant selector | owner rule | without auth | with auth | foreign | validation | tests |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -92,6 +92,7 @@ Route entries: **131**
 | PATCH | `/api/prices/{slug_or_id}` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/prices/{slug_or_id}/photos` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
 | POST | `/api/prices/{slug_or_id}/photos/upload` | protected write | authenticated + endpoint scope | CMS cookie tenant | tenant scoped | 401 | 201/200/204 | 403/404 without existence leak | 400 malformed/domain validation | tests/unit/api; tests/unit/depends/test_auth_dependencies.py |
+| GET | `/api/seo/metrica/tasks` | protected GET exception | SEO only; no ADMIN/SUPERUSER/DEVELOPER override | actor cookie; equestrian_id from session; client selector ignored | tenant scoped; private task history is not public read | 401 | 200; without SEO 403 before downstream; 401/403 before query | foreign tenant not addressable | 400 invalid limit/offset before peer; 502 unavailable/invalid downstream | tests/unit/api/test_metrica_tasks_proxy.py; tests/unit/api/test_metrica_tasks_client.py |
 | GET | `/api/seo/page-normalization/blacklisted-hashes` | protected GET exception | SEO only; no ADMIN/SUPERUSER/DEVELOPER override | actor cookie; equestrian_id from session; client selector ignored | tenant scoped; internal SEO administration data is not public read | 401 | 200; without SEO 403 before downstream; 502 unavailable downstream | foreign tenant not addressable | 502 unavailable downstream | tests/unit/api/test_seo_proxy_api.py |
 | POST | `/api/seo/page-normalization/blacklisted-hashes` | protected write | SEO only; no ADMIN/SUPERUSER/DEVELOPER override | actor cookie; equestrian_id from session; client selector ignored | tenant scoped; internal SEO administration data is not public read | 401 | 201; without SEO 403 before downstream; 400 malformed body/value; 409 duplicate; 502 unavailable downstream | foreign tenant not addressable | 400 malformed body/value; 409 duplicate; 502 unavailable downstream | tests/unit/api/test_seo_proxy_api.py |
 | DELETE | `/api/seo/page-normalization/blacklisted-hashes/{item_id}` | protected write | SEO only; no ADMIN/SUPERUSER/DEVELOPER override | actor cookie; equestrian_id from session; client selector ignored | tenant scoped; internal SEO administration data is not public read | 401 | 204; without SEO 403 before downstream; 400 malformed item_id; 404 foreign/missing item; 502 unavailable downstream | 404 foreign/missing item | 400 malformed item_id; 404 foreign/missing item; 502 unavailable downstream | tests/unit/api/test_seo_proxy_api.py |

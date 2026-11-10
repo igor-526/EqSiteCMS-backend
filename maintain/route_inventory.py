@@ -73,6 +73,18 @@ def classify(method: str, path: str) -> AccessRule:
         )
     if path.startswith("/api/seo/"):
         success = "201" if method == "POST" else "204" if method == "DELETE" else "200"
+        if path == "/api/seo/metrica/tasks":
+            return AccessRule(
+                "protected GET exception",
+                "SEO only; no ADMIN/SUPERUSER/DEVELOPER override",
+                "actor cookie; equestrian_id from session; client selector ignored",
+                "tenant scoped; private task history is not public read",
+                "401",
+                "200; without SEO 403 before downstream; 401/403 before query",
+                "foreign tenant not addressable",
+                "400 invalid limit/offset before peer; 502 unavailable/invalid downstream",
+                "tests/unit/api/test_metrica_tasks_proxy.py; tests/unit/api/test_metrica_tasks_client.py",
+            )
         if path == "/api/seo/parse-jobs":
             return AccessRule(
                 "protected write",

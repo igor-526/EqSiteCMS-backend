@@ -67,6 +67,11 @@ class Settings(BaseSettings):
         default="http://eqsitecms-yandex-service:8000", alias="YANDEX_SERVICE_URL"
     )
 
+    ya_metrica_service_url: str = Field(
+        default="http://eqsitecms-ya-metrica-service:8000",
+        alias="YA_METRICA_SERVICE_URL",
+    )
+
     seo_service_url: str = Field(
         default="http://eqsitecms-seo-service:8000", alias="SEO_SERVICE_URL"
     )

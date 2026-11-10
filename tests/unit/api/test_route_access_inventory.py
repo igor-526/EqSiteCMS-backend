@@ -14,7 +14,7 @@ def test_every_registered_api_route_has_exactly_one_access_classification() -> N
     )
     rows = inventory(app)
 
-    assert registered == 131
+    assert registered == 132
     assert len(rows) == registered
     assert len({(method, path) for method, path, _ in rows}) == registered
     assert all(rule.access_class and rule.tests for _, _, rule in rows)
@@ -160,6 +160,7 @@ def test_ut_seop11_seo_access_matrix_is_explicitly_classified() -> None:
         ("GET", "/api/seo/search-queries"),
         ("GET", "/api/seo/pages"),
         ("POST", "/api/seo/parse-jobs"),
+        ("GET", "/api/seo/metrica/tasks"),
     }
     for suffix in ("blacklisted-query-params", "blacklisted-hashes"):
         path = "/api/seo/page-normalization/" + suffix
@@ -171,7 +172,7 @@ def test_ut_seop11_seo_access_matrix_is_explicitly_classified() -> None:
                 ("DELETE", path + "/{item_id}"),
             }
         )
-    assert len(rows) == 11
+    assert len(rows) == 12
     assert {(method, path) for method, path, _ in rows} == expected
     for method, path, rule in rows:
         assert rule.access_class == (
@@ -182,6 +183,15 @@ def test_ut_seop11_seo_access_matrix_is_explicitly_classified() -> None:
         assert "403 before downstream" in rule.with_auth
         assert "from session" in rule.tenant_selector
         assert "client selector ignored" in rule.tenant_selector
+        if path == "/api/seo/metrica/tasks":
+            assert "401/403 before query" in rule.with_auth
+            assert "400 invalid limit/offset before peer" in rule.validation
+            assert "502 unavailable/invalid downstream" in rule.validation
+            assert rule.tests == (
+                "tests/unit/api/test_metrica_tasks_proxy.py; "
+                "tests/unit/api/test_metrica_tasks_client.py"
+            )
+            continue
         assert rule.tests == "tests/unit/api/test_seo_proxy_api.py"
         if path == "/api/seo/parse-jobs":
             assert rule.with_auth.startswith("202;")
