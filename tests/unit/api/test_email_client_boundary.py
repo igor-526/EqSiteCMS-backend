@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from clients.email_service.client import EmailServiceClient
+from core.exceptions.email_proxy import EmailServiceResponseError
 
 
 def _find_workspace_root(start: Path) -> Path | None:
@@ -37,22 +38,29 @@ class RecordingClient:
 
 @pytest.mark.asyncio
 async def test_downstream_request_contains_no_peer_credential(monkeypatch) -> None:
+    user_id = uuid4()
     response = httpx.Response(
         201,
-        json={"id": str(uuid4())},
+        json={
+            "id": str(uuid4()),
+            "user_id": str(user_id),
+            "email": "a@example.com",
+            "approved": False,
+        },
         request=httpx.Request("POST", "http://email/emails"),
     )
     recording = RecordingClient(response)
     monkeypatch.setattr(httpx, "AsyncClient", lambda: recording)
 
     await EmailServiceClient(base_url="http://email").create_email(
-        user_id=uuid4(), email="a@example.com"
+        user_id=user_id, email="a@example.com"
     )
 
     request = recording.requests[0]
     headers = {key.lower(): value for key, value in request.get("headers", {}).items()}
     assert "authorization" not in headers
     assert "x-service-key" not in headers
+    assert request["json"] == {"user_id": str(user_id), "email": "a@example.com"}
 
 
 def test_peer_compose_services_have_no_host_port_and_share_private_network() -> None:
@@ -152,3 +160,99 @@ async def test_read_owner_rejects_foreign_response(monkeypatch) -> None:
 
     with pytest.raises(ValueError, match="ambiguous owner"):
         await EmailServiceClient(base_url="http://email").get_email(user_id=uuid4())
+
+
+# UT-EM-07: producer response validation and privacy at the real client boundary.
+@pytest.mark.parametrize(
+    "variant", ["missing", "foreign", "mismatch", "bad-id", "list", "json"]
+)
+async def test_create_rejects_untrusted_response(monkeypatch, variant):
+    user_id = uuid4()
+    payload = {
+        "id": str(uuid4()),
+        "user_id": str(user_id),
+        "email": "unit@example.invalid",
+        "approved": False,
+        "private": "private-response-marker",
+    }
+    if variant == "missing":
+        del payload["approved"]
+    elif variant == "foreign":
+        payload["user_id"] = str(uuid4())
+    elif variant == "mismatch":
+        payload["email"] = "other@example.invalid"
+    elif variant == "bad-id":
+        payload["id"] = "bad"
+    body = (
+        {"content": b"not-json"}
+        if variant == "json"
+        else {"json": [payload] if variant == "list" else payload}
+    )
+    response = httpx.Response(
+        201, **body, request=httpx.Request("POST", "http://email/emails")
+    )
+    monkeypatch.setattr(httpx, "AsyncClient", lambda: RecordingClient(response))
+    with pytest.raises(EmailServiceResponseError) as raised:
+        await EmailServiceClient(base_url="http://email").create_email(
+            user_id=user_id, email="unit@example.invalid"
+        )
+    assert str(raised.value) == "Email service returned an invalid response"
+
+
+async def test_create_normalizes_comparison_and_filters_private_response(monkeypatch):
+    user_id = uuid4()
+    expected = {
+        "id": str(uuid4()),
+        "user_id": str(user_id),
+        "email": "unit@example.invalid",
+        "approved": True,
+    }
+    response = httpx.Response(
+        201,
+        json={**expected, "code": "private-response-marker"},
+        request=httpx.Request("POST", "http://email/emails"),
+    )
+    recording = RecordingClient(response)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda: recording)
+    result = await EmailServiceClient(base_url="http://email").create_email(
+        user_id=user_id, email=" Unit@EXAMPLE.INVALID "
+    )
+    assert result == expected
+    assert recording.requests == [
+        {
+            "url": "http://email/emails",
+            "json": {"user_id": str(user_id), "email": " Unit@EXAMPLE.INVALID "},
+        }
+    ]
+
+
+# UT-EM-05/09: only 202 with JSON object establishes acceptance, not delivery.
+@pytest.mark.parametrize("status", [200, 201, 204, 202, 400, 404, 503])
+@pytest.mark.parametrize("body", ["queued", "invalid-json", "list"])
+async def test_send_requires_202_and_json_object(monkeypatch, status, body):
+    user_id = uuid4()
+    kwargs = (
+        {"content": b"not-json"}
+        if body == "invalid-json"
+        else {"json": [] if body == "list" else {"detail": "queued"}}
+    )
+    response = httpx.Response(
+        status,
+        **kwargs,
+        request=httpx.Request("POST", "http://email/emails/send-confirmation"),
+    )
+    recording = RecordingClient(response)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda: recording)
+    client = EmailServiceClient(base_url="http://email")
+    if status == 202 and body == "queued":
+        assert await client.send_confirmation(user_id=user_id) == {"detail": "queued"}
+    else:
+        error = httpx.HTTPStatusError if status >= 400 else EmailServiceResponseError
+        with pytest.raises(error):
+            await client.send_confirmation(user_id=user_id)
+    assert recording.requests == [
+        {
+            "url": "http://email/emails/send-confirmation",
+            "json": {"user_id": str(user_id)},
+        }
+    ]

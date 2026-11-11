@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 
 class EmailRequestBase(BaseModel):
@@ -17,6 +17,7 @@ class EmailRequestBase(BaseModel):
 class EmailCreateRequest(EmailRequestBase):
     user_id: UUID
     email: str
+    send_confirmation: StrictBool = True
 
 
 class EmailUpdateRequest(EmailRequestBase):

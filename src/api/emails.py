@@ -56,7 +56,12 @@ async def create_email(
     service: Annotated[EmailProxyService, Depends(get_email_proxy_service)],
 ) -> dict:
     try:
-        return await service.create(user_id=body.user_id, email=body.email, actor=actor)
+        return await service.create(
+            user_id=body.user_id,
+            email=body.email,
+            actor=actor,
+            send_confirmation=body.send_confirmation,
+        )
     except httpx.HTTPStatusError as exc:
         _raise_downstream_error(exc)
     except httpx.RequestError as exc:

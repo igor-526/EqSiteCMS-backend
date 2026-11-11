@@ -5,6 +5,7 @@ import httpx
 from pydantic import TypeAdapter
 
 from clients.email_service.schemas import EmailResponse
+from core.exceptions.email_proxy import EmailServiceResponseError
 from settings import settings
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,16 @@ class EmailServiceClient:
                 json={"user_id": str(user_id), "email": email},
             )
             resp.raise_for_status()
-            return resp.json()
+            try:
+                result = EmailResponse.model_validate(resp.json())
+                if (
+                    result.user_id != user_id
+                    or result.email.strip().casefold() != email.strip().casefold()
+                ):
+                    raise EmailServiceResponseError()
+                return result.model_dump(mode="json")
+            except ValueError as exc:
+                raise EmailServiceResponseError() from exc
 
     async def get_email(self, *, user_id: UUID) -> EmailResponse | None:
         async with httpx.AsyncClient() as client:
@@ -68,4 +78,12 @@ class EmailServiceClient:
                 json={"user_id": str(user_id)},
             )
             resp.raise_for_status()
-            return resp.json()
+            if resp.status_code != 202:
+                raise EmailServiceResponseError()
+            try:
+                payload = resp.json()
+            except ValueError as exc:
+                raise EmailServiceResponseError() from exc
+            if not isinstance(payload, dict):
+                raise EmailServiceResponseError()
+            return payload

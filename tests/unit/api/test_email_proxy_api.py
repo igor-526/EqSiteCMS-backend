@@ -41,7 +41,8 @@ def authenticate(user: UserOutDto) -> None:
     app.dependency_overrides[get_current_user] = lambda: user
 
 
-def test_anonymous_create_is_401_before_client(client_and_service) -> None:
+@pytest.mark.parametrize("flag", [True, False])
+def test_anonymous_create_is_401_before_client(client_and_service, flag) -> None:
     client, service = client_and_service
 
     async def no_actor() -> None:
@@ -49,7 +50,12 @@ def test_anonymous_create_is_401_before_client(client_and_service) -> None:
 
     app.dependency_overrides[get_current_user] = no_actor
     response = client.post(
-        "/api/emails", json={"user_id": str(uuid4()), "email": "a@example.com"}
+        "/api/emails",
+        json={
+            "user_id": str(uuid4()),
+            "email": "a@example.com",
+            "send_confirmation": flag,
+        },
     )
     assert response.status_code == 401
     service.create.assert_not_awaited()
@@ -74,8 +80,9 @@ def test_owner_create_returns_201_email_response(client_and_service) -> None:
 
 
 @pytest.mark.parametrize("scope", [None, "SUPERUSER", "ADMIN"])
+@pytest.mark.parametrize("flag", [True, False])
 def test_foreign_create_has_no_privileged_override(
-    client_and_service, scope: str | None
+    client_and_service, scope: str | None, flag: bool
 ) -> None:
     client, service = client_and_service
     authenticate(actor(scope=scope))
@@ -83,13 +90,20 @@ def test_foreign_create_has_no_privileged_override(
     # Exercise the real boundary service rather than a permissive API mock.
     from core.services.email_proxy import EmailProxyService
 
-    boundary = EmailProxyService(AsyncMock())
+    downstream = AsyncMock()
+    boundary = EmailProxyService(downstream)
     app.dependency_overrides[get_email_proxy_service] = lambda: boundary
     response = client.post(
-        "/api/emails", json={"user_id": str(foreign_id), "email": "a@example.com"}
+        "/api/emails",
+        json={
+            "user_id": str(foreign_id),
+            "email": "a@example.com",
+            "send_confirmation": flag,
+        },
     )
     assert response.status_code == 403
     service.create.assert_not_awaited()
+    assert downstream.mock_calls == []
 
 
 @pytest.mark.parametrize(
@@ -334,3 +348,240 @@ def test_email_client_di_is_factory_not_global_instance() -> None:
         EmailServiceClientProtocol,
         "EmailServiceClientProtocol",
     }
+
+
+# UT-EM-02: request DTO is strict; PATCH has no new field.
+@pytest.mark.parametrize("value", [None, "true", "false", "1", 0, 1, [], {}])
+def test_invalid_confirmation_flag_is_400_without_effects(client_and_service, value):
+    client, service = client_and_service
+    owner = actor()
+    authenticate(owner)
+    response = client.post(
+        "/api/emails",
+        json={
+            "user_id": str(owner.id),
+            "email": "unit@example.invalid",
+            "send_confirmation": value,
+        },
+    )
+    assert response.status_code == 400
+    assert service.mock_calls == []
+
+
+@pytest.mark.parametrize(
+    "options,expected",
+    [
+        ({}, True),
+        ({"send_confirmation": True}, True),
+        ({"send_confirmation": False}, False),
+    ],
+)
+def test_create_passes_strict_flag_to_service(client_and_service, options, expected):
+    client, service = client_and_service
+    owner = actor()
+    authenticate(owner)
+    service.create.return_value = {"id": str(uuid4())}
+    response = client.post(
+        "/api/emails",
+        json={
+            "user_id": str(owner.id),
+            "email": "unit@example.invalid",
+            **options,
+        },
+    )
+    assert response.status_code == 201
+    service.create.assert_awaited_once_with(
+        user_id=owner.id,
+        email="unit@example.invalid",
+        actor=owner,
+        send_confirmation=expected,
+    )
+
+
+def test_openapi_flag_is_post_only():
+    schema = app.openapi()["components"]["schemas"]
+    assert schema["EmailCreateRequest"]["properties"]["send_confirmation"] == {
+        "type": "boolean",
+        "title": "Send Confirmation",
+        "default": True,
+    }
+    assert "send_confirmation" not in schema["EmailCreateRequest"]["required"]
+    assert "send_confirmation" not in schema["EmailUpdateRequest"]["properties"]
+
+
+@pytest.mark.parametrize("authenticated", [False, True])
+@pytest.mark.parametrize(
+    "operation,status",
+    [
+        ("send", 202),
+        ("send", 404),
+        ("confirm", 200),
+        ("confirm", 400),
+        ("confirm", 404),
+        ("confirm", 409),
+        ("confirm", 410),
+    ],
+)
+def test_public_confirmation_matrix(
+    client_and_service, authenticated, operation, status
+):
+    client, service = client_and_service
+    if authenticated:
+        authenticate(actor())
+    else:
+
+        async def no_actor():
+            raise InvalidCredentials("missing")
+
+        app.dependency_overrides[get_current_user] = no_actor
+    method = service.send_confirmation if operation == "send" else service.confirm
+    if status >= 400:
+        method.side_effect = httpx.HTTPStatusError(
+            "domain",
+            request=httpx.Request("POST", "http://email/emails"),
+            response=httpx.Response(status, json={"detail": "domain outcome"}),
+        )
+    else:
+        method.return_value = (
+            {"detail": "queued"}
+            if operation == "send"
+            else {
+                "status": "confirmed",
+                "user_email_id": str(uuid4()),
+            }
+        )
+    response = (
+        client.post("/api/emails/send-confirmation", json={"user_id": str(uuid4())})
+        if operation == "send"
+        else client.patch("/api/emails/confirm", json={"code": "synthetic-unit-code"})
+    )
+    assert response.status_code == status
+    method.assert_awaited_once()
+
+
+# UT-EM-01..07/09: actual router -> service -> HTTP adapter, local transport only.
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        "default",
+        "true",
+        "false",
+        "approved",
+        "create400",
+        "create409",
+        "create503",
+        "create-timeout",
+        "create-json",
+        "create-foreign",
+        "create-mismatch",
+        "create-malformed",
+        "send200",
+        "send204",
+        "send404",
+        "send503",
+        "send-json",
+        "send-list",
+        "send-timeout",
+        "send-transport",
+    ],
+)
+def test_real_create_boundary(client_and_service, monkeypatch, caplog, scenario):
+    from clients.email_service.client import EmailServiceClient
+    from core.services.email_proxy import EmailProxyService
+
+    client, _ = client_and_service
+    owner = actor()
+    authenticate(owner)
+    peer_calls = []
+    resource = {
+        "id": str(uuid4()),
+        "user_id": str(owner.id),
+        "email": "unit@example.invalid",
+        "approved": scenario == "approved",
+    }
+
+    def peer(request):
+        import json
+
+        peer_calls.append((request.url.path, json.loads(request.content)))
+        assert "authorization" not in request.headers
+        assert "x-service-key" not in request.headers
+        if request.url.path == "/emails":
+            assert json.loads(request.content) == {
+                "user_id": str(owner.id),
+                "email": "Unit@EXAMPLE.INVALID",
+            }
+            if scenario in {"create400", "create409", "create503"}:
+                return httpx.Response(
+                    int(scenario[-3:]), json={"detail": "create rejected"}
+                )
+            if scenario == "create-timeout":
+                raise httpx.ReadTimeout("private-response-marker", request=request)
+            if scenario == "create-json":
+                return httpx.Response(201, content=b"private-response-marker")
+            payload = {**resource, "private": "private-response-marker"}
+            if scenario == "create-foreign":
+                payload["user_id"] = str(uuid4())
+            elif scenario == "create-mismatch":
+                payload["email"] = "other@example.invalid"
+            elif scenario == "create-malformed":
+                del payload["approved"]
+            return httpx.Response(201, json=payload)
+        assert request.url.path == "/emails/send-confirmation"
+        assert json.loads(request.content) == {"user_id": str(owner.id)}
+        if scenario in {"send200", "send204", "send404", "send503"}:
+            return httpx.Response(
+                int(scenario[-3:]), json={"detail": "private-response-marker"}
+            )
+        if scenario == "send-json":
+            return httpx.Response(202, content=b"private-response-marker")
+        if scenario == "send-list":
+            return httpx.Response(202, json=[])
+        if scenario == "send-timeout":
+            raise httpx.ReadTimeout("private-response-marker", request=request)
+        if scenario == "send-transport":
+            raise httpx.ConnectError("private-response-marker", request=request)
+        return httpx.Response(202, json={"detail": "queued"})
+
+    async_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx, "AsyncClient", lambda: async_client(transport=httpx.MockTransport(peer))
+    )
+    service = EmailProxyService(EmailServiceClient(base_url="http://email"))
+    app.dependency_overrides[get_email_proxy_service] = lambda: service
+    options = (
+        {"send_confirmation": scenario == "true"}
+        if scenario in {"true", "false"}
+        else {}
+    )
+    response = client.post(
+        "/api/emails",
+        json={
+            "user_id": str(owner.id),
+            "email": "Unit@EXAMPLE.INVALID",
+            **options,
+        },
+    )
+    status = (
+        int(scenario[-3:])
+        if scenario in {"create400", "create409", "create503"}
+        else (502 if scenario.startswith(("create-", "send")) else 201)
+    )
+    assert response.status_code == status
+    assert "private-response-marker" not in response.text
+    assert "private-response-marker" not in caplog.text
+    expected_paths = ["/emails"]
+    if not scenario.startswith("create") and scenario not in {"false", "approved"}:
+        expected_paths.append("/emails/send-confirmation")
+    assert [path for path, _ in peer_calls] == expected_paths
+    if scenario.startswith("send"):
+        assert response.json() == {
+            "detail": (
+                "Email сохранён, но отправку подтверждения не удалось подтвердить. "
+                "Повторите запрос или используйте повторную отправку."
+            )
+        }
+    elif status == 502:
+        assert "сохранён" not in response.text
+    elif status == 201:
+        assert response.json() == resource

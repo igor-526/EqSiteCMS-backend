@@ -1,8 +1,14 @@
 from uuid import UUID
 
+import httpx
+
 from clients.email_service.schemas import EmailResponse
 from core.exceptions.auth import ForbiddenError
 from core.exceptions.base import NotFoundError
+from core.exceptions.email_proxy import (
+    EmailConfirmationQueueError,
+    EmailServiceResponseError,
+)
 from core.protocols.email_service import EmailServiceClientProtocol
 from core.schemas.users import UserOutDto
 
@@ -16,9 +22,22 @@ class EmailProxyService:
         if actor.id != user_id:
             raise ForbiddenError("Управлять email может только его владелец")
 
-    async def create(self, *, user_id: UUID, email: str, actor: UserOutDto) -> dict:
+    async def create(
+        self,
+        *,
+        user_id: UUID,
+        email: str,
+        actor: UserOutDto,
+        send_confirmation: bool = True,
+    ) -> dict:
         self._require_owner(user_id=user_id, actor=actor)
-        return await self._client.create_email(user_id=user_id, email=email)
+        result = await self._client.create_email(user_id=user_id, email=email)
+        if send_confirmation and not result["approved"]:
+            try:
+                await self._client.send_confirmation(user_id=user_id)
+            except (httpx.HTTPError, ValueError, EmailServiceResponseError) as exc:
+                raise EmailConfirmationQueueError() from exc
+        return result
 
     async def get_mine(self, *, actor: UserOutDto) -> EmailResponse:
         email = await self._client.get_email(user_id=actor.id)

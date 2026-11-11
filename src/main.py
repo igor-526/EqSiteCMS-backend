@@ -39,6 +39,10 @@ from core.exceptions.base import (
     NotFoundError,
     UnprocessableEntityError,
 )
+from core.exceptions.email_proxy import (
+    EmailConfirmationQueueError,
+    EmailServiceResponseError,
+)
 from core.exceptions.tenant import TenantNotFound
 from core.protocols.seo_service import SeoQueueUnavailableError
 from core.middleware.cors import SplitCORSMiddleware
@@ -126,6 +130,14 @@ app.add_middleware(
     SplitCORSMiddleware,
     cms_origins=settings.cms_cors_origins,
 )
+
+
+@app.exception_handler(EmailConfirmationQueueError)
+@app.exception_handler(EmailServiceResponseError)
+def email_proxy_error_handler(
+    _: Request, exc: EmailConfirmationQueueError | EmailServiceResponseError
+) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=502)
 
 
 @app.exception_handler(SeoQueueUnavailableError)
