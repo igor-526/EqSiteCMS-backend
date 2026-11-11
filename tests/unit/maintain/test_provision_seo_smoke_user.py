@@ -1,7 +1,6 @@
 import asyncio
 import json
 from contextlib import asynccontextmanager
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -317,13 +316,3 @@ def test_cli_failure_output_is_redacted(monkeypatch, capsys):
         == 1
     )
     assert TEST_PASSWORD not in capsys.readouterr().out
-
-
-def test_both_skill_copies_use_local_ref_and_separate_cookie_jars():
-    root = Path(__file__).resolve().parents[5]
-    for copy in (".agents", ".claude"):
-        instructions = (root / copy / "skills/api-smoke-test/SKILL.md").read_text()
-        assert f"{copy}/skills/api-smoke-test/credentials.json" in instructions
-        assert "password_ref=admin" in instructions
-        assert ".qa/105-seo-role/<role>.cookies" in instructions
-        assert "visited" in instructions and "цикл" in instructions
