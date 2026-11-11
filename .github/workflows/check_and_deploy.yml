@@ -5,6 +5,9 @@ on:
     branches:
       - release
 
+permissions:
+  contents: read
+
 env:
   IMAGE: ghcr.io/igor-526/eqsitecms-backend
 
@@ -39,17 +42,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
@@ -59,7 +66,7 @@ jobs:
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
-    
+
       - uses: azure/setup-helm@v4
 
       - name: Deploy
@@ -69,4 +76,3 @@ jobs:
             --create-namespace \
             --set imageTag=${{ github.sha }} \
             --wait
-
